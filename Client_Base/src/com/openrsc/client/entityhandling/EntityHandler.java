@@ -109,6 +109,15 @@ public class EntityHandler {
 		return animations.get(id);
 	}
 
+	/** Resolves one-based player paperdoll IDs without changing legacy positional lookups. */
+	public static AnimationDef getPlayerAppearanceDef(int appearanceId) {
+		GeneratedAppearanceRegistry.Entry managed = GeneratedAppearanceRegistry.findAuthentic(appearanceId);
+		if (managed != null) {
+			return Config.S_WANT_CUSTOM_SPRITES ? null : managed.definition;
+		}
+		return appearanceId > 0 ? getAnimationDef(appearanceId - 1) : null;
+	}
+
 	public static int spellCount() {
 		return spells.size();
 	}
@@ -3105,7 +3114,7 @@ public class EntityHandler {
 		items.add(new ItemDef("weapon poison", "For use on daggers and arrows", "", 144, 48, "items:48", false, false, 0, 1140479, true, false, true, 572));
 		items.add(new ItemDef("ID Paper", "ID of Hartigen the black knight", "", 1, 29, "items:29", false, false, 0, 0, true, false, true, 573));
 		items.add(new ItemDef("Poison Bronze Arrows", "Venomous looking arrows", "", 2, 206, "items:206", true, Config.S_WANT_EQUIPMENT_TAB, Config.S_WANT_EQUIPMENT_TAB ? 1000 : 0, 16737817, true, false, false, 574));
-		items.add(new ItemDef("Christmas cracker", "Use on another player to pull it", "", 1, 188, "items:188", false, false, 0, 16711680, false, false, true, 575));
+		items.add(new ItemDef("Christmas cracker", "Open it for a chance at a festive prize", "Open", 1, 188, "items:188", false, false, 0, 16711680, false, false, true, 575));
 		items.add(new ItemDef("Party Hat", "Party!!!", "", 2, 189, "items:189", false, true, 32, 16711680, false, false, true, 576));
 		items.add(new ItemDef("Party Hat", "Party!!!", "", 2, 189, "items:189", false, true, 32, 16776960, false, false, true, 577));
 		items.add(new ItemDef("Party Hat", "Party!!!", "", 2, 189, "items:189", false, true, 32, 255, false, false, true, 578));
@@ -4309,16 +4318,16 @@ public class EntityHandler {
 		items.add(new ItemDef("Boomstick", "A 12-Gauge, Double-Barreled Remington", "", 1, 606, "items:606", false, true, 16, 16737817, false, true, false, 1592));
 
 		// voidscape: Void Scimitar (id 1593). spriteID 607 = AI-generated void icon at archive index 2757 (= 2150 + 607). pictureMask=0 so the icon's own colors are used as-is, no tint.
-		items.add(new ItemDef("Void Scimitar", "A scimitar pulsing with otherworldly energy.", "", 64000, 607, "items:607", false, true, 16, 0, false, true, true, 1593));
+		items.add(new ItemDef("Void Scimitar", "Deals 15% more damage and accuracy against void monsters.", "", 64000, 607, "items:607", false, true, 16, 0, false, false, true, 1593));
 
 		// voidscape: Void Shortbow (id 1594). spriteID 608 = AI-generated icon at archive index 2758. F2P (membersItem=false), tradeable, noteable.
-		items.add(new ItemDef("Void Shortbow", "A bow humming with void energy. It needs no arrows against void monsters.", "", 5000, 608, "items:608", false, true, 24, 0, false, false, true, 1594));
+		items.add(new ItemDef("Void Shortbow", "Needs no arrows and deals 15% more damage and accuracy against void monsters.", "", 5000, 608, "items:608", false, true, 24, 0, false, false, true, 1594));
 
 		// voidscape: Void Amulet (id 1595). spriteID 609 = AI-generated icon at archive index 2759. pictureMask=0 so the icon's own colors render as-is, no tint. F2P, tradeable.
-		items.add(new ItemDef("Void Amulet", "An amulet pulsing with void energy. Stackable void-monster drops bend toward its wearer.", "", 20000, 609, "items:609", false, true, 1024, 0, false, false, true, 1595));
+		items.add(new ItemDef("Void Amulet", "Increases stackable drops from void monsters by 50%.", "", 20000, 609, "items:609", false, true, 1024, 0, false, false, true, 1595));
 
-		// voidscape: Void Mace (id 1596). spriteID 610 = AI-generated icon at archive index 2760. pictureMask=0 so the icon's own colors render as-is, no tint. F2P, tradeable.
-		items.add(new ItemDef("Void Mace", "A heavy mace crackling with void energy. Crushes monsters with otherworldly force.", "", 30000, 610, "items:610", false, true, 16, 0, false, false, true, 1596));
+		// voidscape: Void Sceptre (id 1596). spriteID 610 = AI-generated icon at archive index 2760. pictureMask=0 so the icon's own colors render as-is, no tint. F2P, tradeable.
+		items.add(new ItemDef("Void Sceptre", "Makes combat spells 15% stronger and more accurate against void monsters.", "", 30000, 610, "items:610", false, true, 16, 0, false, false, true, 1596));
 
 		// voidscape: Cursed Greatsword (id 1597). spriteID 612 = AI-generated icon at archive index 2762. Inherits wieldability from id 81 ('rune 2-handed Sword').
 		items.add(new ItemDef("Cursed Greatsword", "A greatsword wreathed in dark, vengeful energy.", "", 100, 612, "items:612", false, true, 8216, 0, false, false, true, 1597));
@@ -4347,6 +4356,9 @@ public class EntityHandler {
 		items.add(new ItemDef("Sacred ashes", "Pale ashes from a maple fire, ready for an altar.", "", 14, 23, "items:23", false, false, 0, 0xD7D5B0, false, false, true, 1606));
 		items.add(new ItemDef("Blessed ashes", "Silvery ashes from a yew fire.", "", 24, 23, "items:23", false, false, 0, 0xE6F4FF, false, false, true, 1607));
 		items.add(new ItemDef("Void ashes", "Magic-log ashes humming with a trace of void energy.", "", 40, 23, "items:23", false, false, 0, 0xA64DFF, false, false, true, 1608));
+
+		// voidscape: Cowboy hat (id 1609). spriteID 638 is packed at archive index 2788.
+		items.add(new ItemDef("Cowboy hat", "A rugged hat from the frontier.", "", 1, 638, "items:638", false, true, 32, 0, false, false, true, 1609));
 		// Custom certificate names
 		if (Config.S_WANT_BANK_NOTES && !Config.S_WANT_CERT_AS_NOTES) {
 			for (int i : new int[]{1543, 1546, 1547, 1548, 1549, 1550, 1551, 1552}) {
@@ -5119,6 +5131,7 @@ public class EntityHandler {
 		animations.add(new AnimationDef("demon", "npc", 0x6a0dad, 0, true, false, 0));   // idx 241 - void demon (tints shared sprite 864)
 		animations.add(new AnimationDef("unicorn", "npc", 0x6a0dad, 0, true, false, 0)); // idx 242 - void unicorn (tints shared sprite 999)
 		animations.add(new AnimationDef("boots", "equipment", 0x6a0dad, 0, true, false, 0)); // idx 243 - void boots (covers the base body's baked brown feet on the humanoid void mobs)
+		animations.add(new AnimationDef("cowboyhat", "equipment", 0, 0, true, false, 0)); // idx 244 - cowboy hat (JSON appearanceID 245)
 	}
 
 	@SuppressWarnings("unchecked")
@@ -7242,6 +7255,8 @@ public class EntityHandler {
 		objects.add(new GameObjectDef("Void claw charge", "A clawed void sigil tearing into shape", "WalkTo", "Examine", 0, 1, 1, 0, "voidclawcharge", ++i)); //1309
 		objects.add(new GameObjectDef("Void test cube", "A colored cube for testing imported OB3 scenery", "WalkTo", "Examine", 0, 1, 1, 0, "void_test_cube", ++i)); //1310
 		objects.add(new GameObjectDef("Void portal arch", "A violet stone arch humming around an empty portal frame", "WalkTo", "Examine", 0, 2, 1, 0, "void_portal_arch", ++i)); //1311
+		objects.add(new GameObjectDef("Void watchtower", "A shattered sentry tower holding a cold violet beacon", "WalkTo", "Examine", 0, 2, 2, 0, "void_watchtower", ++i)); //1312
+		objects.add(new GameObjectDef("Void market shelter", "A patched shelter where Enclave survivors trade supplies", "WalkTo", "Examine", 0, 3, 2, 0, "void_market_shelter", ++i)); //1313
 	}
 
 	public static void load(boolean loadMembers) {

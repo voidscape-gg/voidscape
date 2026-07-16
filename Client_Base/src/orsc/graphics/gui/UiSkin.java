@@ -52,6 +52,13 @@ public final class UiSkin {
 	public static int DANGER_GLYPH = colorProperty("voidscape.ui.DANGER_GLYPH", 0xFF7070);
 	public static int FIELD_BG = colorProperty("voidscape.ui.FIELD_BG", 0x07090C);
 	public static int FIELD_BORDER_IDLE = colorProperty("voidscape.ui.FIELD_BORDER_IDLE", 0x56606A);
+	// Christmas-cracker reel tiers. These are code-drawn accents around the
+	// authentic inventory sprites; they are not new item art.
+	public static int CRACKER_REEL_BG = colorProperty("voidscape.ui.CRACKER_REEL_BG", 0x08060C);
+	public static int CRACKER_CARD = colorProperty("voidscape.ui.CRACKER_CARD", 0x17111F);
+	public static int CRACKER_NOTHING = colorProperty("voidscape.ui.CRACKER_NOTHING", 0x6F6879);
+	public static int CRACKER_PARTY = colorProperty("voidscape.ui.CRACKER_PARTY", 0xB36CFF);
+	public static int CRACKER_RARE = colorProperty("voidscape.ui.CRACKER_RARE", 0xFFD968);
 	/** Parchment fallback tint matching right-panel-bg.png (panel chrome + Menu tint). */
 	public static int TINT_PARCHMENT = colorProperty("voidscape.ui.TINT_PARCHMENT", 0x3C3125);
 

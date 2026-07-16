@@ -2698,6 +2698,107 @@ public class GraphicsController {
 		this.drawColoredString(x, y, str, font, color, 0);
 	}
 
+	/**
+	 * Draws plain bitmap-font text at a percentage of its native size. This is
+	 * intentionally limited to unformatted labels: colour/rank/position tokens
+	 * remain the responsibility of the normal string renderer.
+	 */
+	public final void drawScaledPlainStringCentered(int centerX, String str, int color,
+												 int font, int baselineY, int scalePercent) {
+		int width = scaledPlainStringWidth(font, str, scalePercent);
+		int x = centerX - width / 2;
+		if (this.loggedIn && !Fonts.fontAntiAliased[font] && color != 0) {
+			drawScaledPlainString(str, x + 1, baselineY, 0, font, scalePercent);
+			drawScaledPlainString(str, x, baselineY + 1, 0, font, scalePercent);
+		}
+		drawScaledPlainString(str, x, baselineY, color, font, scalePercent);
+	}
+
+	public final int scaledPlainStringWidth(int font, String str, int scalePercent) {
+		if (str == null || str.length() == 0) {
+			return 0;
+		}
+		int percent = Math.max(1, Math.min(100, scalePercent));
+		byte[] fontData = Fonts.fontData[font];
+		int width = 0;
+		for (int i = 0; i < str.length(); i++) {
+			int addr = plainFontCharacterAddress(str.charAt(i));
+			width += Math.max(1, scaledFontMetric(fontData[addr + 7], percent));
+		}
+		return width;
+	}
+
+	private void drawScaledPlainString(String str, int x, int baselineY, int color,
+										 int font, int scalePercent) {
+		if (str == null || str.length() == 0) {
+			return;
+		}
+		int percent = Math.max(1, Math.min(100, scalePercent));
+		byte[] fontData = Fonts.fontData[font];
+		int cursorX = x;
+		for (int i = 0; i < str.length(); i++) {
+			int addr = plainFontCharacterAddress(str.charAt(i));
+			int sourceWidth = fontData[addr + 3];
+			int sourceHeight = fontData[addr + 4];
+			int advance = Math.max(1, scaledFontMetric(fontData[addr + 7], percent));
+			if (sourceWidth <= 0 || sourceHeight <= 0) {
+				cursorX += advance;
+				continue;
+			}
+			int dataAddr = (fontData[addr] << 14) + (fontData[addr + 1] << 7) + fontData[addr + 2];
+			int destWidth = Math.max(1, scaledFontMetric(sourceWidth, percent));
+			int destHeight = Math.max(1, scaledFontMetric(sourceHeight, percent));
+			int left = cursorX + scaledFontMetric(fontData[addr + 5], percent);
+			int top = baselineY - scaledFontMetric(fontData[addr + 6], percent);
+
+			for (int destY = 0; destY < destHeight; destY++) {
+				int screenY = top + destY;
+				if (screenY < this.clipTop || screenY >= this.clipBottom) {
+					continue;
+				}
+				int sourceTop = destY * sourceHeight / destHeight;
+				int sourceBottom = Math.max(sourceTop + 1,
+					(destY + 1) * sourceHeight / destHeight);
+				for (int destX = 0; destX < destWidth; destX++) {
+					int screenX = left + destX;
+					if (screenX < this.clipLeft || screenX >= this.clipRight) {
+						continue;
+					}
+					int sourceLeft = destX * sourceWidth / destWidth;
+					int sourceRight = Math.max(sourceLeft + 1,
+						(destX + 1) * sourceWidth / destWidth);
+					boolean ink = false;
+					for (int sourceY = sourceTop; sourceY < sourceBottom && !ink; sourceY++) {
+						for (int sourceX = sourceLeft; sourceX < sourceRight; sourceX++) {
+							if (fontData[dataAddr + sourceY * sourceWidth + sourceX] != 0) {
+								ink = true;
+								break;
+							}
+						}
+					}
+					if (ink) {
+						this.pixelData[screenX + this.width2 * screenY] = color;
+					}
+				}
+			}
+			cursorX += advance;
+		}
+	}
+
+	private static int plainFontCharacterAddress(char c) {
+		if (c == 160 || c < 0 || c >= Fonts.inputFilterCharFontAddr.length) {
+			c = ' ';
+		}
+		return Fonts.inputFilterCharFontAddr[c];
+	}
+
+	private static int scaledFontMetric(int value, int scalePercent) {
+		if (value >= 0) {
+			return (value * scalePercent + 50) / 100;
+		}
+		return -((-value * scalePercent + 50) / 100);
+	}
+
 	private static boolean isCountryFlagToken(String str, int index) {
 		return index + 6 < str.length()
 			&& str.charAt(index) == '@'

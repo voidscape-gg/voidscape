@@ -841,6 +841,14 @@ public class PacketHandler {
 		}
 
 		if (mc.handleVoidscapeAccountAuthMessage(message)
+			|| (sender == null && type == MessageType.QUEST
+				&& mc.handleVoidscapePkCatchingMessage(message))
+			|| (sender == null && type == MessageType.QUEST
+				&& mc.handleVoidscapeChristmasCrackerMessage(message))
+			|| (sender == null && type == MessageType.QUEST
+				&& mc.handleVoidscapeDuelProofMessage(message))
+			|| (sender == null && type == MessageType.QUEST
+				&& mc.handleVoidscapeDuelJournalMessage(message))
 			|| mc.handleVoidscapeFarmSimMessage(message)
 			|| mc.handleUndeadSiegeMessage(message)
 			|| mc.handleVoidArenaRatingMessage(message)) {
@@ -1614,18 +1622,17 @@ public class PacketHandler {
 					int tileSize = mc.getTileSize();
 					int xWorld = (xTile * 2 + xSize) * tileSize / 2;
 					int zWorld = (zTile * 2 + zSize) * tileSize / 2;
-					RSModel m;
-					if (id == mudclient.VOID_RIFT_OBJECT_ID) {
-						m = mc.createVoidRiftGroundModel(xWorld, zWorld);
-					} else {
-						int modelIndex = com.openrsc.client.entityhandling.EntityHandler.getObjectDef(id).modelID;// CacheValues.gameObjectModelIndex[id];
-						m = mc.getModelCacheItem(modelIndex).clone();
-					}
+					int modelIndex = com.openrsc.client.entityhandling.EntityHandler.getObjectDef(id).modelID;// CacheValues.gameObjectModelIndex[id];
+					RSModel m = mc.getModelCacheItem(modelIndex).clone();
 					mc.getScene().addModel(m);
 					m.key = mc.getGameObjectInstanceCount();
 					m.addRotation(0, dir * 32, 0);
 					m.translate2(xWorld, -mc.getWorld().getElevation(xWorld, zWorld), zWorld);
-					m.setDiffuseLightAndColor(-50, -10, -50, 48, 48, true, 117);
+					if (id == mudclient.VOID_RIFT_OBJECT_ID) {
+						m.setDiffuseLightAndColor(-50, -10, -50, 60, 24, false, 117);
+					} else {
+						m.setDiffuseLightAndColor(-50, -10, -50, 48, 48, true, 117);
+					}
 					mc.getWorld().addGameObject_UpdateCollisionMap(xTile, zTile, id, false);
 					if (id == 74) {
 						m.translate2(0, -480, 0);
@@ -2288,7 +2295,7 @@ public class PacketHandler {
 		mc.setFightModeSelectorToggle(packetsIncoming.getUnsignedByte()); // 32
 		mc.setExperienceCounterToggle(packetsIncoming.getUnsignedByte()); // 33
 		mc.setHideInventoryCount(packetsIncoming.getUnsignedByte() == 1); // 34
-		mc.setHideNameTag(packetsIncoming.getUnsignedByte() == 1); // 35
+		mc.setOverheadPlayerLabelMode(packetsIncoming.getUnsignedByte()); // 35
 		packetsIncoming.getUnsignedByte(); // 36 — was party-invite block; parties removed, byte still consumed
 		mc.setAndroidInvToggle(packetsIncoming.getUnsignedByte() == 1); // 37
 		mc.setShowNPCKC(packetsIncoming.getUnsignedByte() == 1); // 38
@@ -2625,7 +2632,9 @@ public class PacketHandler {
 	}
 
 	private void showServerMessageDialog() {
-		mc.setServerMessage(packetsIncoming.readString());
+		String message = packetsIncoming.readString();
+		if (mc.shouldSuppressVoidscapePkCatchingLegacyBox(message)) return;
+		mc.setServerMessage(message);
 		mc.setShowDialogServerMessage(true);
 		mc.setServerMessageBoxTop(true);
 	}
@@ -2649,7 +2658,9 @@ public class PacketHandler {
 	}
 
 	private void showServerMessageDialogTwo() {
-		mc.setServerMessage(packetsIncoming.readString());
+		String message = packetsIncoming.readString();
+		if (mc.shouldSuppressVoidscapePkCatchingLegacyBox(message)) return;
+		mc.setServerMessage(message);
 		mc.setShowDialogServerMessage(true);
 		mc.setServerMessageBoxTop(false);
 	}
@@ -2951,6 +2962,10 @@ public class PacketHandler {
 						packetsIncoming.getUnsignedByte();
 					if (Config.CLIENT_VERSION >= Config.MODERN_HAIR_CLIENT_VERSION)
 						packetsIncoming.getUnsignedByte();
+					if (Config.CLIENT_VERSION >= Config.PLAYER_HONORIFIC_CLIENT_VERSION) {
+						packetsIncoming.readString();
+						packetsIncoming.getUnsignedByte();
+					}
 				} else {
 					//packetsIncoming.getShort();
 
@@ -3005,6 +3020,16 @@ public class PacketHandler {
 						player.hairStyle = packetsIncoming.getUnsignedByte();
 					} else {
 						player.hairStyle = 0;
+					}
+					if (Config.CLIENT_VERSION >= Config.PLAYER_HONORIFIC_CLIENT_VERSION) {
+						player.honorific = packetsIncoming.readString();
+						if (player.honorific != null && player.honorific.length() == 0) {
+							player.honorific = null;
+						}
+						player.honorificTier = packetsIncoming.getUnsignedByte();
+					} else {
+						player.honorific = null;
+						player.honorificTier = 0;
 					}
 				}
 			} else if (updateType == 8) {

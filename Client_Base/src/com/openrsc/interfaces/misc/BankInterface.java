@@ -10,6 +10,7 @@ import orsc.graphics.gui.Panel;
 import orsc.graphics.gui.UiSkin;
 import orsc.graphics.two.Fonts;
 import orsc.mudclient;
+import orsc.multiclient.ClientPort;
 import orsc.util.BankUtil;
 
 import java.io.File;
@@ -150,6 +151,7 @@ public class BankInterface {
 	private int vgMenuKind = 0; // 0 = item quantity menu, 1 = loadout actions
 	private int vgMenuPresetSlot = -1;
 	private int vgMenuX, vgMenuY, vgMenuSlot, vgMenuItemID;
+	private int vgMenuPage = 0;
 	private final ArrayList<String> vgMenuLabels = new ArrayList<>();
 	private final ArrayList<Boolean> vgMenuDep = new ArrayList<>();
 	private final ArrayList<Integer> vgMenuAmt = new ArrayList<>();
@@ -161,6 +163,10 @@ public class BankInterface {
 	private int vgTouchScrollAccum = 0;
 	private int vgInvScrollRow = 0;
 	private boolean vgInvScrollDrag = false;
+	private boolean vgInvTouchScrollActive = false;
+	private boolean vgInvTouchScrolled = false;
+	private int vgInvTouchScrollLastY = 0;
+	private int vgInvTouchScrollAccum = 0;
 	private String vgSearch = "";
 	private String vgLastQuery = "";
 	private boolean vgSearchFocus = false;
@@ -216,6 +222,7 @@ public class BankInterface {
 		final int invLabelH = 16;
 		final int actionH = vgActionH();
 		final int pad = 4;
+		final int pw = vgPanelW();
 		final String query = vgSearch == null ? "" : vgSearch.trim().toLowerCase(Locale.ROOT);
 		final int bankPages = bankItems.isEmpty() ? 0
 			: Math.min(VG_PAGE_MAX, Math.max(1, (bankItems.size() + VG_PAGE_SIZE - 1) / VG_PAGE_SIZE));
@@ -223,17 +230,23 @@ public class BankInterface {
 		if (!query.isEmpty() && page != 0) page = 0;
 		if (page > bankPages) page = 0;
 		final boolean tabsVisible = query.isEmpty() && bankPages > 1;
-		final int tabRowH = vgTabRowH(tabsVisible);
+		final int tabRowH = vgTabAreaH(tabsVisible, bankPages, pw);
 		final int invRowsFull = vgInvRows();
-		final int chrome = titleH + tabRowH + pad + invLabelH + actionH + pad + pad;
+		final int chrome = titleH + tabRowH + pad + invLabelH + vgActionAreaH() + pad + pad;
 		final int totalRows = Math.max(2, (availH - chrome) / cellH);
 		final int invRows = Math.max(1, Math.min(invRowsFull, totalRows - 3));
 		final int bankRows = Math.max(1, Math.min(14, totalRows - invRows));
 		final int fixed = chrome + invRows * cellH;
-		final int pw = vgPanelW();
 		final int ph = fixed + bankRows * cellH;
 		final int px = (gw - pw) / 2;
 		final int py = topSafe + Math.max(0, (availH - ph) / 2);
+		final int tabCount = tabsVisible ? bankPages + 1 : 0;
+		final int tabColumns = tabsVisible ? vgTabColumns(tabCount, pw) : 0;
+		final int tabRows = tabsVisible ? vgTabRows(tabCount, pw) : 0;
+		final int tabW = tabsVisible ? vgTabWidth(tabCount, pw) : 0;
+		final int tabH = tabsVisible ? vgTabHeight() : 0;
+		final int[] firstTab = tabsVisible ? vgTabRect(0, bankPages, px, py, pw, titleH) : null;
+		final int[] lastTab = tabsVisible ? vgTabRect(tabCount - 1, bankPages, px, py, pw, titleH) : null;
 		final int gx = px + VG_INNER_PAD;
 		final int bankGY = py + titleH + tabRowH + pad;
 		final int gridH = bankRows * cellH;
@@ -248,19 +261,22 @@ public class BankInterface {
 		final int sbX = px + pw - VG_INNER_PAD + 1;
 		final int sbY = bankGY;
 		final int sbH = gridH;
-		final int closeW = vgMobileLayout() ? 54 : 14;
-		final int closeH = vgMobileLayout() ? 22 : 14;
+		final int closeW = vgCloseW();
+		final int closeH = vgCloseH();
 		final int closeX = px + pw - closeW - 4;
 		final int closeY = py + (titleH - closeH) / 2;
 		final int sx = px + (vgMobileLayout() ? 64 : 58);
-		final int sy = py + 4;
-		final int searchH = vgMobileLayout() ? 22 : 16;
-		final int sw = Math.min(vgMobileLayout() ? 184 : 170, Math.max(80, closeX - sx - 8));
-		final int searchClearW = vgMobileLayout() ? 30 : 14;
+		final int searchH = vgSearchH();
+		final int sy = py + (titleH - searchH) / 2;
+		final int sw = vgSearchW();
+		final int searchClearW = vgMobileLayout() ? vgTouchTarget() : 14;
 		final int searchClearX = sx + sw - searchClearW;
-		final int depositAllW = Math.min(vgMobileLayout() ? 150 : 170, pw - 2 * VG_INNER_PAD);
-		final int depositAllX = px + pw - VG_INNER_PAD - depositAllW;
-		final int loadoutW = vgMobileLayout() ? 38 : 26;
+		final int depositAllW = vgStackMobileActions()
+			? pw - 2 * VG_INNER_PAD
+			: Math.min(vgMobileLayout() ? 150 : 170, pw - 2 * VG_INNER_PAD);
+		final int depositAllX = vgStackMobileActions() ? gx : px + pw - VG_INNER_PAD - depositAllW;
+		final int depositAllY = actionY + (vgStackMobileActions() ? actionH + vgActionGap() : 0);
+		final int loadoutW = vgMobileLayout() ? vgTouchTarget() : 26;
 		final int loadoutsX = S_WANT_BANK_PRESETS ? gx + loadoutW / 2 : -1;
 		final int loadoutsY = S_WANT_BANK_PRESETS ? actionY + actionH / 2 : -1;
 		final int menuRowH = vgMenuRowH();
@@ -293,6 +309,24 @@ public class BankInterface {
 			.append(",\"bankSlotY\":").append(bankGY + cellH / 2)
 			.append(",\"inventorySlotX\":").append(gx + cellW / 2)
 			.append(",\"inventorySlotY\":").append(invGY + cellH / 2)
+			.append(",\"touchTarget\":").append(vgMobileLayout() ? vgTouchTarget() : 0)
+			.append(",\"cellW\":").append(cellW)
+			.append(",\"cellH\":").append(cellH)
+			.append(",\"titleH\":").append(titleH)
+			.append(",\"panelX\":").append(px)
+			.append(",\"panelY\":").append(py)
+			.append(",\"panelW\":").append(pw)
+			.append(",\"panelH\":").append(ph)
+			.append(",\"tabCount\":").append(tabCount)
+			.append(",\"tabColumns\":").append(tabColumns)
+			.append(",\"tabRows\":").append(tabRows)
+			.append(",\"tabW\":").append(tabW)
+			.append(",\"tabH\":").append(tabH)
+			.append(",\"tab0X\":").append(firstTab == null ? -1 : firstTab[0] + firstTab[2] / 2)
+			.append(",\"tab0Y\":").append(firstTab == null ? -1 : firstTab[1] + firstTab[3] / 2)
+			.append(",\"tabLastX\":").append(lastTab == null ? -1 : lastTab[0] + lastTab[2] / 2)
+			.append(",\"tabLastY\":").append(lastTab == null ? -1 : lastTab[1] + lastTab[3] / 2)
+			.append(",\"searchH\":").append(searchH)
 			.append(",\"searchX\":").append(sx + sw / 2)
 			.append(",\"searchY\":").append(sy + searchH / 2)
 			.append(",\"searchClearX\":").append(searchClearX + searchClearW / 2)
@@ -302,17 +336,20 @@ public class BankInterface {
 			.append(",\"closeW\":").append(closeW)
 			.append(",\"closeH\":").append(closeH)
 			.append(",\"depositAllX\":").append(depositAllX + depositAllW / 2)
-			.append(",\"depositAllY\":").append(actionY + actionH / 2)
+			.append(",\"depositAllY\":").append(depositAllY + actionH / 2)
 			.append(",\"loadoutsX\":").append(loadoutsX)
 			.append(",\"loadoutsY\":").append(loadoutsY)
 			.append(",\"loadoutW\":").append(loadoutW)
 			.append(",\"actionH\":").append(actionH)
+			.append(",\"actionAreaH\":").append(vgActionAreaH())
 			.append(",\"menuOpen\":").append(vgMenu)
 			.append(",\"menuKind\":").append(vgMenuKind)
 			.append(",\"menuX\":").append(vgMenu ? vgMenuX : -1)
 			.append(",\"menuY\":").append(vgMenu ? vgMenuY : -1)
 			.append(",\"menuWidth\":").append(vgMenu ? vgMenuWidth() : 0)
 			.append(",\"menuRowH\":").append(menuRowH)
+			.append(",\"menuPage\":").append(vgMenu ? vgMenuPage : 0)
+			.append(",\"menuPages\":").append(vgMenu ? vgMenuPageCount() : 0)
 			.append(",\"loadoutSave0X\":").append(loadoutSaveX)
 			.append(",\"loadoutSave0Y\":").append(loadoutSaveY)
 			.append(",\"loadoutLoad0X\":").append(loadoutLoadX)
@@ -355,7 +392,8 @@ public class BankInterface {
 		final int topSafe = vgTopSafe();
 		final int botSafe = vgBotSafe();
 		final int availH = botSafe - topSafe;
-		final int chrome = vgTitleH() + vgTabRowH(tabsVisible) + 4 + 16 + vgActionH() + 4 + 4;
+		final int chrome = vgTitleH() + vgTabAreaH(tabsVisible, bankPages, vgPanelW())
+			+ 4 + 16 + vgActionAreaH() + 4 + 4;
 		final int totalRows = Math.max(2, (availH - chrome) / vgCellH());
 		final int invRows = Math.max(1, Math.min(vgInvRows(), totalRows - 3));
 		final int bankRows = Math.max(1, Math.min(14, totalRows - invRows));
@@ -401,20 +439,125 @@ public class BankInterface {
 	}
 
 	private boolean vgMobileLayout() { return Config.isAndroid(); }
-	private int vgTitleH() { return vgMobileLayout() ? 30 : VG_TITLE_H; }
-	private int vgActionH() { return vgMobileLayout() ? 30 : 22; }
-	private int vgTabRowH(boolean visible) { return visible ? (vgMobileLayout() ? 28 : 20) : 0; }
-	private int vgMenuRowH() { return vgMobileLayout() ? 28 : VG_MENU_ROW_H; }
+	private boolean vgNativeAndroidLayout() { return Config.isAndroid() && !Config.isWeb(); }
+
+	private void vgRequestSearchKeyboard() {
+		if (vgNativeAndroidLayout() && mudclient.clientPort != null) {
+			mudclient.clientPort.drawKeyboard();
+		}
+	}
+
+	private void vgDismissSearchKeyboard() {
+		if (vgNativeAndroidLayout() && mudclient.clientPort != null) {
+			mudclient.clientPort.closeKeyboard();
+		}
+	}
+
+	private int vgClientPixelsForDp(final int dp) {
+		if (!vgMobileLayout()) return Math.max(1, dp);
+		final ClientPort activePort = mudclient.clientPort;
+		return activePort == null ? Math.max(1, dp) : Math.max(1, activePort.getTouchTargetClientPixels(dp));
+	}
+
+	private int vgTouchTarget() { return vgClientPixelsForDp(48); }
+	private int vgMobileMargin() { return Math.max(4, vgClientPixelsForDp(8)); }
+	private int vgTitleH() { return vgMobileLayout() ? vgTouchTarget() + vgClientPixelsForDp(8) : VG_TITLE_H; }
+	private int vgSearchH() { return vgMobileLayout() ? vgTouchTarget() : 16; }
+	private int vgCloseW() { return vgMobileLayout() ? Math.max(54, vgTouchTarget()) : 14; }
+	private int vgCloseH() { return vgMobileLayout() ? vgTouchTarget() : 14; }
+	private int vgSearchW() {
+		final int panelX = (mc.getGameWidth() - vgPanelW()) / 2;
+		final int searchX = panelX + (vgMobileLayout() ? 64 : 58);
+		final int closeX = panelX + vgPanelW() - vgCloseW() - 4;
+		return Math.min(vgMobileLayout() ? 184 : 170, Math.max(80, closeX - searchX - 8));
+	}
+	private int vgSearchTextCap() {
+		return vgMobileLayout() ? Math.max(20, vgSearchW() - vgTouchTarget() - 10) : 150;
+	}
+	private int vgActionH() { return vgMobileLayout() ? vgTouchTarget() : 22; }
+	private int vgActionGap() { return vgMobileLayout() ? Math.max(3, vgClientPixelsForDp(4)) : 0; }
+	private boolean vgStackMobileActions() {
+		return vgMobileLayout() && mc.getGameHeight() >= mc.getGameWidth();
+	}
+	private int vgActionAreaH() {
+		return vgActionH() * (vgStackMobileActions() ? 2 : 1) + (vgStackMobileActions() ? vgActionGap() : 0);
+	}
+	private int vgTabGap() {
+		return vgMobileLayout() ? Math.max(1, vgClientPixelsForDp(2)) : 4;
+	}
+	private int vgTabRows(final int tabCount, final int panelWidth) {
+		if (tabCount <= 0 || !vgMobileLayout()) return tabCount > 0 ? 1 : 0;
+		final int available = Math.max(vgTouchTarget(), panelWidth - 2 * VG_INNER_PAD);
+		final int maxColumns = Math.max(1,
+			(available + vgTabGap()) / (vgTouchTarget() + vgTabGap()));
+		return Math.max(1, (tabCount + maxColumns - 1) / maxColumns);
+	}
+	private int vgTabColumns(final int tabCount, final int panelWidth) {
+		if (tabCount <= 0) return 0;
+		final int rows = vgTabRows(tabCount, panelWidth);
+		return Math.max(1, (tabCount + rows - 1) / rows);
+	}
+	private int vgTabWidth(final int tabCount, final int panelWidth) {
+		if (tabCount <= 0) return 0;
+		final int gap = vgTabGap();
+		final int columns = vgTabColumns(tabCount, panelWidth);
+		final int available = Math.max(1, panelWidth - 2 * VG_INNER_PAD);
+		if (!vgMobileLayout()) {
+			return Math.max(30, Math.min(60,
+				(available - (tabCount - 1) * gap) / tabCount));
+		}
+		return Math.max(vgTouchTarget(),
+			(available - (columns - 1) * gap) / columns);
+	}
+	private int vgTabHeight() {
+		return vgMobileLayout() ? vgTouchTarget() : 17;
+	}
+	private int vgTabAreaH(final boolean visible, final int bankPages, final int panelWidth) {
+		if (!visible) return 0;
+		if (!vgMobileLayout()) return 20;
+		final int rows = vgTabRows(bankPages + 1, panelWidth);
+		return rows * vgTabHeight() + Math.max(0, rows - 1) * vgTabGap() + 3;
+	}
+	private int[] vgTabRect(final int tab, final int bankPages, final int panelX,
+							final int panelY, final int panelWidth, final int titleH) {
+		final int tabCount = bankPages + 1;
+		final int columns = vgTabColumns(tabCount, panelWidth);
+		final int width = vgTabWidth(tabCount, panelWidth);
+		final int height = vgTabHeight();
+		final int gap = vgTabGap();
+		final int row = tab / columns;
+		final int column = tab % columns;
+		final int rowCount = Math.min(columns, tabCount - row * columns);
+		final int available = Math.max(1, panelWidth - 2 * VG_INNER_PAD);
+		final int rowWidth = rowCount * width + Math.max(0, rowCount - 1) * gap;
+		final int startX = panelX + VG_INNER_PAD + Math.max(0, (available - rowWidth) / 2);
+		return new int[]{startX + column * (width + gap), panelY + titleH + row * (height + gap), width, height};
+	}
+	private int vgMenuRowH() { return vgMobileLayout() ? vgTouchTarget() : VG_MENU_ROW_H; }
 	private int vgTier() { int gw = mc.getGameWidth(); return gw < 700 ? 0 : (gw < 940 ? 1 : 2); }
-	private int vgCols() { int t = vgTier(); return t == 0 ? 9 : (t == 1 ? 10 : 12); }
-	private int vgCellW() { int t = vgTier(); return t == 0 ? 49 : (t == 1 ? 54 : 60); }
-	private int vgCellH() { int t = vgTier(); return t == 0 ? 34 : (t == 1 ? 36 : 40); }
+	private int vgBaseCols() { int t = vgTier(); return t == 0 ? 9 : (t == 1 ? 10 : 12); }
+	private int vgBaseCellW() { int t = vgTier(); return t == 0 ? 49 : (t == 1 ? 54 : 60); }
+	private int vgBaseCellH() { int t = vgTier(); return t == 0 ? 34 : (t == 1 ? 36 : 40); }
+	private int vgCols() {
+		final int baseCols = vgBaseCols();
+		if (!vgMobileLayout()) return baseCols;
+		final int available = Math.max(1, mc.getGameWidth() - 2 * VG_SIDE_MARGIN - 2 * VG_INNER_PAD - VG_SCROLL_GUTTER);
+		return Math.max(1, Math.min(baseCols, available / Math.max(vgBaseCellW(), vgTouchTarget())));
+	}
+	private int vgCellW() { return vgMobileLayout() ? Math.max(vgBaseCellW(), vgTouchTarget()) : vgBaseCellW(); }
+	private int vgCellH() { return vgMobileLayout() ? Math.max(vgBaseCellH(), vgTouchTarget()) : vgBaseCellH(); }
 	private int vgTopSafe() {
+		if (vgMobileLayout()) return vgMobileMargin();
 		// the small-HUD preset hides the top-tab row while banking, freeing the whole top
 		if (mc.isVoidscapeClassicWebSmallHud()) return 8;
 		return Math.max(56, mc.getVoidscapeDesktopOverlayTopSafeY());
 	}
-	private int vgBotSafe() { int gh = mc.getGameHeight(); int e = mc.getVoidscapeDesktopOverlayBottomSafeY(); return e < gh ? e : gh - 22; }
+	private int vgBotSafe() {
+		final int gh = mc.getGameHeight();
+		if (vgMobileLayout()) return Math.max(vgTopSafe() + 1, gh - vgMobileMargin());
+		final int e = mc.getVoidscapeDesktopOverlayBottomSafeY();
+		return e < gh ? e : gh - 22;
+	}
 	private int vgPanelW() { return Math.min(vgCols() * vgCellW() + 2 * VG_INNER_PAD + VG_SCROLL_GUTTER, mc.getGameWidth() - 2 * VG_SIDE_MARGIN); }
 	private int vgInvRows() { int c = vgCols(); return (30 + c - 1) / c; }
 
@@ -459,9 +602,15 @@ public class BankInterface {
 	}
 
 	private void logAndroidSmokeBankState(final String rawSearchItem, final int matches, final int visibleBankSlotStart,
-										  final int bankSlotX, final int bankSlotY,
-										  final int inventorySlotX, final int inventorySlotY,
-										  final int searchX, final int searchY,
+											  final int bankSlotX, final int bankSlotY,
+											  final int inventorySlotX, final int inventorySlotY,
+											  final int panelX, final int panelY,
+											  final int panelW, final int panelH,
+											  final int tabCount, final int tabColumns,
+											  final int tabRows, final int tabW, final int tabH,
+											  final int tab0X, final int tab0Y,
+											  final int tabLastX, final int tabLastY,
+											  final int searchX, final int searchY,
 										  final int searchClearX, final int searchClearY,
 										  final int closeX, final int closeY,
 										  final int closeW, final int closeH,
@@ -499,6 +648,25 @@ public class BankInterface {
 
 		System.out.println("ANDROID_SMOKE_BANK_OPEN"
 			+ " renderer=voidGlass"
+			+ " touchTarget=" + (vgMobileLayout() ? vgTouchTarget() : 0)
+			+ " titleH=" + vgTitleH()
+			+ " searchH=" + vgSearchH()
+			+ " cellW=" + vgCellW()
+			+ " cellH=" + vgCellH()
+			+ " cols=" + vgCols()
+			+ " panelX=" + panelX
+			+ " panelY=" + panelY
+			+ " panelW=" + panelW
+			+ " panelH=" + panelH
+			+ " tabCount=" + tabCount
+			+ " tabColumns=" + tabColumns
+			+ " tabRows=" + tabRows
+			+ " tabW=" + tabW
+			+ " tabH=" + tabH
+			+ " tab0X=" + tab0X
+			+ " tab0Y=" + tab0Y
+			+ " tabLastX=" + tabLastX
+			+ " tabLastY=" + tabLastY
 			+ " bankItems=" + bankItems.size()
 			+ " max=" + mc.bankItemsMax
 			+ " inventoryItems=" + countInventoryItems()
@@ -526,6 +694,7 @@ public class BankInterface {
 			+ " loadoutsY=" + loadoutsY
 			+ " loadoutW=" + loadoutW
 			+ " actionH=" + actionH
+			+ " actionAreaH=" + vgActionAreaH()
 			+ " menuRowH=" + vgMenuRowH()
 			+ " scrollbarX=" + scrollbarX
 			+ " scrollDownY=" + scrollDownY
@@ -572,7 +741,45 @@ public class BankInterface {
 
 	private int vgMenuRowCenterY(final int row) {
 		int rowH = vgMenuRowH();
-		return vgMenuY + 2 + row * rowH + rowH / 2;
+		return vgMenuY + 2 + (row - vgMenuPage * vgMenuRowsPerPage()) * rowH + rowH / 2;
+	}
+
+	private int vgMenuRowsPerPage() {
+		if (!vgMobileLayout()) return Math.max(1, vgMenuLabels.size());
+		final int availableH = Math.max(vgMenuRowH(), mc.getGameHeight() - 2 * vgMobileMargin() - 4);
+		final int rowsThatFit = Math.max(2, availableH / vgMenuRowH());
+		return vgMenuLabels.size() > rowsThatFit ? Math.max(1, rowsThatFit - 1) : rowsThatFit;
+	}
+
+	private int vgMenuPageCount() {
+		final int perPage = vgMenuRowsPerPage();
+		return Math.max(1, (vgMenuLabels.size() + perPage - 1) / perPage);
+	}
+
+	private boolean vgMenuPaged() {
+		return vgMobileLayout() && vgMenuPageCount() > 1;
+	}
+
+	private int vgMenuVisibleCount() {
+		final int first = vgMenuPage * vgMenuRowsPerPage();
+		return Math.max(0, Math.min(vgMenuRowsPerPage(), vgMenuLabels.size() - first));
+	}
+
+	private int vgMenuHeight() {
+		return 4 + (vgMenuVisibleCount() + (vgMenuPaged() ? 1 : 0)) * vgMenuRowH();
+	}
+
+	private void vgClampMenuToScreen() {
+		final int width = vgMenuWidth();
+		final int height = vgMenuHeight();
+		if (!vgMobileLayout()) {
+			vgMenuX = Math.min(vgMenuX, mc.getGameWidth() - width - 2);
+			vgMenuY = Math.min(vgMenuY, mc.getGameHeight() - height - 2);
+			return;
+		}
+		final int margin = vgMobileMargin();
+		vgMenuX = Math.max(margin, Math.min(vgMenuX, mc.getGameWidth() - width - margin));
+		vgMenuY = Math.max(margin, Math.min(vgMenuY, mc.getGameHeight() - height - margin));
 	}
 
 	private boolean renderVoidGlassBank(int mx, int my) {
@@ -584,23 +791,23 @@ public class BankInterface {
 		int topSafe = vgTopSafe(), botSafe = vgBotSafe();
 		int availH = botSafe - topSafe;
 		int titleH = vgTitleH(), invLabelH = 16, actionH = vgActionH(), pad = 4;
+		int pw = vgPanelW();
 		// page tabs (client-side slices of bankItems, 48 per tab like classic pages)
 		String vq = vgSearch.trim().toLowerCase(Locale.ROOT);
 		int bankPages = bankItems.isEmpty() ? 0 : Math.min(VG_PAGE_MAX, Math.max(1, (bankItems.size() + VG_PAGE_SIZE - 1) / VG_PAGE_SIZE));
 		if (!vq.isEmpty() && vgPage != 0) vgPage = 0; // search always spans the whole bank
 		if (vgPage > bankPages) vgPage = 0;
 		boolean tabsVisible = vq.isEmpty() && bankPages > 1;
-		int tabRowH = vgTabRowH(tabsVisible);
+		int tabRowH = vgTabAreaH(tabsVisible, bankPages, pw);
 
 		// Adaptive bank/inventory split: the bank grid keeps >=3 rows; the inventory
 		// tray takes the remainder (min 1) and scrolls when rows are hidden (Classic 512x334).
 		int invRowsFull = vgInvRows();
-		int chrome = titleH + tabRowH + pad + invLabelH + actionH + pad + pad;
+		int chrome = titleH + tabRowH + pad + invLabelH + vgActionAreaH() + pad + pad;
 		int totalRows = Math.max(2, (availH - chrome) / cellH);
 		int invRows = Math.max(1, Math.min(invRowsFull, totalRows - 3));
 		int bankRows = Math.max(1, Math.min(14, totalRows - invRows));
 		int fixed = chrome + invRows * cellH;
-		int pw = vgPanelW();
 		int ph = fixed + bankRows * cellH;
 		int px = (gw - pw) / 2;
 		int py = topSafe + Math.max(0, (availH - ph) / 2);
@@ -662,14 +869,25 @@ public class BankInterface {
 		// --- input: right-click quantity menu takes priority ---
 		if (vgMenu && (click || rclick)) {
 			int rowH = vgMenuRowH();
-			int mw = vgMenuWidth(), mh = vgMenuLabels.size() * rowH + 4;
+			int mw = vgMenuWidth(), mh = vgMenuHeight();
+			boolean keepMenuOpen = false;
 			if (mx >= vgMenuX && mx < vgMenuX + mw && my >= vgMenuY && my < vgMenuY + mh) {
 				// guard the 2px header band: negative dividends truncate toward zero,
 				// which would fire row 0 on a double-click at the menu's top edge
 				int row = my < vgMenuY + 2 ? -1 : (my - vgMenuY - 2) / rowH;
-				if (row >= 0 && row < vgMenuLabels.size()) vgDoMenu(row);
+				final int visibleCount = vgMenuVisibleCount();
+				if (row >= 0 && row < visibleCount) {
+					vgDoMenu(vgMenuPage * vgMenuRowsPerPage() + row);
+				} else if (vgMenuPaged() && row == visibleCount) {
+					final boolean previousHalf = mx < vgMenuX + mw / 2;
+					if (previousHalf && vgMenuPage > 0) vgMenuPage--;
+					else if (!previousHalf && vgMenuPage + 1 < vgMenuPageCount()) vgMenuPage++;
+					vgClampMenuToScreen();
+					keepMenuOpen = true;
+				}
 			}
-			vgMenu = false; mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false; rclick = false;
+			vgMenu = keepMenuOpen;
+			mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false; rclick = false;
 		}
 
 		// --- input: scrollbar drag / track click ---
@@ -696,14 +914,16 @@ public class BankInterface {
 			} else {
 				vgTouchScrollAccum += vgTouchScrollLastY - my;
 				vgTouchScrollLastY = my;
-				int rowDelta = vgTouchScrollAccum / cellH;
-				if (rowDelta != 0) {
-					vgScrollRow += rowDelta;
-					vgTouchScrollAccum -= rowDelta * cellH;
+				if (Math.abs(vgTouchScrollAccum) >= vgClientPixelsForDp(8)) {
 					vgTouchScrolled = true;
 					mc.setMouseClick(0);
 					mc.mouseButtonClick = 0;
 					click = false;
+				}
+				int rowDelta = vgTouchScrollAccum / cellH;
+				if (rowDelta != 0) {
+					vgScrollRow += rowDelta;
+					vgTouchScrollAccum -= rowDelta * cellH;
 				}
 			}
 		} else if (!down) {
@@ -732,18 +952,59 @@ public class BankInterface {
 		vgInvScrollRow = Math.max(0, Math.min(maxInvScroll, vgInvScrollRow));
 		invThumbY = maxInvScroll > 0 ? invSbY + (invSbH - invThumbH) * vgInvScrollRow / maxInvScroll : invSbY;
 
+		// The landscape tray often has only one visible row. Let the whole tray act as
+		// its scrollbar on Android so reaching later inventory rows never depends on
+		// the narrow visual gutter.
+		boolean overInventoryGrid = mx >= gx && mx < gx + cols * cellW
+			&& my >= invGY && my < invGY + invRows * cellH;
+		if (Config.isAndroid() && maxInvScroll > 0 && down && !vgMenu && !vgScrollDrag
+			&& !vgInvScrollDrag && overInventoryGrid) {
+			if (!vgInvTouchScrollActive) {
+				vgInvTouchScrollActive = true;
+				vgInvTouchScrolled = false;
+				vgInvTouchScrollLastY = my;
+				vgInvTouchScrollAccum = 0;
+			} else {
+				vgInvTouchScrollAccum += vgInvTouchScrollLastY - my;
+				vgInvTouchScrollLastY = my;
+				if (Math.abs(vgInvTouchScrollAccum) >= vgClientPixelsForDp(8)) {
+					vgInvTouchScrolled = true;
+					mc.setMouseClick(0);
+					mc.mouseButtonClick = 0;
+					click = false;
+				}
+				int rowDelta = vgInvTouchScrollAccum / cellH;
+				if (rowDelta != 0) {
+					vgInvScrollRow += rowDelta;
+					vgInvTouchScrollAccum -= rowDelta * cellH;
+				}
+			}
+		} else if (!down) {
+			if (vgInvTouchScrolled && click) {
+				mc.setMouseClick(0);
+				mc.mouseButtonClick = 0;
+				click = false;
+			}
+			vgInvTouchScrollActive = false;
+			vgInvTouchScrolled = false;
+			vgInvTouchScrollAccum = 0;
+		}
+		vgInvScrollRow = Math.max(0, Math.min(maxInvScroll, vgInvScrollRow));
+		invThumbY = maxInvScroll > 0 ? invSbY + (invSbH - invThumbH) * vgInvScrollRow / maxInvScroll : invSbY;
+
 		// --- input: close button ---
-		int closeW = vgMobileLayout() ? 54 : 14;
-		int closeH = vgMobileLayout() ? 22 : 14;
+		int closeW = vgCloseW();
+		int closeH = vgCloseH();
 		int closeX = px + pw - closeW - 4;
 		int closeY = py + (titleH - closeH) / 2;
 		boolean overClose = mx >= closeX && mx < closeX + closeW && my >= closeY && my < closeY + closeH;
 		if (click && overClose) { mc.setMouseClick(0); bankClose(); return false; }
 
 		// --- input: search box focus ---
-		int sx = px + (vgMobileLayout() ? 64 : 58), sy = py + 4, sh2 = vgMobileLayout() ? 22 : 16;
-		int sw = Math.min(vgMobileLayout() ? 184 : 170, Math.max(80, closeX - sx - 8));
-		int searchClearW = vgMobileLayout() ? 30 : 14;
+		int sx = px + (vgMobileLayout() ? 64 : 58), sh2 = vgSearchH();
+		int sy = py + (titleH - sh2) / 2;
+		int sw = vgSearchW();
+		int searchClearW = vgMobileLayout() ? vgTouchTarget() : 14;
 		int searchClearX = sx + sw - searchClearW;
 		boolean mobileSearchClear = Config.isAndroid();
 		boolean overSearchClear = mobileSearchClear && !vgSearch.isEmpty()
@@ -751,20 +1012,35 @@ public class BankInterface {
 		boolean overSearch = mx >= sx && mx < sx + sw && my >= sy && my < sy + sh2;
 		if (click) {
 			if (overSearchClear) {
-				clearVgSearch(false);
+				// Clearing a search keeps the field active so players can immediately
+				// refine it without summoning the IME again.
+				clearVgSearch(true);
+				vgRequestSearchKeyboard();
 				mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false;
-			} else if (overSearch) { vgSearchFocus = true; mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false; }
-			else vgSearchFocus = false;
+			} else if (overSearch) {
+				vgSearchFocus = true;
+				vgRequestSearchKeyboard();
+				mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false;
+			} else {
+				final boolean searchOwnedKeyboard = vgSearchFocus;
+				vgSearchFocus = false;
+				if (searchOwnedKeyboard) vgDismissSearchKeyboard();
+			}
 		}
 
 		// --- input: page tabs ---
-		int tabY = py + titleH, tabH = Math.max(0, tabRowH - 3), tabGap = 4;
+		// Narrow native phones wrap the seven-tab maximum into balanced rows. The
+		// exact same rectangles drive hit-testing, rendering, and QA telemetry.
 		int tabCount = tabsVisible ? bankPages + 1 : 0;
-		int tabW = tabsVisible ? Math.max(30, Math.min(60, (pw - 2 * VG_INNER_PAD - (tabCount - 1) * tabGap) / tabCount)) : 0;
+		int tabColumns = tabsVisible ? vgTabColumns(tabCount, pw) : 0;
+		int tabRows = tabsVisible ? vgTabRows(tabCount, pw) : 0;
+		int tabW = tabsVisible ? vgTabWidth(tabCount, pw) : 0;
+		int tabH = tabsVisible ? vgTabHeight() : 0;
 		if (tabsVisible && click) {
 			for (int t = 0; t < tabCount; t++) {
-				int tx = gx + t * (tabW + tabGap);
-				if (mx >= tx && mx < tx + tabW && my >= tabY && my < tabY + tabH) {
+				int[] tabRect = vgTabRect(t, bankPages, px, py, pw, titleH);
+				if (mx >= tabRect[0] && mx < tabRect[0] + tabRect[2]
+					&& my >= tabRect[1] && my < tabRect[1] + tabRect[3]) {
 					vgPage = t; vgScrollRow = 0;
 					mc.setMouseClick(0); mc.mouseButtonClick = 0; click = false;
 					break;
@@ -773,12 +1049,16 @@ public class BankInterface {
 		}
 
 		// --- input: deposit-all button ---
-		int daW = Math.min(vgMobileLayout() ? 150 : 170, pw - 2 * VG_INNER_PAD), daX = px + pw - VG_INNER_PAD - daW, daY = actionY;
+		int daW = vgStackMobileActions()
+			? pw - 2 * VG_INNER_PAD
+			: Math.min(vgMobileLayout() ? 150 : 170, pw - 2 * VG_INNER_PAD);
+		int daX = vgStackMobileActions() ? gx : px + pw - VG_INNER_PAD - daW;
+		int daY = actionY + (vgStackMobileActions() ? actionH + vgActionGap() : 0);
 		boolean overDA = mx >= daX && mx < daX + daW && my >= daY && my < daY + actionH;
 		if (click && overDA) { mc.setMouseClick(0); mc.mouseButtonClick = 0; sendVgDepositAll(); click = false; }
 
 		// --- input: loadout chips (left of the action bar); any click opens the action menu ---
-		int loW = vgMobileLayout() ? 38 : 26, loGap = 4, loY = actionY;
+		int loW = vgMobileLayout() ? vgTouchTarget() : 26, loGap = 4, loY = actionY;
 		int loHover = -1;
 		if (S_WANT_BANK_PRESETS) {
 			for (int p = 0; p < 3; p++) {
@@ -794,7 +1074,8 @@ public class BankInterface {
 		}
 
 		// --- input: withdraw-as-note toggle (sendWithdraw appends swapNoteMode) ---
-		int noteW = vgMobileLayout() ? 60 : 62, noteX = gx + (S_WANT_BANK_PRESETS ? 3 * (loW + loGap) + 6 : 0);
+		int noteW = vgMobileLayout() ? Math.max(60, vgTouchTarget()) : 62;
+		int noteX = gx + (S_WANT_BANK_PRESETS ? 3 * (loW + loGap) + 6 : 0);
 		boolean overNote = S_WANT_BANK_NOTES && mx >= noteX && mx < noteX + noteW && my >= loY && my < loY + actionH;
 		if (overNote && click) {
 			swapNoteMode = !swapNoteMode;
@@ -802,7 +1083,8 @@ public class BankInterface {
 		}
 
 		// --- input: arrange-mode toggle (Off -> Swap -> Insert) ---
-		int arW = vgMobileLayout() ? 72 : 78, arX = noteX + (S_WANT_BANK_NOTES ? noteW + 6 : 0);
+		int arW = vgMobileLayout() ? Math.max(72, vgTouchTarget()) : 78;
+		int arX = noteX + (S_WANT_BANK_NOTES ? noteW + 6 : 0);
 		boolean overAr = mx >= arX && mx < arX + arW && my >= loY && my < loY + actionH;
 		if (overAr && click) {
 			vgArrangeMode = (vgArrangeMode + 1) % 3;
@@ -911,7 +1193,8 @@ public class BankInterface {
 		// ---- render: page tabs ----
 		if (tabsVisible) {
 			for (int t = 0; t < tabCount; t++) {
-				int tx = gx + t * (tabW + tabGap);
+				int[] tabRect = vgTabRect(t, bankPages, px, py, pw, titleH);
+				int tx = tabRect[0], tabY = tabRect[1];
 				boolean active = t == vgPage;
 				boolean hovT = mx >= tx && mx < tx + tabW && my >= tabY && my < tabY + tabH;
 				mc.getSurface().drawBoxAlpha(tx, tabY, tabW, tabH, active ? VG_STRIP : 0x0C0620, active ? 170 : (hovT ? 150 : 105));
@@ -1017,9 +1300,17 @@ public class BankInterface {
 		}
 
 		if (vgMenu) drawVoidGlassMenu(mx, my);
+		final int[] firstTab = tabsVisible ? vgTabRect(0, bankPages, px, py, pw, titleH) : null;
+		final int[] lastTab = tabsVisible ? vgTabRect(tabCount - 1, bankPages, px, py, pw, titleH) : null;
 		logAndroidSmokeBankState(vgSearch, vis.size(), vgScrollRow * cols,
 			gx + cellW / 2, bankGY + cellH / 2,
 			gx + cellW / 2, invGY + cellH / 2,
+			px, py, pw, ph,
+			tabCount, tabColumns, tabRows, tabW, tabH,
+			firstTab == null ? -1 : firstTab[0] + firstTab[2] / 2,
+			firstTab == null ? -1 : firstTab[1] + firstTab[3] / 2,
+			lastTab == null ? -1 : lastTab[0] + lastTab[2] / 2,
+			lastTab == null ? -1 : lastTab[1] + lastTab[3] / 2,
 			sx + sw / 2, sy + sh2 / 2,
 			searchClearX + searchClearW / 2, sy + sh2 / 2,
 			closeX + closeW / 2, closeY + closeH / 2,
@@ -1039,7 +1330,10 @@ public class BankInterface {
 		if (!voidGlassBank() || !mc.isShowDialogBank()) return false;
 		if (mc.inputX_Action != InputXAction.ACT_0) return false; // X-amount prompt owns the keyboard
 		if (key == 27) {
-			if (vgSearchFocus || !vgSearch.isEmpty()) clearVgSearch(false);
+			if (vgSearchFocus || !vgSearch.isEmpty()) {
+				clearVgSearch(false);
+				vgDismissSearchKeyboard();
+			}
 			else bankClose();
 			return true;
 		}
@@ -1048,9 +1342,13 @@ public class BankInterface {
 			if (!vgSearch.isEmpty()) vgSearch = vgSearch.substring(0, vgSearch.length() - 1);
 			return true;
 		}
-		if (key == 10 || key == 13) { vgSearchFocus = false; return true; }
+		if (key == 10 || key == 13) {
+			vgSearchFocus = false;
+			vgDismissSearchKeyboard();
+			return true;
+		}
 		if (Fonts.inputFilterChars.indexOf((char) key) >= 0
-			&& mc.getSurface().stringWidth(1, vgSearch + (char) key) <= 150) // pixel cap: box is 170px, drawString doesn't clip
+			&& mc.getSurface().stringWidth(1, vgSearch + (char) key) <= vgSearchTextCap()) // drawString doesn't clip
 			vgSearch += (char) key;
 		return true;
 	}
@@ -1066,11 +1364,20 @@ public class BankInterface {
 
 	public void vgResetSearch() {
 		vgSearch = ""; vgLastQuery = ""; vgSearchFocus = false;
-		vgScrollRow = 0; vgInvScrollRow = 0; vgMenu = false; vgPage = 0;
+		vgScrollRow = 0; vgInvScrollRow = 0; vgMenu = false; vgMenuPage = 0; vgPage = 0;
+		vgTouchScrollActive = false; vgTouchScrolled = false; vgTouchScrollAccum = 0;
+		vgInvTouchScrollActive = false; vgInvTouchScrolled = false; vgInvTouchScrollAccum = 0;
 		vgArrangeMode = 0; vgDragSlot = -1;
 		// only the Void Glass bank resets note mode per visit; the classic path
 		// keeps its once-per-login semantics (this runs on every bank-open packet)
 		if (voidGlassBank()) swapNoteMode = false;
+	}
+
+	/** Releases native text-input ownership when any path dismisses the bank. */
+	public void vgOnDialogClosed() {
+		final boolean searchOwnedKeyboard = vgSearchFocus;
+		vgSearchFocus = false;
+		if (searchOwnedKeyboard) vgDismissSearchKeyboard();
 	}
 
 	private void vgDoMenu(int row) {
@@ -1146,10 +1453,10 @@ public class BankInterface {
 		if (!empty) addVgMenu("Load loadout " + (slot + 1), false, 0);
 		addVgMenu("Save current as loadout " + (slot + 1), true, 1);
 		if (!empty) addVgMenu("Clear loadout " + (slot + 1), true, 2);
-		vgMenuKind = 1; vgMenuPresetSlot = slot; vgMenu = true;
-		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * vgMenuRowH() + 4;
-		vgMenuX = Math.min(mx, mc.getGameWidth() - mw - 2);
-		vgMenuY = Math.min(my, mc.getGameHeight() - mh - 2);
+		vgMenuKind = 1; vgMenuPresetSlot = slot; vgMenu = true; vgMenuPage = 0;
+		vgMenuX = mx;
+		vgMenuY = my;
+		vgClampMenuToScreen();
 		logAndroidSmokeBankLoadoutsPanel(empty);
 	}
 
@@ -1205,10 +1512,10 @@ public class BankInterface {
 			addVgMenu("Deposit All", true, VG_ALL);
 		}
 		if (vgMenuLabels.isEmpty()) return;
-		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * vgMenuRowH() + 4;
-		vgMenu = true; vgMenuKind = 0; vgMenuItemID = id;
-		vgMenuX = Math.min(mx, mc.getGameWidth() - mw - 2);
-		vgMenuY = Math.min(my, mc.getGameHeight() - mh - 2);
+		vgMenu = true; vgMenuKind = 0; vgMenuItemID = id; vgMenuPage = 0;
+		vgMenuX = mx;
+		vgMenuY = my;
+		vgClampMenuToScreen();
 	}
 
 	private void addVgMenu(String label, boolean deposit, int amt) {
@@ -1218,19 +1525,41 @@ public class BankInterface {
 	private int vgMenuWidth() {
 		int w = 80;
 		for (String s : vgMenuLabels) w = Math.max(w, mc.getSurface().stringWidth(1, s) + 18);
+		if (vgMobileLayout()) w = Math.max(w, vgTouchTarget() * 2);
 		return w;
 	}
 
 	private void drawVoidGlassMenu(int mx, int my) {
 		int rowH = vgMenuRowH();
-		int mw = vgMenuWidth(), mh = vgMenuLabels.size() * rowH + 4;
+		int mw = vgMenuWidth(), mh = vgMenuHeight();
 		mc.getSurface().drawBoxAlpha(vgMenuX, vgMenuY, mw, mh, VG_MENU_CARD, 210);
 		mc.getSurface().drawBoxBorder(vgMenuX, mw, vgMenuY, mh, VG_FRAME_INNER);
-		for (int i = 0; i < vgMenuLabels.size(); i++) {
+		final int first = vgMenuPage * vgMenuRowsPerPage();
+		final int visibleCount = vgMenuVisibleCount();
+		for (int i = 0; i < visibleCount; i++) {
+			final int option = first + i;
 			int ry = vgMenuY + 2 + i * rowH;
 			boolean hov = mx >= vgMenuX && mx < vgMenuX + mw && my >= ry && my < ry + rowH;
 			if (hov) mc.getSurface().drawBoxAlpha(vgMenuX + 1, ry, mw - 2, rowH, VG_HOVER, 90);
-			drawString(vgMenuLabels.get(i), vgMenuX + 6, ry + (rowH + 9) / 2, 1, vgMenuDep.get(i) ? VG_CYAN : VG_GREEN);
+			drawString(vgMenuLabels.get(option), vgMenuX + 6, ry + (rowH + 9) / 2, 1,
+				vgMenuDep.get(option) ? VG_CYAN : VG_GREEN);
+		}
+		if (vgMenuPaged()) {
+			final int navY = vgMenuY + 2 + visibleCount * rowH;
+			final int halfW = mw / 2;
+			final boolean overPrevious = mx >= vgMenuX && mx < vgMenuX + halfW && my >= navY && my < navY + rowH;
+			final boolean overNext = mx >= vgMenuX + halfW && mx < vgMenuX + mw && my >= navY && my < navY + rowH;
+			if (overPrevious || overNext) {
+				mc.getSurface().drawBoxAlpha(overPrevious ? vgMenuX + 1 : vgMenuX + halfW,
+					navY, overPrevious ? halfW - 1 : mw - halfW - 1, rowH, VG_HOVER, 90);
+			}
+			mc.getSurface().drawLineVert(vgMenuX + halfW, navY, VG_SLOT_BORDER, rowH);
+			final String previous = "Prev";
+			final String next = "Next";
+			drawString(previous, vgMenuX + (halfW - mc.getSurface().stringWidth(1, previous)) / 2,
+				navY + (rowH + 9) / 2, 1, vgMenuPage > 0 ? VG_TITLE_TEXT : VG_LABEL);
+			drawString(next, vgMenuX + halfW + (mw - halfW - mc.getSurface().stringWidth(1, next)) / 2,
+				navY + (rowH + 9) / 2, 1, vgMenuPage + 1 < vgMenuPageCount() ? VG_TITLE_TEXT : VG_LABEL);
 		}
 	}
 

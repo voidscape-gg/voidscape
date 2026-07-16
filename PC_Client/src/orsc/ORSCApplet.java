@@ -13,6 +13,8 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.*;
 import java.io.ByteArrayInputStream;
+import java.security.SecureRandom;
+import java.util.Arrays;
 
 import static orsc.Config.S_ZOOM_VIEW_TOGGLE;
 import static orsc.osConfig.C_LAST_ZOOM;
@@ -47,6 +49,8 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 	private static BufferedImage game_image;
 	private static Graphics2D g2dForGameImage;
 	private static final Object gameImageLock = new Object();
+	private static final Object duelProofRandomLock = new Object();
+	private static SecureRandom duelProofSecureRandom;
 	public static float oldRenderingScalar = 1.0f;
 
 	public MouseHandler getMouseHandler() {
@@ -534,6 +538,24 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 	}
 
 	@Override
+	public boolean fillSecureRandom(byte[] destination) {
+		if (destination == null || destination.length != 32) {
+			if (destination != null) Arrays.fill(destination, (byte) 0);
+			return false;
+		}
+		synchronized (duelProofRandomLock) {
+			try {
+				if (duelProofSecureRandom == null) duelProofSecureRandom = new SecureRandom();
+				duelProofSecureRandom.nextBytes(destination);
+				return true;
+			} catch (RuntimeException ignored) {
+				Arrays.fill(destination, (byte) 0);
+				return false;
+			}
+		}
+	}
+
+	@Override
 	public String getCacheLocation() {
 		return "../OpenRSC/";
 	}
@@ -651,6 +673,11 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		public final synchronized void mousePressed(MouseEvent var1) {
 			try {
 				if (var1.getButton() == MouseEvent.BUTTON2) {
+					mudclient.mouseX = var1.getX() - mudclient.screenOffsetX;
+					mudclient.mouseY = var1.getY() - mudclient.screenOffsetY;
+					if (mudclient.consumeChristmasCrackerPointerAt(mudclient.mouseX, mudclient.mouseY, false)) {
+						return;
+					}
 					mudclient.mouseLastProcessedX = mudclient.mouseX;
 					mudclient.mouseLastProcessedY = mudclient.mouseY;
 					return;
@@ -659,10 +686,22 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				mudclient.mouseX = var1.getX() - mudclient.screenOffsetX;
 				mudclient.mouseY = var1.getY() - mudclient.screenOffsetY;
 
+				if (mudclient.consumeChristmasCrackerPointerAt(mudclient.mouseX, mudclient.mouseY,
+					!SwingUtilities.isRightMouseButton(var1))) {
+					return;
+				}
 				if (!SwingUtilities.isRightMouseButton(var1)
 					&& (mudclient.closeWelcomeDialogAt(mudclient.mouseX, mudclient.mouseY)
 					|| mudclient.closeServerMessageDialogAt(mudclient.mouseX, mudclient.mouseY)
 					|| mudclient.closeFarmSimDialogAt(mudclient.mouseX, mudclient.mouseY))) {
+					return;
+				}
+				if (mudclient.consumePkCatchingPointerAt(mudclient.mouseX, mudclient.mouseY,
+					!SwingUtilities.isRightMouseButton(var1))) {
+					return;
+				}
+				if (mudclient.consumeDuelJournalPointerAt(mudclient.mouseX, mudclient.mouseY,
+					!SwingUtilities.isRightMouseButton(var1))) {
 					return;
 				}
 
@@ -718,6 +757,19 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				updateControlShiftState(var1);
 				mudclient.mouseX = var1.getX() - mudclient.screenOffsetX;
 				mudclient.mouseY = var1.getY() - mudclient.screenOffsetY;
+
+				if (mudclient.isDuelJournalVisible()) {
+					if (mudclient.mouseLastProcessedX != 0 && mudclient.mouseLastProcessedY != 0) {
+						int distanceY = (mudclient.mouseY - mudclient.mouseLastProcessedY) / 2;
+						if (distanceY != 0) mudclient.routeDuelJournalScroll(distanceY);
+					}
+					mudclient.mouseLastProcessedX = mudclient.mouseX;
+					mudclient.mouseLastProcessedY = mudclient.mouseY;
+					mudclient.currentMouseButtonDown = 0;
+					mudclient.lastMouseButtonDown = 0;
+					mudclient.mouseButtonClick = 0;
+					return;
+				}
 
 				// World-map panel owns drag-pan when visible — don't rotate camera underneath.
 				if (mudclient.worldMapPanel != null && mudclient.worldMapPanel.isVisible()) return;
@@ -803,6 +855,10 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		@Override
 		public final synchronized void mouseWheelMoved(MouseWheelEvent e) {
 			updateControlShiftState(e);
+			if (mudclient.routeDuelJournalScroll(e.getWheelRotation())) {
+				e.consume();
+				return;
+			}
 
 			// Same game-coordinate chat gesture zone as the drag path above:
 			// e.getY() is already mapped into game coordinates by ScaledWindow,
@@ -818,7 +874,8 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 
 
 			// Disables zoom while visible
-			boolean inScrollable = (Config.S_SPAWN_AUCTION_NPCS && mudclient.auctionHouse.isVisible() || mudclient.onlineList.isVisible() || Config.S_WANT_SKILL_MENUS && mudclient.skillGuideInterface.isVisible()
+			boolean inScrollable = (mudclient.isDuelJournalVisible()
+				|| Config.S_SPAWN_AUCTION_NPCS && mudclient.auctionHouse.isVisible() || mudclient.onlineList.isVisible() || Config.S_WANT_SKILL_MENUS && mudclient.skillGuideInterface.isVisible()
 				|| Config.S_WANT_QUEST_MENUS && mudclient.questGuideInterface.isVisible() || mudclient.experienceConfigInterface.isVisible()
 				|| mudclient.ironmanInterface.isVisible() || mudclient.achievementInterface.isVisible() || Config.S_WANT_SKILL_MENUS && mudclient.doSkillInterface.isVisible()
 				|| Config.S_ITEMS_ON_DEATH_MENU && mudclient.lostOnDeathInterface.isVisible() || mudclient.territorySignupInterface.isVisible()
@@ -862,6 +919,11 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				updateControlShiftState(var1);
 				char keyChar = var1.getKeyChar();
 				int keyCode = var1.getKeyCode();
+				int clientKey = keyCode == KeyEvent.VK_ESCAPE ? 27 : (int) keyChar;
+
+				if (mudclient.consumeDuelJournalKeyDown(clientKey)) {
+					return;
+				}
 
 				// voidscape: backtick saves an exact game-frame capture.
 				if (keyChar == '`') {
@@ -881,7 +943,6 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 				}
 
 				boolean hitInputFilter = false;
-				int clientKey = keyCode == KeyEvent.VK_ESCAPE ? 27 : (int) keyChar;
 				mudclient.handleKeyPress((byte) 126, clientKey);
 				mudclient.lastMouseAction = 0;
 

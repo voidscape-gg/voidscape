@@ -22,6 +22,8 @@ public final class LostOnDeathInterface {
 	// Prayer index for Protect Items — must match server Prayers.PROTECT_ITEMS (8) and the
 	// client prayer list; mc.checkPrayerOn(8) is server-synced via opcode 206 SET_PRAYERS.
 	private static final int PROTECT_ITEMS_PRAYER = 8;
+	private static final int FIRST_VOID_GEAR_ID = 1593;
+	private static final int LAST_VOID_GEAR_ID = 1596;
 	private ArrayList<OnDeathItem> onDeathItems;
 	private boolean visible;
 	private mudclient mc;
@@ -163,9 +165,12 @@ public final class LostOnDeathInterface {
 		Collections.sort(onDeathItems, new Comparator<OnDeathItem>() {
 			@Override
 			public int compare(OnDeathItem obj1, OnDeathItem obj2) {
-				long p1 = isAlwaysLost(obj1) ? -1L : obj1.getPrice();
-				long p2 = isAlwaysLost(obj2) ? -1L : obj2.getPrice();
-				return Long.compare(p2, p1);
+					long p1 = deathProtectionValue(obj1);
+					long p2 = deathProtectionValue(obj2);
+					int valueOrder = Long.compare(p2, p1);
+					return valueOrder != 0
+						? valueOrder
+						: Integer.compare(obj1.getItemID(), obj2.getItemID());
 			}
 		});
 
@@ -198,6 +203,15 @@ public final class LostOnDeathInterface {
 	 *  server's Inventory.dropOnDeath rule. */
 	private boolean isAlwaysLost(OnDeathItem item) {
 		return item.getNoted() || EntityHandler.getItemDef(item.getItemID()).isStackable();
+	}
+
+	private long deathProtectionValue(OnDeathItem item) {
+		if (isAlwaysLost(item)) {
+			return -1L;
+		}
+		return item.getItemID() >= FIRST_VOID_GEAR_ID && item.getItemID() <= LAST_VOID_GEAR_ID
+			? Integer.MAX_VALUE
+			: item.getPrice();
 	}
 
 	private String getLossTotal() {

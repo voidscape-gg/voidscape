@@ -1,6 +1,7 @@
 <project default="compile" basedir=".">
     <property name="src" location="src"/>
     <property name="pc_client" location="../PC_Client/src"/>
+    <property name="duel_proof_src" location="../Duel_Proof/src/main/java"/>
     <property name="build" location="build"/>
     <property name="lib" location="../PC_Client/lib"/>
     <property name="jar" location="Open_RSC_Client.jar"/>
@@ -21,7 +22,7 @@
         <copy todir="${build}/res">
             <fileset dir="src/res"/>
         </copy>
-        <javac srcdir="${src}:${pc_client}" destdir="${build}" debug="on" target="${javac.target}" source="${javac.source}"
+        <javac srcdir="${src}:${pc_client}:${duel_proof_src}" destdir="${build}" debug="on" target="${javac.target}" source="${javac.source}"
                includeantruntime="false">
             <classpath>
                 <pathelement path="${java.class.path}/"/>

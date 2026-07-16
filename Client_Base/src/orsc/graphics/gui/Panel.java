@@ -549,6 +549,11 @@ public final class Panel {
 		return fontHeight;
 	}
 
+	private boolean usesTouchListRows(int control, int font) {
+		return control >= 0 && control < this.controlTouchRowHeight.length
+			&& this.controlTouchRowHeight[control] > this.graphics.fontHeight(font);
+	}
+
 	public final int getControlClickedListIndex(int control) {
 		try {
 
@@ -891,6 +896,22 @@ public final class Panel {
 		}
 	}
 
+	private void renderTouchScrollIndicator(int x, int y, int width, int height,
+										 int entryCount, int visibleLines, int scroll) {
+		int trackY = y + 4;
+		int trackHeight = Math.max(1, height - 8);
+		int trackX = x + width - 5;
+		int maxScroll = Math.max(1, entryCount - visibleLines);
+		int thumbHeight = Math.min(trackHeight,
+			Math.max(18, trackHeight * Math.max(1, visibleLines) / Math.max(1, entryCount)));
+		int thumbTravel = Math.max(0, trackHeight - thumbHeight);
+		int thumbY = trackY + thumbTravel * Math.max(0, Math.min(scroll, maxScroll)) / maxScroll;
+		int trackColor = this.useVoidSkin() ? UiSkin.VOID_LINE : this.colorA;
+		int thumbColor = this.useVoidSkin() ? UiSkin.PURPLE_EDGE : this.colorD;
+		this.graphics.drawBoxAlpha(trackX, trackY, 3, trackHeight, trackColor, 100);
+		this.graphics.drawBoxAlpha(trackX - 1, thumbY, 5, thumbHeight, thumbColor, 225);
+	}
+
 
 	private void renderScrollingList(int controlIndex, int x, int y, int width, int height, int font,
 									 int entryCount, String[] entriesString, int[] entriesCrowns, int scroll) {
@@ -898,10 +919,16 @@ public final class Panel {
 
 			int fontHeight = this.graphics.fontHeight(font);
 			int rowHeight = effectiveListRowHeight(controlIndex, font);
+			boolean touchRows = this.usesTouchListRows(controlIndex, font);
 			int maxLines = height / rowHeight;
 			if (entryCount <= maxLines) {
 				scroll = 0;
 				this.controlScrollAmount[controlIndex] = 0;
+			} else if (touchRows) {
+				scroll = Math.max(0, Math.min(scroll, entryCount - maxLines));
+				this.controlScrollAmount[controlIndex] = scroll;
+				this.isScrolling[controlIndex] = false;
+				this.renderTouchScrollIndicator(x, y, width, height, entryCount, maxLines, scroll);
 			} else {
 				int scrollBarStartX = width - 12 + x;
 				int barDraggerSize = maxLines * (height - 27) / entryCount;
@@ -955,6 +982,7 @@ public final class Panel {
 			int heightWhitespace = height - rowHeight * maxLines;
 			int rowTop = y + heightWhitespace / 2;
 
+			int renderedLines = 0;
 			for (int line = scroll; line < entryCount; ++line) {
 				lineY = rowTop + (rowHeight - fontHeight) / 2 + fontHeight * 5 / 6;
 
@@ -983,7 +1011,8 @@ public final class Panel {
 					line == this.controlClickedListIndex[controlIndex] && this.m_t, false);
 				this.graphics.drawColoredString(x + 2, lineY, entriesString[line], font, color, entriesCrowns[line] << 24);
 				rowTop += rowHeight;
-				if (rowTop >= height + y) {
+				renderedLines++;
+				if ((touchRows && renderedLines >= maxLines) || rowTop >= height + y) {
 					break;
 				}
 			}
@@ -999,6 +1028,11 @@ public final class Panel {
 	private void renderScrollingList3(int controlIndex, int x, int y, int width, int height, int font,
 									  int entryCount, String[] entriesString, int[] entriesInt, int scroll, int spaceHeight, int spaceHeightText) {
 		try {
+			if (this.usesTouchListRows(controlIndex, font)) {
+				this.renderScrollingList3Touch(controlIndex, x, y, width, height, font, entryCount,
+					entriesString, scroll, spaceHeight, spaceHeightText);
+				return;
+			}
 
 			int maxLines = (height - (spaceHeightText + spaceHeight)) / this.graphics.fontHeight(font);
 			if (entryCount <= maxLines) {
@@ -1084,6 +1118,52 @@ public final class Panel {
 				"qa.D(" + height + ',' + x + ',' + controlIndex + ',' + (entriesString != null ? "{...}" : "null")
 					+ ',' + entryCount + ',' + font + ',' + y + ',' + (entriesInt != null ? "{...}" : "null")
 					+ ',' + "dummy" + ',' + scroll + ',' + width + ')');
+		}
+	}
+
+	private void renderScrollingList3Touch(int controlIndex, int x, int y, int width, int height, int font,
+										 int entryCount, String[] entriesString, int scroll, int spaceHeight,
+										 int spaceHeightText) {
+		int fontHeight = this.graphics.fontHeight(font);
+		int rowHeight = this.controlTouchRowHeight[controlIndex];
+		int contentHeight = Math.max(rowHeight, height - (spaceHeightText + spaceHeight));
+		int maxLines = Math.max(1, contentHeight / rowHeight);
+		int maxScroll = Math.max(0, entryCount - maxLines);
+		scroll = Math.max(0, Math.min(scroll, maxScroll));
+		this.controlScrollAmount[controlIndex] = scroll;
+
+		boolean hasScrollbar = entryCount > maxLines;
+		this.isScrolling[controlIndex] = false;
+		if (hasScrollbar) {
+			this.renderTouchScrollIndicator(x, y, width, height, entryCount, maxLines, scroll);
+		}
+
+		this.controlSelectedListIndex[controlIndex] = -1;
+		int visibleLines = Math.min(maxLines, entryCount - scroll);
+		int heightWhitespace = contentHeight - rowHeight * maxLines;
+		int rowTop = y + heightWhitespace / 2;
+		int rowWidth = width - (hasScrollbar ? 12 : 0);
+
+		for (int visibleLine = 0; visibleLine < visibleLines; ++visibleLine) {
+			int line = scroll + visibleLine;
+			int lineY = rowTop + (rowHeight - fontHeight) / 2 + fontHeight * 5 / 6;
+			boolean hovered = this.currMouseX >= x && this.currMouseX < x + rowWidth
+				&& this.currMouseY >= rowTop && this.currMouseY < rowTop + rowHeight;
+			if (hovered) {
+				this.controlSelectedListIndex[controlIndex] = line;
+				if (this.lastMouseButtonDown == 1) {
+					this.controlClickedListIndex[controlIndex] = line;
+					this.controlClicked[controlIndex] = true;
+				}
+			}
+
+			if (this.useVoidSkin() && hovered) {
+				UiSkin.listRowFill(this.graphics, x, rowTop, rowWidth, rowHeight, true, false);
+			}
+			int color = this.resolveListColor(this.controlUseAlternativeColour[controlIndex], hovered,
+				line == this.controlClickedListIndex[controlIndex] && this.m_t, false);
+			this.graphics.drawColoredString(x + 2, lineY, entriesString[line], font, color, 0);
+			rowTop += rowHeight;
 		}
 	}
 
@@ -1361,7 +1441,15 @@ public final class Panel {
 		if (rowHeight <= 0) {
 			return false;
 		}
-		int maxLines = this.controlHeight[control] / rowHeight;
+		int maxLines;
+		if (this.controlType[control] == PanelControlType.SCROLLING_LIST3
+			&& this.usesTouchListRows(control, this.controlArgInt[control])) {
+			int listHeight = Math.max(rowHeight, this.controlHeight[control]
+				- this.controlSpaceTextHeight[control] - this.controlSpaceHeight[control]);
+			maxLines = Math.max(1, listHeight / rowHeight);
+		} else {
+			maxLines = this.controlHeight[control] / rowHeight;
+		}
 		if (this.controlListCurrentSize[control] <= maxLines) {
 			return false;
 		}
@@ -1392,6 +1480,17 @@ public final class Panel {
 	}
 
 	public void scrollMethodCustomList(int handle, int i, int cDifference) {
+		if (this.controlType[handle] == PanelControlType.SCROLLING_LIST3
+			&& this.usesTouchListRows(handle, this.controlArgInt[handle])) {
+			int rowHeight = effectiveListRowHeight(handle, this.controlArgInt[handle]);
+			int contentHeight = Math.max(rowHeight, this.controlHeight[handle]
+				- this.controlSpaceTextHeight[handle] - this.controlSpaceHeight[handle]);
+			int maxLines = Math.max(1, contentHeight / rowHeight);
+			int limit = Math.max(0, this.controlListCurrentSize[handle] - maxLines);
+			this.controlScrollAmount[handle] = Math.max(0,
+				Math.min(limit, this.controlScrollAmount[handle] + i));
+			return;
+		}
 		int limit = controlListCurrentSize[handle] - (controlHeight[handle] / graphics.fontHeight(controlArgInt[handle])) + cDifference;
 		int diff = Math.abs(limit - controlScrollAmount[handle]);
 		if (controlScrollAmount[handle] <= limit) {

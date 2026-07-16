@@ -41,6 +41,8 @@ public final class ORSCharacter {
 	public int level = -1;
 	public String message;
 	public int messageTimeout = 0;
+	public String honorific;
+	public int honorificTier = 0;
 	public String title;
 	public int titleTier = 0;
 	public int waypointIndexNext;

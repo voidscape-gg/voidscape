@@ -24,6 +24,17 @@ public interface ClientPort {
 		return CredentialStore.unsupported();
 	}
 
+	/**
+	 * Fills exactly one 32-byte duel-proof seed from platform secure entropy.
+	 * Unsupported ports fail closed and leave no caller-provided bytes behind.
+	 */
+	default boolean fillSecureRandom(byte[] destination) {
+		if (destination != null) {
+			for (int i = 0; i < destination.length; i++) destination[i] = 0;
+		}
+		return false;
+	}
+
 	boolean drawLoading(int i);
 
 	void showLoadingProgress(int percentage, String status);
@@ -39,6 +50,33 @@ public interface ClientPort {
 
 	default boolean shouldSuppressReconnectOverlay() {
 		return false;
+	}
+
+	/**
+	 * Notifies the platform shell that the low-resource AFK monitor is active.
+	 * Platforms without a dedicated implementation can safely ignore this.
+	 */
+	default void setAfkMonitorActive(boolean active) {
+	}
+
+	/**
+	 * Converts a platform touch target expressed in density-independent pixels
+	 * into the current logical client framebuffer coordinate space. Desktop and
+	 * web clients retain a one-to-one fallback; the native Android shell
+	 * overrides this using its display density and active viewport transform.
+	 */
+	default int getTouchTargetClientPixels(int dp) {
+		return Math.max(1, dp);
+	}
+
+	/**
+	 * Returns the logical client Y coordinate where the platform soft keyboard
+	 * begins, or {@link Integer#MAX_VALUE} when it is hidden or unavailable.
+	 * Native Android uses this to keep canvas-owned composers above the IME
+	 * without resizing the game framebuffer.
+	 */
+	default int getKeyboardTopClientPixel() {
+		return Integer.MAX_VALUE;
 	}
 
 	void crashed();
