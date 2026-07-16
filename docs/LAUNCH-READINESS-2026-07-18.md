@@ -12,8 +12,10 @@ database contents, signing material, or private source/history in this file.
 ## Current decision
 
 - **Verdict:** NO-GO as of 2026-07-16; re-audit after every P0 and P1 gate is closed.
+- **Immediate portal exposure:** CONTAINED by VS-092; unrelated launch blockers below
+  keep the overall verdict at NO-GO.
 - **Private branch:** `codex/release-10139-integration`
-- **Latest verified release fix:** `6d70d5ee` (VS-089 portal static boundary)
+- **Latest verified release fix:** `e2b24ece` (VS-092 containment boundary)
 - **Sanitized public branch:** `codex/launch-rc-public-clean`
 - **Current local public commit:** `271581884add7bb434b715c598de281c631dba62`
 - **Current public `main`:** `57056c6147c105039f3e7b39c33f264cfd776247`
@@ -22,8 +24,9 @@ database contents, signing material, or private source/history in this file.
   Publishing and not publicly rolled out
 - **Play candidate local SHA-256:**
   `961b2148bb88300720084fb50c8a8ea3c10d5a739c75d4efc37edaa28cacb62b`
-- **Release authority:** build/package work is authorized; production containment,
-  deployment, public-source push, channel promotion, and Play publication each require
+- **Release authority:** build/package work and the narrowly scoped VS-092 production
+  Nginx containment were explicitly authorized and completed. Any further production
+  deployment, public-source push, channel promotion, or Play publication requires
   separate explicit authorization.
 
 ## Status words
@@ -39,6 +42,7 @@ database contents, signing material, or private source/history in this file.
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-07-16 | Apply an emergency Nginx-only boundary to all three public origins without replacing the portal bundle or touching the game, database, clients, Play Store, or public source. | Existing pre-signup visitors should not be able to retrieve packaged runtime/schema/support files, while normal portal, web-play, and launcher-update routes must remain available. |
 | 2026-07-16 | Preserve the complete eligible pre-signed-player cohort and grant exactly one free starter subscription card entitlement to every character under each qualifying account. | The owner reports 190 eligible pre-signups so far. The benefit is per character: a qualifying account with ten characters must receive ten cards, one on each character. |
 | 2026-07-16 | Treat 190 as a baseline count, not the final freeze count. | More eligible signups may arrive before the cutover. The freeze-time snapshot is authoritative. |
 | 2026-07-16 | Keep the optional ten-player headless fleet disabled and outside the launch critical path. | It adds accounts, credentials, persistence, and recovery complexity without being needed to open. |
@@ -150,19 +154,19 @@ Freeze evidence:
 
 | Gate | Owner | Status | Completion evidence |
 |---|---|---|---|
-| Contain public portal access to runtime/source/schema/support files on all three origins. | Production operator | BLOCKED | Status-only probes must show forbidden and encoded paths `404` while allowed public routes remain healthy. Preserve access logs; do not retrieve bodies unnecessarily. |
+| Contain public portal access to runtime/source/schema/support files on all three origins. | Production operator | PASS | VS-092: 69/69 apex, `www`, and sslip checks plus the canonical hosted verifier passed. Forbidden, encoded, traversal-like, hidden, schema, metadata, and admin paths return `404`; portal/play/assets/public APIs and the launcher manifest remain healthy. Nginx and portal services remain active. |
 | Complete VS-089 as a committed, fail-closed application/package/Nginx boundary. | Codex | PASS | Commit `6d70d5ee`; `docs/BUGS.md` VS-089; packaged-runtime, exact-tree, all-origin, portal API/schema, launch-config, and full-build checks pass. |
-| Prevent every existing pre-VS-089 portal bundle from being deployed. | Release owner | BLOCKED | Retire/quarantine record naming the superseded bundle paths and hashes. |
+| Prevent every existing pre-VS-089 portal bundle from being deployed. | Release owner | BLOCKED | The current legacy live tree is Nginx-contained, but superseded bundle paths and hashes still need a retire/quarantine record so they cannot be redeployed elsewhere without the boundary. |
 
 ## P1 — required before opening
 
 | Workstream | Owner | Status | Completion evidence |
 |---|---|---|---|
-| Clean source and canonical build | Codex | IN PROGRESS | Private source is clean at `6d70d5ee` and `scripts/build.sh` exits `0`; repeat against the final post-reward-fix commit and sanitized public tree. |
+| Clean source and canonical build | Codex | IN PROGRESS | Private source is clean at `e2b24ece` and `scripts/build.sh` exits `0`; repeat against the final post-reward-fix commit and sanitized public tree. |
 | Final v12 server/client release bundle | Codex | PENDING | Manifest names exact final commit, `source_dirty=false`, exact hashes, protocol `10139`, corrected launch contract, and no blockers. |
 | Bundle hygiene | Codex | PENDING | No personal absolute paths, credentials/keys, backups/archives, `.gitsave`, runtime state, private history, or unexpected files; populated `portal.env` install mode is `0600`. |
 | Correct launch profile and custom content | Codex | PENDING | Complete launch-contract verification; archived boot log shows expected custom region/Enclave/Rift/Auction counts. |
-| Public portal boundary | Codex + operator | BLOCKED | Exact packaged tree; Nginx include installed; all-origin forbidden-path probes `404`; hosted allowed paths and ranges pass. |
+| Public portal boundary | Codex + operator | PASS | VS-089 exact-tree/application/package checks and VS-092 live Nginx containment pass. The include is active on all three origins; hosted forbidden, allowed, range, API, play-page, and launcher-manifest checks pass. Clean bundle replacement remains covered by bundle hygiene and superseded-bundle quarantine. |
 | Portal account flows | Codex + human | PENDING | Signup, rules acceptance, verification, login, recovery, character create/delete, logout, data-deletion link, and email delivery pass against final candidate. |
 | Pre-signed-player cohort | Owner + Codex + operator | BLOCKED | Every protected-cohort checkbox and count/hash reconciliation above passes. |
 | Reward/reset safety | Codex + owner | BLOCKED | VS-090: replace the current account-wide/code-only grant behavior and broad reset with an owner-approved frozen roster and one marker per eligible character; prove ten characters receive ten independent cards, preserve claimed state where intended, and add focused automated tests. |
@@ -230,7 +234,9 @@ do not commit secrets or player data.
 | 2026-07-16 | VS-089 portal API/schema | PASS | `6d70d5ee` | `scripts/test-portal-api.sh`; `scripts/test-portal-schema.sh` |
 | 2026-07-16 | VS-089 package test | PASS | `6d70d5ee` | Whole packaged tree exactly equals the contract; no symlink or non-regular entry. |
 | 2026-07-16 | Canonical build after VS-089 | PASS | `6d70d5ee` | `scripts/build.sh` exit `0`; JDK 25 compatibility warnings only. |
-| 2026-07-16 | Existing held portal boundary | FAIL | held bundles from `57056c61` | Forbidden paths are packaged/served; status-only production probes returned `200` on all three origins. |
+| 2026-07-16 | VS-092 live portal containment | PASS | `e2b24ece`; snippet SHA-256 `a21ee841e920ba62ab15290d33e9861a903005a4bc9d44ba8e0622e40b3f7e5a` | Backup: `/opt/voidscape/backups/vs092-portal-containment-20260716T184849Z`. Nginx syntax/reload and 69/69 all-origin probes passed, followed by the canonical hosted verifier. Available logs show no successful body GET of backend `.mjs`, schema SQL, or build metadata; two README GETs returned bodies, with no established credential exposure. This configuration/log backup is not the required paired portal/game data backup. |
+| 2026-07-16 | Canonical build after VS-092 | PASS | `e2b24ece` | `scripts/build.sh` exit `0`; focused launch-config, static-boundary, package-runtime, portal API, and portal schema checks pass; JDK 25 compatibility warnings only. |
+| 2026-07-16 | Pre-containment held portal boundary | FAIL (historical; now contained) | held bundles from `57056c61` | Forbidden paths were packaged/served and status-only probes returned `200` on all three origins before VS-092. The live access path is now contained; bundle retirement remains open. |
 | 2026-07-16 | Play status | HELD, NOT PUBLIC | v11 / `1.0.10` / client `10139` | Console: `Managed publishing on`, `Changes ready to publish`, `Publish 1 change`. |
 | 2026-07-16 | Play AAB local identity | PARTIAL | SHA-256 `961b2148bb88300720084fb50c8a8ea3c10d5a739c75d4efc37edaa28cacb62b` | Local sidecar/signature/metadata pass; Play-hosted byte identity pending. |
 | 2026-07-16 | Protected pre-signup cohort | OWNER BASELINE ONLY | count `190` | Production count/schema/hash reconciliation pending; identities must not be recorded here. |
@@ -264,9 +270,15 @@ or physical-device requirements.
   the current account-global marker and single-use legacy code do not yet meet this
   contract.
 - 2026-07-16: committed and fully verified the local VS-089 fail-closed portal
-  application/package/Nginx boundary at `6d70d5ee`. The live production origins and
-  every superseded bundle remain blocked until an operator performs an explicitly
-  authorized containment/deployment and the hosted probes pass.
+  application/package/Nginx boundary at `6d70d5ee`. At that point the live production
+  origins were still exposed and every superseded bundle remained blocked pending
+  separately authorized containment.
 - 2026-07-16: triaged the per-character founder reward as VS-090 and fail-open portal
   roster loading as VS-091. Both are P1 launch blockers; VS-090 awaits the owner's
   deletion/recreation, promotion-stacking, and legacy-code accounting decisions.
+- 2026-07-16: completed the explicitly authorized VS-092 Nginx-only containment at
+  `e2b24ece`. Preflight caught an overbroad `.properties` denial before installation,
+  preserving `/api/launcher/manifest.properties`; the corrected rule, 69/69 matrix,
+  canonical hosted verifier, and full build pass. The game ingress stayed intentionally
+  closed, and no portal bundle, database, client, Play change, or source publication
+  was deployed.
