@@ -452,6 +452,7 @@ run_package_check() {
 		--ws-url "$WS_URL"
 		--launch-at "$LAUNCH_AT"
 		--skip-build
+		--allow-dirty-staging
 		--output-dir "$PACKAGE_DIR"
 	)
 	if [[ "$BUILD_WEB" -eq 0 ]]; then
@@ -476,6 +477,15 @@ run_package_check() {
 		--out "$OUT_DIR/launch-config-verifier"
 	if [[ -f "$PACKAGE_DIR/MANIFEST.txt" ]]; then
 		record_check pass "Launch-staging manifest present" "bundle manifest written" "" "$PACKAGE_DIR/MANIFEST.txt"
+		local package_promotable
+		local package_blockers
+		package_promotable="$(awk -F= '$1 == "promotable" { print $2; exit }' "$PACKAGE_DIR/MANIFEST.txt")"
+		package_blockers="$(awk -F= '$1 == "promotion_blockers" { print $2; exit }' "$PACKAGE_DIR/MANIFEST.txt")"
+		if [[ "$package_promotable" == "false" && "$package_blockers" == *server_client_build_reused* ]]; then
+			record_check pass "Launch-staging rehearsal provenance" "explicitly non-promotable: $package_blockers" "" "$PACKAGE_DIR/MANIFEST.txt"
+		else
+			record_check fail "Launch-staging rehearsal provenance" "expected promotable=false with reused-build blocker, got promotable=$package_promotable blockers=$package_blockers" "" "$PACKAGE_DIR/MANIFEST.txt"
+		fi
 	else
 		record_check fail "Launch-staging manifest present" "MANIFEST.txt missing" ""
 	fi
@@ -646,6 +656,10 @@ run_iphone_final_audit() {
 }
 
 echo "==> Prelaunch readiness output: $OUT_DIR"
+
+run_check "Canonical client/cache manifest" tests/client-cache-manifest.sh
+run_check "Launch staging release guards" tests/launch-staging-guard-unit.sh
+run_check "Production SQLite permissions" tests/production-sqlite-permissions.sh
 
 if [[ "$RUN_PORTAL_SCHEMA" -eq 1 ]]; then
 	run_check "Portal schema smoke" scripts/test-portal-schema.sh

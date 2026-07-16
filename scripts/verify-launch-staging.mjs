@@ -2,6 +2,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -64,6 +65,31 @@ async function main() {
 		throw new Error("Portal URL must be https:// unless --allow-http is set.");
 	}
 	pass("portal url", args.portalUrl.href);
+	const adminPublicInputs = args.adminPublicUrls.length
+		? [...args.adminPublicUrls]
+		: [args.portalUrl.href];
+	const productionAdminOrigins = [
+		"https://voidscape.gg/",
+		"https://www.voidscape.gg/",
+		"https://voidscape.5.161.114.251.sslip.io/"
+	];
+	const targetsProduction = [args.portalUrl.href, ...adminPublicInputs]
+		.some((value) => productionAdminOrigins.some((origin) => new URL(origin).hostname === new URL(value).hostname));
+	if (targetsProduction) adminPublicInputs.push(...productionAdminOrigins);
+	args.adminPublicUrls = [...new Set(adminPublicInputs.map((value) => normalizeBaseUrl(value, "admin public").href))];
+	for (const value of args.adminPublicUrls) {
+		const url = new URL(value);
+		if (!args.allowHttp && url.protocol !== "https:") {
+			throw new Error("Admin public URLs must be https:// unless --allow-http is set.");
+		}
+	}
+	if (args.allowLocalAdminTokenGuard) {
+		if (!args.allowHttp || args.adminPublicUrls.some((value) => !isLoopbackUrl(value))) {
+			throw new Error("--allow-local-admin-token-guard is restricted to loopback URLs with --allow-http.");
+		}
+	} else if (args.adminToken) {
+		throw new Error("--admin-token is allowed only with --allow-local-admin-token-guard; public admin routes must stay externally blocked.");
+	}
 
 	if (!args.skipWebVerify) {
 		if (!args.webUrl) {
@@ -78,11 +104,21 @@ async function main() {
 	if ((!args.serverConfig || !args.connectionsConfig) && !args.skipServerConfig) {
 		throw new Error("Missing --server-config or --connections-config. Pass copies of both deployed configs, or --skip-server-config for portal-only rehearsal.");
 	}
-	if (!args.runSignup && !args.skipSignup) {
-		throw new Error("Choose --run-signup for the real staged signup, or --skip-signup for a non-mutating dry gate.");
+	const signupModes = [args.runSignup, args.pendingEmailRehearsal, args.skipSignup].filter(Boolean).length;
+	if (signupModes !== 1) {
+		throw new Error("Choose exactly one signup mode: --run-signup, --pending-email-rehearsal, or --skip-signup.");
 	}
-	if (args.runSignup && args.skipSignup) {
-		throw new Error("--run-signup and --skip-signup are mutually exclusive.");
+	if (args.runSignup && (!args.signupUsername || !args.signupEmail || !args.signupPassword)) {
+		throw new Error("Final --run-signup requires explicit --signup-username, --signup-email, and --signup-password values for the exact account that will be email-verified.");
+	}
+	if (!Number.isFinite(args.verificationTimeoutSeconds) || args.verificationTimeoutSeconds < 1 || args.verificationTimeoutSeconds > 900) {
+		throw new Error("--verification-timeout-seconds must be from 1 to 900.");
+	}
+	if (!Number.isFinite(args.verificationPollSeconds) || args.verificationPollSeconds < 1 || args.verificationPollSeconds > args.verificationTimeoutSeconds) {
+		throw new Error("--verification-poll-seconds must be at least 1 and no greater than the verification timeout.");
+	}
+	if (Math.ceil(args.verificationTimeoutSeconds / args.verificationPollSeconds) + 1 > 9) {
+		throw new Error("Verification polling is limited to nine login probes to stay below the production login-abuse threshold; increase --verification-poll-seconds.");
 	}
 
 	await verifyServerConfig();
@@ -91,7 +127,7 @@ async function main() {
 	await verifyLauncherUpdateChannel();
 	await verifyDisabledProviderSurfaces();
 	await verifyLaunchPasswordContract();
-	if (args.runSignup) {
+	if (args.runSignup || args.pendingEmailRehearsal) {
 		await verifySignupFlow();
 	} else {
 		warn("staged signup skipped", "No account was created because --skip-signup was used.");
@@ -162,8 +198,12 @@ async function verifyPublicLaunchPayload() {
 	assertCheck("public mode", body.publicMode === true, JSON.stringify(body));
 	assertCheck("launch signup mode", body.launchSignupMode === true, JSON.stringify(body));
 	assertCheck("launch timestamp", iso(body.launch && body.launch.openAt) === iso(args.launchAt || "2026-07-18T18:00:00.000Z"), String(body.launch && body.launch.openAt));
-	assertCheck("portal-first registration", body.worldRules && body.worldRules.registration === "portal-first", JSON.stringify(body.worldRules || null));
-	assertCheck("public web packet registration off", body.worldRules && body.worldRules.packetRegistration === false, JSON.stringify(body.worldRules || null));
+	assertCheck("hybrid registration contract", body.worldRules && body.worldRules.registration === "hybrid", JSON.stringify(body.worldRules || null));
+	assertCheck("web registration portal-first", body.worldRules && body.worldRules.webRegistration === "portal-first", JSON.stringify(body.worldRules || null));
+	assertCheck("desktop packet registration", body.worldRules && body.worldRules.desktopRegistration === "packet", JSON.stringify(body.worldRules || null));
+	assertCheck("Android registration policy-gated", body.worldRules && body.worldRules.nativeAndroidRegistration === "portal-first", JSON.stringify(body.worldRules || null));
+	assertCheck("desktop packet registration enabled", body.worldRules && body.worldRules.packetRegistration === true, JSON.stringify(body.worldRules || null));
+	assertCheck("current community terms", body.worldRules && body.worldRules.communityTermsVersion === "2026-07-16" && body.worldRules.communityTermsUrl === "/community-rules", JSON.stringify(body.worldRules || null));
 	assertCheck("hybrid member world", body.worldRules && body.worldRules.memberWorld === true, JSON.stringify(body.worldRules || null));
 	assertCheck("subscription does not grant members", body.worldRules && body.worldRules.subscriptionGrantsMembers === false, JSON.stringify(body.worldRules || null));
 	assertCheck("no fake public player count", body.status && body.status.playersOnline === 0, JSON.stringify(body.status || null));
@@ -202,6 +242,25 @@ async function verifyLauncherUpdateChannel() {
 	assertCheck("launcher manifest version", Boolean(values.version), String(values.version || ""));
 	assertCheck("launcher manifest baseUrl", Boolean(values.baseUrl) && channelUrlOk(values.baseUrl), String(values.baseUrl || ""));
 	assertCheck("launcher manifest file entries", files.length > 0, `${files.length} contiguous file.N.path entries`);
+	const requiredCachePaths = [
+		"MD5.SUM",
+		"video/Authentic_Sprites.orsc",
+		"video/Custom_Landscape.orsc",
+		"video/models.orsc",
+		"worldmap/plane-0.png",
+		"worldmap/plane-1.png",
+		"worldmap/plane-2.png",
+		"worldmap/plane-3.png"
+	];
+	const unsafePaths = files.filter((file) => /(^|\/)(?:[^/]+\.(?:bak|tmp)|[^/]+~)$/i.test(file.path)).map((file) => file.path);
+	assertCheck("launcher manifest excludes backup files", unsafePaths.length === 0, unsafePaths.join(", ") || "no backup or temporary paths");
+	const manifestPaths = new Set(files.map((file) => file.path));
+	const missingCachePaths = requiredCachePaths.filter((path) => !manifestPaths.has(path));
+	assertCheck(
+		"launcher manifest launch cache",
+		missingCachePaths.length === 0,
+		missingCachePaths.length ? `missing ${missingCachePaths.join(", ")}` : "landscape, models, and all world-map planes present"
+	);
 
 	const badHashes = files.filter((file) => !/^[0-9a-f]{64}$/i.test(file.sha256)).map((file) => `${file.key}.sha256`);
 	if (values["launcher.sha256"] && !/^[0-9a-f]{64}$/i.test(values["launcher.sha256"])) badHashes.push("launcher.sha256");
@@ -235,32 +294,74 @@ async function verifyLauncherUpdateChannel() {
 	for (const file of files) {
 		const target = file.url || `${values.baseUrl || ""}${file.path}`;
 		if (channelUrlOk(target)) {
-			await probeChannelUrl(`launcher manifest file reachable: ${file.path}`, target);
+			await probeChannelUrl(`launcher manifest file reachable: ${file.path}`, target, file.size);
 		} else {
 			fail(`launcher manifest file reachable: ${file.path}`, `Unresolvable file URL: ${target}`);
 		}
 	}
+	const criticalPaths = new Set(["Open_RSC_Client.jar", ...requiredCachePaths]);
+	for (const file of files.filter((entry) => criticalPaths.has(entry.path))) {
+		const target = file.url || `${values.baseUrl || ""}${file.path}`;
+		if (channelUrlOk(target)) {
+			await verifyChannelArtifact(file.path, target, file.size, file.sha256);
+		}
+	}
 	if (values["launcher.url"] && channelUrlOk(values["launcher.url"])) {
-		await probeChannelUrl("launcher self-update jar reachable", values["launcher.url"]);
+		await probeChannelUrl("launcher self-update jar reachable", values["launcher.url"], values["launcher.size"]);
+		await verifyChannelArtifact("launcher self-update jar", values["launcher.url"], values["launcher.size"], values["launcher.sha256"]);
 	}
 }
 
-async function probeChannelUrl(name, urlText) {
-	const head = await request(urlText, { method: "HEAD", expectJson: false });
+async function probeChannelUrl(name, urlText, expectedSize) {
+	const identityHeaders = { "accept-encoding": "identity" };
+	const head = await request(urlText, { method: "HEAD", headers: identityHeaders, expectJson: false });
 	if (head.status === 200 || head.status === 206) {
-		pass(name, `HEAD ${head.status} ${urlText}`);
+		const actualSize = responseObjectSize(head, head.status === 206);
+		assertCheck(name, actualSize === Number(expectedSize), `HEAD ${head.status}; ${actualSize} bytes vs manifest ${expectedSize}; ${urlText}`);
 		return;
 	}
 	if (head.status === 405 || head.status === 501) {
 		const ranged = await request(urlText, {
 			method: "GET",
-			headers: { range: "bytes=0-0" },
+			headers: { ...identityHeaders, range: "bytes=0-0" },
 			expectJson: false
 		});
-		assertCheck(name, ranged.status === 200 || ranged.status === 206, `HEAD ${head.status}, ranged GET ${ranged.status} ${urlText}`);
+		const actualSize = responseObjectSize(ranged, ranged.status === 206);
+		assertCheck(
+			name,
+			(ranged.status === 200 || ranged.status === 206) && actualSize === Number(expectedSize),
+			`HEAD ${head.status}, ranged GET ${ranged.status}; ${actualSize} bytes vs manifest ${expectedSize}; ${urlText}`
+		);
 		return;
 	}
 	fail(name, `HEAD ${head.status} ${urlText}`);
+}
+
+function responseObjectSize(response, partial) {
+	if (partial) {
+		const match = /\/([0-9]+)$/.exec(response.headers["content-range"] || "");
+		if (match) return Number(match[1]);
+	}
+	const length = response.headers["content-length"];
+	return /^\d+$/.test(length || "") ? Number(length) : -1;
+}
+
+async function verifyChannelArtifact(path, urlText, expectedSize, expectedSha256) {
+	const response = await request(urlText, {
+		method: "GET",
+		headers: { "accept-encoding": "identity" },
+		expectJson: false,
+		binary: true
+	});
+	const bytes = response.bytes || Buffer.alloc(0);
+	const actualSha256 = createHash("sha256").update(bytes).digest("hex");
+	assertCheck(
+		`launcher artifact bytes: ${path}`,
+		response.status === 200
+			&& bytes.length === Number(expectedSize)
+			&& actualSha256 === expectedSha256,
+		`HTTP ${response.status}; ${bytes.length} bytes vs ${expectedSize}; sha256 ${actualSha256} vs ${expectedSha256}`
+	);
 }
 
 async function verifyDisabledProviderSurfaces() {
@@ -288,19 +389,38 @@ async function verifyDisabledProviderSurfaces() {
 		);
 	}
 
-	const adminWithoutToken = await request("/api/admin/signups", {
-		expectJson: false
-	});
-	assertCheck(
-		"admin endpoint protected or disabled",
-		adminWithoutToken.status === 403 || adminWithoutToken.status === 503,
-		`HTTP ${adminWithoutToken.status}`
-	);
-	if (args.adminToken) {
-		const adminWithToken = await request("/api/admin/signups", {
-			headers: { "x-portal-admin-token": args.adminToken }
+	for (const publicBase of args.adminPublicUrls) {
+		const adminUrl = new URL("/api/admin/signups", publicBase).href;
+		const label = new URL(publicBase).host;
+		const adminWithoutToken = await request(adminUrl, { expectJson: false });
+		const adminWithProbeToken = await request(adminUrl, {
+			headers: { "x-portal-admin-token": "external-verifier-probe-not-a-real-token" },
+			expectJson: false
 		});
-		assertCheck("admin endpoint accepts configured token", adminWithToken.status === 200 && Array.isArray(adminWithToken.body.signups || adminWithToken.body.founders), `HTTP ${adminWithToken.status}`);
+		if (args.allowLocalAdminTokenGuard) {
+			assertCheck(
+				`local admin guard: ${label}`,
+				[403, 404, 503].includes(adminWithoutToken.status)
+					&& [403, 404, 503].includes(adminWithProbeToken.status),
+				`without token HTTP ${adminWithoutToken.status}; probe token HTTP ${adminWithProbeToken.status}`
+			);
+			if (args.adminToken) {
+				const adminWithToken = await request(adminUrl, {
+					headers: { "x-portal-admin-token": args.adminToken }
+				});
+				assertCheck(
+					`local admin endpoint accepts configured token: ${label}`,
+					adminWithToken.status === 200 && Array.isArray(adminWithToken.body.signups || adminWithToken.body.founders),
+					`HTTP ${adminWithToken.status}`
+				);
+			}
+		} else {
+			assertCheck(
+				`public admin route externally blocked: ${label}`,
+				adminWithoutToken.status === 404 && adminWithProbeToken.status === 404,
+				`without token HTTP ${adminWithoutToken.status}; probe token HTTP ${adminWithProbeToken.status}; expected 404/404`
+			);
+		}
 	}
 }
 
@@ -315,7 +435,9 @@ async function verifyLaunchPasswordContract() {
 			body: {
 				username: badUsername,
 				email: `staging-${badUsername.toLowerCase()}@voidscape.gg`,
-				password
+				password,
+				termsAccepted: true,
+				termsVersion: "2026-07-16"
 			}
 		});
 		assertCheck(
@@ -336,7 +458,6 @@ async function verifyLaunchPasswordContract() {
 }
 
 async function verifySignupFlow() {
-	signupUser = clipUsername(signupUser);
 	if (!/^[A-Za-z0-9 ]{1,12}$/.test(signupUser)) {
 		throw new Error(`Signup username must be 1-12 client-safe characters: ${signupUser}`);
 	}
@@ -348,49 +469,87 @@ async function verifySignupFlow() {
 		body: {
 			username: signupUser,
 			email: signupEmail,
-			password: signupPassword
+			password: signupPassword,
+			termsAccepted: true,
+			termsVersion: "2026-07-16"
 		}
 	});
-	assertCheck("staged signup status", signup.status === 201 || signup.status === 202, `HTTP ${signup.status} ${safeJson(signup.body)}`);
-	if (signup.status === 202) {
-		assertCheck("staged signup awaits verified email", signup.body.verificationRequired === true && !signup.body.token, safeJson(signup.body));
-		warn("staged signup verification pending", `Open the message sent to ${signupEmail}, complete verification, then run the web login smoke with that character's credentials.`);
+	assertCheck("staged signup awaits verified email", signup.status === 202 && signup.body.verificationRequired === true && !signup.body.token, `HTTP ${signup.status} ${safeJson(signup.body)}`);
+	if (signup.status !== 202) return;
+	if (args.pendingEmailRehearsal) {
+		warn("non-final signup rehearsal pending", `The message sent to ${signupEmail} was not verified; this mode is intentionally not final release evidence.`);
 		return;
 	}
-	if (signup.status !== 201) return;
-	assertCheck("staged signup issued token", Boolean(signup.body.token), safeJson({ token: signup.body.token }));
-	assertAccountPayload("staged signup account payload", signup.body);
-	signupReadyForGameSmoke = true;
-
-	const token = signup.body.token;
-	const account = await request("/api/account", {
-		headers: { authorization: `Bearer ${token}` }
-	});
-	assertCheck("created account readback status", account.status === 200, `HTTP ${account.status}`);
-	assertAccountPayload("created account readback", account.body);
-
-	const login = await request("/api/accounts/login", {
-		method: "POST",
-		body: {
-			email: signupEmail,
-			password: signupPassword
-		}
-	});
-	assertCheck("created account login status", login.status === 200, `HTTP ${login.status}`);
-	assertCheck("created account login issued token", Boolean(login.body.token), safeJson({ token: login.body.token }));
-	assertAccountPayload("created account login payload", login.body);
+	console.log(
+		`Signup is pending for ${signupEmail}. Open the delivered email and complete verification within ${args.verificationTimeoutSeconds} seconds; this verifier will poll every ${args.verificationPollSeconds} seconds.`
+	);
+	await waitForExactSignupVerification();
 }
 
-function assertAccountPayload(name, body) {
+async function waitForExactSignupVerification() {
+	const timeoutMs = args.verificationTimeoutSeconds * 1000;
+	const pollMs = args.verificationPollSeconds * 1000;
+	const deadline = Date.now() + timeoutMs;
+	let attempts = 0;
+	let lastStatus = 0;
+
+	while (attempts < 9 && Date.now() <= deadline) {
+		attempts += 1;
+		const login = await request("/api/accounts/login", {
+			method: "POST",
+			body: {
+				email: signupEmail,
+				password: signupPassword
+			}
+		});
+		lastStatus = login.status;
+		if (login.status === 200) {
+			assertCheck("exact verified signup login issued token", Boolean(login.body.token), safeJson({ token: login.body.token }));
+			const loginValid = assertExactVerifiedSignupPayload("exact verified signup login", login.body);
+			if (!login.body.token) return;
+
+			const account = await request("/api/account", {
+				headers: { authorization: `Bearer ${login.body.token}` }
+			});
+			assertCheck("exact verified signup readback status", account.status === 200, `HTTP ${account.status}`);
+			const readbackValid = assertExactVerifiedSignupPayload("exact verified signup readback", account.body);
+			if (loginValid && readbackValid && account.status === 200) signupReadyForGameSmoke = true;
+			return;
+		}
+		if (login.status !== 401) {
+			fail("exact signup verification login", `Unexpected HTTP ${login.status} after ${attempts} attempt(s); expected 401 while pending or 200 after verification.`);
+			return;
+		}
+
+		const remaining = deadline - Date.now();
+		if (remaining <= 0 || attempts >= 9) break;
+		await delay(Math.min(pollMs, remaining));
+	}
+
+	fail(
+		"exact signup verification completed",
+		`The exact signup ${signupEmail} did not become a verified, active, linked account within ${args.verificationTimeoutSeconds}s (${attempts} login probes; last HTTP ${lastStatus}). Complete the delivered email verification and rerun.`
+	);
+}
+
+function assertExactVerifiedSignupPayload(name, body) {
 	const characters = Array.isArray(body.characters) ? body.characters : [];
-	const first = characters[0] || {};
-	assertCheck(`${name}: email`, body.account && body.account.email === signupEmail, safeJson(body.account || null));
-	assertCheck(`${name}: one used character slot`, characters.length === 1, safeJson(characters));
-	assertCheck(`${name}: first character name`, first.name === signupUser, safeJson(first));
-	assertCheck(`${name}: real OpenRSC save`, first.source === "openrsc-sqlite-created", safeJson(first));
-	assertCheck(`${name}: linked save`, first.linkStatus === "linked" && Number.isInteger(first.playerId), safeJson(first));
-	assertCheck(`${name}: starter card waiting`, body.rewards && body.rewards.starterCardStatus === "waiting", safeJson(body.rewards || null));
-	assertCheck(`${name}: one starter card`, body.rewards && body.rewards.starterSubscriptionCards === 1, safeJson(body.rewards || null));
+	const linked = characters.filter((character) =>
+		character
+		&& character.name === signupUser
+		&& character.linkStatus === "linked"
+		&& Number.isInteger(character.playerId)
+		&& character.source === "openrsc-sqlite-created"
+	);
+	const active = Boolean(body.account)
+		&& String(body.account.email || "").toLowerCase() === signupEmail.toLowerCase()
+		&& body.account.status === "active";
+	const verified = Boolean(body.security) && body.security.emailVerified === true;
+	assertCheck(`${name}: exact active email account`, active, safeJson(body.account || null));
+	assertCheck(`${name}: email verified`, verified, safeJson(body.security || null));
+	const exactCharacter = characters.length === 1 && linked.length === 1;
+	assertCheck(`${name}: exact linked OpenRSC character`, exactCharacter, safeJson(characters));
+	return active && verified && exactCharacter;
 }
 
 async function verifyWebDeployment() {
@@ -466,28 +625,44 @@ async function request(path, options = {}) {
 		headers,
 		body
 	});
-	const text = await response.text();
-	let parsed = text;
-	if (options.expectJson !== false) {
+	const responseHeaders = Object.fromEntries(response.headers.entries());
+	let bytes = null;
+	let text = "";
+	let parsed;
+	if (options.binary) {
+		bytes = Buffer.from(await response.arrayBuffer());
+		parsed = {
+			binaryBytes: bytes.length,
+			sha256: createHash("sha256").update(bytes).digest("hex")
+		};
+	} else {
+		text = await response.text();
+		parsed = text;
+	}
+	if (!options.binary && options.expectJson !== false) {
 		try {
 			parsed = text ? JSON.parse(text) : {};
 		} catch {
 			parsed = { raw: text };
 		}
 	}
-	const artifactName = safeArtifactName(`${options.method || "GET"}-${url.pathname}`);
+	const artifactName = safeArtifactName(`${options.method || "GET"}-${url.host}-${url.pathname}`);
 	await writeFile(resolve(args.out, `${artifactName}-${Date.now()}.json`), JSON.stringify({
 		url: url.href,
 		status: response.status,
+		headers: responseHeaders,
 		body: redactSensitive(parsed)
 	}, null, 2));
-	return { status: response.status, body: parsed, text };
+	return { status: response.status, body: parsed, text, bytes, headers: responseHeaders };
 }
 
 function parseArgs(argv) {
 	const parsed = {
 		out: defaultOut,
-		launchAt: "2026-07-18T18:00:00.000Z"
+		launchAt: "2026-07-18T18:00:00.000Z",
+		adminPublicUrls: [],
+		verificationTimeoutSeconds: 240,
+		verificationPollSeconds: 30
 	};
 	for (let i = 0; i < argv.length; i += 1) {
 		const arg = argv[i];
@@ -539,6 +714,12 @@ function parseArgs(argv) {
 			case "--signup-password":
 				parsed.signupPassword = value();
 				break;
+			case "--verification-timeout-seconds":
+				parsed.verificationTimeoutSeconds = Number(value());
+				break;
+			case "--verification-poll-seconds":
+				parsed.verificationPollSeconds = Number(value());
+				break;
 			case "--qa-user":
 			case "--user":
 				parsed.qaUser = value();
@@ -550,6 +731,9 @@ function parseArgs(argv) {
 			case "--admin-token":
 				parsed.adminToken = value();
 				break;
+			case "--admin-public-url":
+				parsed.adminPublicUrls.push(value());
+				break;
 			case "--chrome":
 				parsed.chrome = value();
 				break;
@@ -558,6 +742,9 @@ function parseArgs(argv) {
 				break;
 			case "--run-signup":
 				parsed.runSignup = true;
+				break;
+			case "--pending-email-rehearsal":
+				parsed.pendingEmailRehearsal = true;
 				break;
 			case "--skip-signup":
 				parsed.skipSignup = true;
@@ -586,6 +773,9 @@ function parseArgs(argv) {
 			case "--allow-payment":
 				parsed.allowPayment = true;
 				break;
+			case "--allow-local-admin-token-guard":
+				parsed.allowLocalAdminTokenGuard = true;
+				break;
 			case "--allow-android-apk":
 				parsed.allowAndroidApk = true;
 				break;
@@ -597,16 +787,17 @@ function parseArgs(argv) {
 }
 
 function usage() {
-	console.log(`Usage: scripts/verify-launch-staging.mjs --portal-url URL --web-url URL --server-config FILE --connections-config FILE (--run-signup|--skip-signup) [options]
+	console.log(`Usage: scripts/verify-launch-staging.mjs --portal-url URL --web-url URL --server-config FILE --connections-config FILE (--run-signup|--pending-email-rehearsal|--skip-signup) [options]
 
 Verifies the production-like launch gate for a staged Voidscape deployment:
   - portal health uses public launch-signup mode, durable storage, and an OpenRSC DB bridge
-  - /api/public exposes web portal-first registration metadata, hybrid member world, Google hidden by default
+  - /api/public exposes the desktop-packet / web-and-Android-portal registration split, current Community Rules, hybrid member world, and Google hidden by default
   - /api/launcher/manifest.properties is a well-formed update channel (required keys,
     64-hex sha256 values, https URLs, clientVersion matching the server config) and its
-	    every file entry plus the launcher self-update jar respond to HEAD
+	    every file entry has the declared hosted size; launch-critical files and the launcher self-update jar are downloaded and SHA-256 verified
   - payment and Google provider surfaces are disabled/hidden unless explicitly allowed
-	  - launch signup accepts 8-20 letters and numbers only, rejects symbols and spaces, and, with --run-signup, creates one real linked OpenRSC character plus a waiting starter card
+  - every supplied public host externally returns 404 for /api/admin/* with and without a fake token
+  - launch signup accepts the current Community Rules, rejects invalid game passwords, and, with --run-signup, waits for delivered-email verification before proving the exact linked account
   - /play static deployment matches dist/web-teavm/voidscape-web-build.json and optionally runs web login smoke
   - deployed server config copy has exactly one of every value in the reviewed
     launch contract; deployed connections config selects the SQLite launch backend
@@ -616,20 +807,27 @@ Required for the full gate:
   --web-url URL                 Staged web client URL, e.g. https://staging.voidscape.gg/play/
   --server-config FILE          Local copy of the deployed server config.
   --connections-config FILE     Local copy of the deployed connections config.
-  --run-signup                  Create a real staged account/first character.
+  --run-signup                  Final gate: initiate the explicit signup below,
+                                wait for its email verification, then prove login.
 
 Useful options:
   --ws URL                      WSS URL for web smoke.
   --expected-build-manifest FILE Default: dist/web-teavm/voidscape-web-build.json.
-  --signup-username NAME        Default: generated Stg* name.
-  --signup-email EMAIL          Default: staging+<name>@voidscape.gg.
-  --signup-password PASSWORD    Default: Launchpass1 (letters and numbers only; symbols and spaces are rejected).
-  --admin-token TOKEN           Also prove token-gated admin access works.
+  --signup-username NAME        Exact new QA character; required for --run-signup.
+  --signup-email EMAIL          Exact delivered-email address; required for --run-signup.
+  --signup-password PASSWORD    Exact portal/game password; required for --run-signup.
+  --verification-timeout-seconds N  Bounded email-completion wait. Default: 240.
+  --verification-poll-seconds N     Login-probe interval. Default: 30; max 9 probes.
+  --admin-public-url URL        Public origin whose /api/admin/* must return 404;
+                                repeat for non-production aliases.
+  --admin-token TOKEN           Loopback-only proof; requires --allow-local-admin-token-guard.
   --no-web-smoke                Static/deep web verification only.
   --skip-web-verify             Portal/config rehearsal only.
   --skip-server-config          Do not check the launch config contract or DB backend.
   --server-config-only          Check both deployed config copies without network requests.
   --skip-signup                 Non-mutating dry gate.
+  --pending-email-rehearsal     Non-final: initiate verification but permit it to remain pending.
+  --allow-local-admin-token-guard  Loopback fixture only; permits the backend token guard instead of external 404.
   --allow-google                Expect Google to be intentionally configured.
   --allow-payment               Do not fail if payment endpoint is configured.
   --allow-android-apk           Accepted for older package scripts; Android is verified from /api/public.
@@ -665,14 +863,17 @@ async function writeSummary() {
 		startedAt: startedAt.toISOString(),
 		finishedAt: new Date().toISOString(),
 		portalUrl: args.portalUrl && args.portalUrl.href || args.portalUrl || "",
+		adminPublicUrls: args.adminPublicUrls || [],
 		webUrl: args.webUrl || "",
 		wsUrl: args.wsUrl || "",
 		serverConfig: args.serverConfig || "",
 		connectionsConfig: args.connectionsConfig || "",
 		serverConfigOnly: Boolean(args.serverConfigOnly),
-		signup: args.runSignup ? {
+		signupMode: args.runSignup ? "final" : args.pendingEmailRehearsal ? "pending-email-rehearsal" : "skipped",
+		signup: args.runSignup || args.pendingEmailRehearsal ? {
 			username: signupUser,
-			email: signupEmail
+			email: signupEmail,
+			exactSignupVerified: checks.some((check) => check.name === "exact verified signup readback: email verified" && check.status === "pass")
 		} : null,
 		checks,
 		warnings,
@@ -685,6 +886,11 @@ function normalizeBaseUrl(value, label) {
 	if (url.search || url.hash) throw new Error(`${label} URL must not include query or fragment.`);
 	if (!url.pathname.endsWith("/")) url.pathname += "/";
 	return url;
+}
+
+function isLoopbackUrl(value) {
+	const hostname = new URL(value).hostname.toLowerCase();
+	return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
 }
 
 function parsePropertiesText(text) {
@@ -744,6 +950,10 @@ function iso(value) {
 	return new Date(value).toISOString();
 }
 
+function delay(milliseconds) {
+	return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+}
+
 function stamp(date) {
 	return date.toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
 }
@@ -784,7 +994,7 @@ function redactSensitiveString(value) {
 }
 
 function redactedCommand(command) {
-	const redactNext = new Set(["--pass", "--qa-pass", "--signup-password"]);
+	const redactNext = new Set(["--pass", "--qa-pass", "--signup-password", "--admin-token"]);
 	const redacted = [];
 	let redact = false;
 	for (const part of command) {

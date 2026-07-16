@@ -11,6 +11,7 @@ WS_PORT="43496"
 PORTAL_URL=""
 WEB_URL=""
 WS_URL=""
+ANDROID_PLAY_URL=""
 LAUNCH_AT="2026-07-18T18:00:00Z"
 SERVER_PRESET="$ROOT/server/preservation.conf"
 SKIP_BUILD=0
@@ -18,6 +19,19 @@ SKIP_WEB_BUILD=0
 SKIP_ANDROID=0
 ANDROID_RELEASE=0
 RSYNC_TARGET=""
+ALLOW_DIRTY_STAGING=0
+BUNDLE_PROMOTABLE=1
+PROMOTION_BLOCKERS=()
+SERVER_CLIENT_BUILD_MODE="fresh"
+WEB_BUILD_MODE="fresh"
+SOURCE_DIRTY=0
+INITIAL_SOURCE_STATUS=""
+ANDROID_APK_TYPE="not_included"
+ANDROID_APK_PROMOTABLE=0
+ANDROID_RELEASE_CHECK="not_run"
+ANDROID_ENDPOINT_REWRITTEN=0
+ANDROID_BUNDLE_APK=""
+ANDROID_BUNDLE_META=""
 
 LAUNCHER_RESOURCE="$ROOT/PC_Launcher/src/main/resources/voidscape-launcher.properties"
 LAUNCHER_BACKUP=""
@@ -50,6 +64,8 @@ Options:
   --ws-port PORT           Game WebSocket port. Default: 43496.
   --ws-url URL             Public WSS URL for /play verification.
                            Default: <portal-url>/play/ws/ converted to wss://.
+  --android-play-url URL   Optional canonical Google Play details URL for
+                           com.voidscape.gg. Leave unset until the listing is public.
   --launch-at ISO          Launch timestamp. Default: 2026-07-18T18:00:00Z.
   --server-preset FILE     Secret-free base config for generated local.launch-staging.conf.
                            The reviewed launch contract is applied afterward.
@@ -60,6 +76,9 @@ Options:
   --skip-android           Do not rebuild/copy the Android APK.
   --android-release        Build/copy a signed release APK instead of debug.
                            Requires Android signing config.
+  --allow-dirty-staging    Permit an explicitly non-promotable rehearsal bundle
+                           with dirty source, reused builds, debug Android, or
+                           temporary endpoint rewriting.
   --rsync-target TARGET    Optional rsync destination, e.g. user@host:/opt/voidscape-staging.
   -h, --help               Show this help.
 
@@ -94,6 +113,10 @@ while [[ $# -gt 0 ]]; do
 			WS_URL="${2:-}"
 			shift 2
 			;;
+		--android-play-url)
+			ANDROID_PLAY_URL="${2:-}"
+			shift 2
+			;;
 		--launch-at)
 			LAUNCH_AT="${2:-}"
 			shift 2
@@ -120,6 +143,10 @@ while [[ $# -gt 0 ]]; do
 			;;
 		--android-release)
 			ANDROID_RELEASE=1
+			shift
+			;;
+		--allow-dirty-staging)
+			ALLOW_DIRTY_STAGING=1
 			shift
 			;;
 		--rsync-target)
@@ -162,7 +189,98 @@ if [[ ! -f "$SERVER_PRESET" ]]; then
 	echo "ERROR: server preset not found: $SERVER_PRESET" >&2
 	exit 1
 fi
+if [[ "$SKIP_ANDROID" -eq 1 && "$ANDROID_RELEASE" -eq 1 ]]; then
+	echo "ERROR: --skip-android and --android-release are mutually exclusive." >&2
+	exit 1
+fi
 
+canonical_android_play_url() {
+	local configured="$1"
+	python3 - "$configured" <<'PY'
+import sys
+from urllib.parse import parse_qs, urlsplit
+
+text = sys.argv[1].strip()
+try:
+    parsed = urlsplit(text)
+    ids = parse_qs(parsed.query, keep_blank_values=True).get("id", [])
+    valid = (
+        parsed.scheme == "https"
+        and parsed.hostname == "play.google.com"
+        and parsed.port in (None, 443)
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.path.rstrip("/") == "/store/apps/details"
+        and len(ids) == 1
+        and ids[0] == "com.voidscape.gg"
+    )
+except (TypeError, ValueError):
+    valid = False
+if not valid:
+    raise SystemExit(1)
+print("https://play.google.com/store/apps/details?id=com.voidscape.gg", end="")
+PY
+}
+
+if [[ -n "$ANDROID_PLAY_URL" ]]; then
+	if ! ANDROID_PLAY_URL="$(canonical_android_play_url "$ANDROID_PLAY_URL")"; then
+		echo "ERROR: --android-play-url must be the official com.voidscape.gg Google Play details URL." >&2
+		exit 1
+	fi
+fi
+
+mark_non_promotable() {
+	local reason="$1"
+	local existing=""
+	for existing in "${PROMOTION_BLOCKERS[@]:-}"; do
+		[[ "$existing" == "$reason" ]] && return
+	done
+	BUNDLE_PROMOTABLE=0
+	PROMOTION_BLOCKERS+=("$reason")
+}
+
+promotion_blockers_text() {
+	local separator=""
+	local reason=""
+	if [[ ${#PROMOTION_BLOCKERS[@]} -eq 0 ]]; then
+		printf '%s' "none"
+		return
+	fi
+	for reason in "${PROMOTION_BLOCKERS[@]}"; do
+		printf '%s%s' "$separator" "$reason"
+		separator=","
+	done
+}
+
+if ! git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+	echo "ERROR: launch packages must be built from a Git worktree." >&2
+	exit 1
+fi
+FULL_COMMIT="$(git -C "$ROOT" rev-parse --verify 'HEAD^{commit}' 2>/dev/null || true)"
+if ! [[ "$FULL_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+	echo "ERROR: could not resolve the package source to one full Git commit." >&2
+	exit 1
+fi
+COMMIT="${FULL_COMMIT:0:12}"
+INITIAL_SOURCE_STATUS="$(git -C "$ROOT" status --porcelain=v1 --untracked-files=normal)"
+if [[ -n "$INITIAL_SOURCE_STATUS" ]]; then
+	SOURCE_DIRTY=1
+	mark_non_promotable "source_dirty"
+fi
+if [[ "$SKIP_BUILD" -eq 1 ]]; then
+	SERVER_CLIENT_BUILD_MODE="reused"
+	mark_non_promotable "server_client_build_reused"
+fi
+if [[ "$SKIP_WEB_BUILD" -eq 1 ]]; then
+	WEB_BUILD_MODE="reused"
+	mark_non_promotable "web_build_reused"
+fi
+if [[ "$SKIP_ANDROID" -eq 0 && "$ANDROID_RELEASE" -eq 0 ]]; then
+	ANDROID_APK_TYPE="debug"
+	mark_non_promotable "android_debug_apk"
+elif [[ "$SKIP_ANDROID" -eq 0 ]]; then
+	ANDROID_APK_TYPE="release"
+fi
 trim_trailing_slash() {
 	local value="$1"
 	while [[ "$value" == */ ]]; do
@@ -179,8 +297,67 @@ if [[ -z "$WS_URL" ]]; then
 	WS_URL="${WS_URL/https:\/\//wss://}"
 fi
 
+if [[ "$SKIP_ANDROID" -eq 0 ]]; then
+	if ! python3 - "$ANDROID_CONFIG" "$GAME_HOST" "$GAME_PORT" "$PORTAL_URL/portal?auth=login" "$PORTAL_URL/portal?auth=recovery" "$PORTAL_URL/data-deletion" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path, host, port, account_url, recovery_url, deletion_url = sys.argv[1:]
+expected = {
+    "VOIDSCAPE_PUBLIC_HOST": host,
+    "VOIDSCAPE_DEFAULT_PORT": port,
+    "VOIDSCAPE_PORTAL_ACCOUNT_URL": account_url,
+    "VOIDSCAPE_PORTAL_RECOVERY_URL": recovery_url,
+    "VOIDSCAPE_PORTAL_DELETION_URL": deletion_url,
+}
+try:
+    text = Path(path).read_text(encoding="utf-8")
+except OSError as exc:
+    raise SystemExit(f"cannot read Android endpoint contract {path}: {exc}") from exc
+for key, value in expected.items():
+    matches = re.findall(
+        rf'public static final String {re.escape(key)} = "([^"]*)";',
+        text,
+    )
+    if matches != [value]:
+        raise SystemExit(1)
+PY
+	then
+		ANDROID_ENDPOINT_REWRITTEN=1
+		mark_non_promotable "android_endpoint_rewrite"
+		if [[ "$ALLOW_DIRTY_STAGING" -ne 1 ]]; then
+			echo "ERROR: target Android endpoint differs from committed osConfig.java; temporary rewriting is rehearsal-only." >&2
+			exit 1
+		fi
+	fi
+fi
+
+if [[ "$BUNDLE_PROMOTABLE" -ne 1 && "$ALLOW_DIRTY_STAGING" -ne 1 ]]; then
+	echo "ERROR: requested package would be non-promotable ($(promotion_blockers_text))." >&2
+	echo "Commit and rebuild the release inputs, or pass --allow-dirty-staging only for an isolated rehearsal." >&2
+	exit 1
+fi
+
 sha256_file() {
 	shasum -a 256 "$1" | awk '{print $1}'
+}
+
+write_sha256_tree() {
+	local source="$1"
+	local target="$2"
+	(
+		cd "$source"
+		find . -type f -print | LC_ALL=C sort | while IFS= read -r relative; do
+			shasum -a 256 "$relative"
+		done
+	) > "$target"
+}
+
+normalize_public_tree_modes() {
+	local target="$1"
+	find "$target" -type d -exec chmod 0755 {} +
+	find "$target" -type f -exec chmod 0644 {} +
 }
 
 client_version() {
@@ -233,28 +410,102 @@ bundle_copy_dir() {
 	fi
 }
 
+bundle_copy_tracked_tree() {
+	local repo_relative="$1"
+	local target="$2"
+	local tracked=""
+	local relative=""
+	rm -rf "$target"
+	mkdir -p "$target"
+	while IFS= read -r -d '' tracked; do
+		relative="${tracked#"$repo_relative"/}"
+		if [[ "$relative" == "$tracked" || -z "$relative" ]]; then
+			echo "ERROR: invalid tracked release path below $repo_relative: $tracked" >&2
+			exit 1
+		fi
+		if [[ -L "$ROOT/$tracked" || ! -f "$ROOT/$tracked" ]]; then
+			echo "ERROR: release tree only permits tracked regular files: $tracked" >&2
+			exit 1
+		fi
+		mkdir -p "$target/$(dirname "$relative")"
+		cp -p "$ROOT/$tracked" "$target/$relative"
+	done < <(git -C "$ROOT" ls-files -z -- "$repo_relative")
+}
+
+bundle_copy_client_cache() {
+	local source="$1"
+	local target="$2"
+	rm -rf "$target"
+	mkdir -p "$target"
+	python3 - "$source" "$target" <<'PY'
+import shutil
+import sys
+from pathlib import Path, PurePosixPath
+
+source = Path(sys.argv[1])
+target = Path(sys.argv[2])
+manifest = source / "MD5.SUM"
+for line in manifest.read_text(encoding="utf-8").splitlines():
+    try:
+        _digest, relative_text = line.split(" *./", 1)
+    except ValueError as exc:
+        raise SystemExit(f"ERROR: malformed client cache manifest row: {line!r}") from exc
+    if relative_text == "Open_RSC_Client.jar":
+        continue
+    relative = PurePosixPath(relative_text)
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        raise SystemExit(f"ERROR: unsafe client cache manifest path: {relative_text!r}")
+    source_file = source.joinpath(*relative.parts)
+    target_file = target.joinpath(*relative.parts)
+    if source_file.is_symlink() or not source_file.is_file():
+        raise SystemExit(f"ERROR: client cache manifest file is missing: {source_file}")
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_file, target_file)
+shutil.copy2(manifest, target / "MD5.SUM")
+PY
+}
+
+if [[ -L "$OUTPUT_DIR" ]]; then
+	echo "ERROR: --output-dir must not be a symlink: $OUTPUT_DIR" >&2
+	exit 1
+fi
+if ! OUTPUT_DIR="$(python3 - "$ROOT" "$OUTPUT_DIR" <<'PY'
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+raw = Path(sys.argv[2])
+candidate = raw if raw.is_absolute() else root / raw
+if candidate.is_symlink():
+    raise SystemExit("ERROR: --output-dir must not be a symlink")
+resolved = candidate.resolve(strict=False)
+allowed = [(root / "dist").resolve(strict=False), (root / "tmp").resolve(strict=False)]
+if not any(resolved != parent and parent in resolved.parents for parent in allowed):
+    raise SystemExit("ERROR: --output-dir must be a child of this worktree's dist/ or tmp/ directory")
+print(resolved, end="")
+PY
+)"; then
+	exit 1
+fi
+mkdir -p "$OUTPUT_DIR"
+
 cd "$ROOT"
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
 	scripts/build.sh
 fi
+tests/client-cache-manifest.sh
 
-OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
-if [[ "$OUTPUT_DIR" == "/" || "$OUTPUT_DIR" == "$ROOT" ]]; then
-	echo "ERROR: refusing to replace unsafe output directory: $OUTPUT_DIR" >&2
-	exit 1
-fi
 rm -rf "$OUTPUT_DIR"
-mkdir -p "$OUTPUT_DIR"/{server,portal,launcher,android,logs}
+mkdir -p "$OUTPUT_DIR"/{server,client,portal,launcher,android,logs,ops/database,ops/nginx}
 
 VERSION="$(client_version)"
-COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-FULL_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 echo "==> Packaging server artifacts"
 cp "$ROOT/server/core.jar" "$OUTPUT_DIR/server/core.jar"
 cp "$ROOT/server/plugins.jar" "$OUTPUT_DIR/server/plugins.jar"
+chmod 0644 "$OUTPUT_DIR/server/core.jar" "$OUTPUT_DIR/server/plugins.jar"
 helper_tmp="$(mktemp -d "${TMPDIR:-/tmp}/voidscape-portal-helper.XXXXXX")"
 (
 	cd "$helper_tmp"
@@ -264,8 +515,30 @@ helper_tmp="$(mktemp -d "${TMPDIR:-/tmp}/voidscape-portal-helper.XXXXXX")"
 	jar cf "$OUTPUT_DIR/server/portal-password-helper.jar" com
 )
 rm -rf "$helper_tmp"
-bundle_copy_dir "$ROOT/server/database" "$OUTPUT_DIR/server/database"
-bundle_copy_dir "$ROOT/server/conf/server/defs" "$OUTPUT_DIR/server/conf/server/defs"
+chmod 0644 "$OUTPUT_DIR/server/portal-password-helper.jar"
+bundle_copy_tracked_tree "server/database" "$OUTPUT_DIR/server/database"
+normalize_public_tree_modes "$OUTPUT_DIR/server/database"
+write_sha256_tree "$OUTPUT_DIR/server/database" "$OUTPUT_DIR/server/database.SHA256"
+bundle_copy_tracked_tree "server/conf" "$OUTPUT_DIR/server/conf"
+normalize_public_tree_modes "$OUTPUT_DIR/server/conf"
+write_sha256_tree "$OUTPUT_DIR/server/conf" "$OUTPUT_DIR/server/conf.SHA256"
+
+echo "==> Packaging launcher-served client runtime"
+cp "$ROOT/Client_Base/Open_RSC_Client.jar" "$OUTPUT_DIR/client/Open_RSC_Client.jar"
+chmod 0644 "$OUTPUT_DIR/client/Open_RSC_Client.jar"
+bundle_copy_client_cache "$ROOT/Client_Base/Cache" "$OUTPUT_DIR/client/Cache"
+normalize_public_tree_modes "$OUTPUT_DIR/client/Cache"
+if find "$OUTPUT_DIR/client/Cache" -type f \( -name '*.bak' -o -name '*.tmp' -o -name '*~' \) -print -quit | grep -q .; then
+	echo "ERROR: backup or temporary cache files entered the release bundle." >&2
+	exit 1
+fi
+write_sha256_tree "$OUTPUT_DIR/client/Cache" "$OUTPUT_DIR/client/cache.SHA256"
+
+mkdir -p "$OUTPUT_DIR/ops/verify"
+cp "$ROOT/scripts/prepare-production-sqlite-permissions.sh" "$OUTPUT_DIR/ops/database/"
+cp "$ROOT/scripts/verify-exact-sha256-tree.py" "$OUTPUT_DIR/ops/verify/"
+chmod +x "$OUTPUT_DIR/ops/database/prepare-production-sqlite-permissions.sh"
+chmod +x "$OUTPUT_DIR/ops/verify/verify-exact-sha256-tree.py"
 
 python3 scripts/generate-launch-server-config.py \
 	"$SERVER_PRESET" \
@@ -316,8 +589,33 @@ cp -p "$ROOT/docs/subsystems/headless-players.md" \
 	"$OUTPUT_DIR/docs/subsystems/headless-players.md"
 cp -p "$ROOT/docs/OPERATIONS.md" "$OUTPUT_DIR/docs/OPERATIONS.md"
 
+cat > "$OUTPUT_DIR/ops/nginx/voidscape-admin-public-block.location.conf" <<'EOF'
+# Include this fragment inside every internet-facing Voidscape server block.
+# Portal maintenance routes stay reachable only through the loopback backend.
+location ^~ /api/admin/ {
+	return 404;
+}
+EOF
+cat > "$OUTPUT_DIR/ops/nginx/README.md" <<'EOF'
+# Public admin-route boundary
+
+Install `voidscape-admin-public-block.location.conf` below
+`/etc/nginx/snippets/` and include it inside every public TLS server block that
+proxies to the portal. For the known production layout, that includes both the
+`voidscape.gg www.voidscape.gg` block and the launch-period
+`https://voidscape.5.161.114.251.sslip.io/` block. Keep the portal backend bound to
+`127.0.0.1:8788`.
+
+After `nginx -t`, reload nginx and require HTTP 404 from all three public
+origins, both without a token and with a fake `x-portal-admin-token` header.
+Do not send a real maintenance token to a public URL.
+EOF
+chmod 0644 "$OUTPUT_DIR/ops/nginx/"*
+
 echo "==> Packaging portal"
-bundle_copy_dir "$ROOT/web/portal" "$OUTPUT_DIR/portal/web-portal"
+bundle_copy_tracked_tree "web/portal" "$OUTPUT_DIR/portal/web-portal"
+normalize_public_tree_modes "$OUTPUT_DIR/portal/web-portal"
+rm -f "$OUTPUT_DIR/portal/web-portal/build-meta.json"
 cat > "$OUTPUT_DIR/portal/portal.env.staging" <<EOF
 PORT=8788
 PORTAL_BIND_HOST=127.0.0.1
@@ -325,6 +623,7 @@ PORTAL_PUBLIC_MODE=1
 PORTAL_LAUNCH_SIGNUP_MODE=1
 PORTAL_LAUNCH_AT=$LAUNCH_AT
 PORTAL_WEB_CLIENT_URL=$WEB_URL
+PORTAL_ANDROID_PLAY_URL=$ANDROID_PLAY_URL
 PORTAL_DATA_DIR=/var/lib/voidscape-portal
 PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db
 PORTAL_INTEGRITY_SNAPSHOT=/var/lib/voidscape-portal/integrity-summary.json
@@ -347,6 +646,10 @@ PORTAL_SENSITIVE_ACTION_WINDOW_MINUTES=10
 PORTAL_GAME_PASSWORD_RESET_LIMIT=5
 PORTAL_GAME_PASSWORD_RESET_WINDOW_MINUTES=60
 PORTAL_GAME_PASSWORD_HELPER_CLASSPATH=/opt/voidscape/server/portal-password-helper.jar
+PORTAL_PC_CLIENT_JAR=/opt/voidscape/client/Open_RSC_Client.jar
+PORTAL_CLIENT_CACHE_DIR=/opt/voidscape/client/Cache
+PORTAL_CLIENT_VERSION=$VERSION
+PORTAL_LAUNCHER_JAR=/opt/voidscape/launcher/VoidscapeLauncher-staging.jar
 PORTAL_SIGNUP_IP_HOURLY_LIMIT=3
 PORTAL_SIGNUP_IP_DAILY_LIMIT=5
 PORTAL_SIGNUP_SUBNET_HOURLY_LIMIT=20
@@ -367,7 +670,7 @@ PORTAL_ABUSE_HASH_SALT=CHANGE_ME_STABLE_PRIVATE_SECRET
 # PORTAL_ADMIN_TOKEN=CHANGE_ME_LONG_RANDOM_SECRET
 # PORTAL_ANDROID_APK overrides the APK served by /downloads/android-apk.
 # Use the packaged release APK path for production if direct Android download is live.
-# PORTAL_ANDROID_APK=/opt/voidscape/downloads/voidscape-staging-release.apk
+# PORTAL_ANDROID_APK=/var/www/html/voidscape/Voidscape-Android.apk
 # PORTAL_GOOGLE_CLIENT_ID=
 # PORTAL_GOOGLE_JWKS_URL=https://www.googleapis.com/oauth2/v3/certs
 # Verified-email registration and password recovery require Resend delivery.
@@ -390,6 +693,7 @@ if [[ "$SKIP_WEB_BUILD" -eq 1 ]]; then
 else
 	scripts/package-web-teavm.sh --output-dir "$OUTPUT_DIR/play"
 fi
+normalize_public_tree_modes "$OUTPUT_DIR/play"
 
 echo "==> Packaging desktop launcher for staging"
 if [[ -f "$LAUNCHER_RESOURCE" ]]; then
@@ -409,6 +713,8 @@ mkdir -p "$(dirname "$LAUNCHER_RESOURCE")"
 (cd "$ROOT/PC_Launcher" && ant compile)
 cp "$ROOT/PC_Launcher/OpenRSC.jar" "$OUTPUT_DIR/launcher/VoidscapeLauncher-staging.jar"
 cp "$LAUNCHER_RESOURCE" "$OUTPUT_DIR/launcher/voidscape-launcher.properties"
+chmod 0644 "$OUTPUT_DIR/launcher/VoidscapeLauncher-staging.jar" \
+	"$OUTPUT_DIR/launcher/voidscape-launcher.properties"
 python3 - "$OUTPUT_DIR/launcher/VoidscapeLauncher-staging.jar" "$OUTPUT_DIR/launcher/voidscape-launcher.properties" "$GAME_HOST" "$GAME_PORT" "$PORTAL_URL" <<'PY'
 import sys
 import zipfile
@@ -455,18 +761,19 @@ if [[ "$SKIP_ANDROID" -eq 0 ]]; then
 	echo "==> Packaging Android APK for staging host"
 	ANDROID_BACKUP="$(mktemp)"
 	cp "$ANDROID_CONFIG" "$ANDROID_BACKUP"
-	python3 - "$ANDROID_CONFIG" "$GAME_HOST" "$GAME_PORT" "$PORTAL_URL/portal?auth=login" "$PORTAL_URL/portal?auth=recovery" <<'PY'
+	python3 - "$ANDROID_CONFIG" "$GAME_HOST" "$GAME_PORT" "$PORTAL_URL/portal?auth=login" "$PORTAL_URL/portal?auth=recovery" "$PORTAL_URL/data-deletion" <<'PY'
 import re
 import sys
 from pathlib import Path
 
-path, host, port, account_url, recovery_url = sys.argv[1:]
+path, host, port, account_url, recovery_url, deletion_url = sys.argv[1:]
 text = Path(path).read_text()
 replacements = {
     "VOIDSCAPE_PUBLIC_HOST": host,
     "VOIDSCAPE_DEFAULT_PORT": port,
     "VOIDSCAPE_PORTAL_ACCOUNT_URL": account_url,
     "VOIDSCAPE_PORTAL_RECOVERY_URL": recovery_url,
+    "VOIDSCAPE_PORTAL_DELETION_URL": deletion_url,
 }
 for key, value in replacements.items():
     text = re.sub(
@@ -477,9 +784,20 @@ for key, value in replacements.items():
     )
 Path(path).write_text(text)
 PY
+	if ! cmp -s "$ANDROID_BACKUP" "$ANDROID_CONFIG"; then
+		ANDROID_ENDPOINT_REWRITTEN=1
+		mark_non_promotable "android_endpoint_rewrite"
+		if [[ "$ALLOW_DIRTY_STAGING" -ne 1 ]]; then
+			echo "ERROR: target Android endpoints differ from committed osConfig.java; temporary rewriting is rehearsal-only." >&2
+			exit 1
+		fi
+	fi
 	if [[ "$ANDROID_RELEASE" -eq 1 ]]; then
-		# The staging endpoint rewrite above is intentionally dirty and must remain non-promotable.
-		VOIDSCAPE_ANDROID_ALLOW_DIRTY_RELEASE=1 scripts/build-android.sh --release
+		if [[ "$BUNDLE_PROMOTABLE" -eq 1 ]]; then
+			scripts/build-android.sh --release
+		else
+			VOIDSCAPE_ANDROID_ALLOW_DIRTY_RELEASE=1 scripts/build-android.sh --release
+		fi
 		ANDROID_APK="$ROOT/Android_Client/Open RSC Android Client/build/outputs/apk/release/voidscape.apk"
 		ANDROID_LABEL="release"
 	else
@@ -487,24 +805,126 @@ PY
 		ANDROID_APK="$ROOT/Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk"
 		ANDROID_LABEL="debug"
 	fi
-	cp "$ANDROID_APK" "$OUTPUT_DIR/android/voidscape-staging-$ANDROID_LABEL.apk"
-	cp "$ANDROID_APK" "$OUTPUT_DIR/android/voidscape-staging.apk"
-	if [[ -f "$ANDROID_APK.json" ]]; then
-		cp "$ANDROID_APK.json" "$OUTPUT_DIR/android/voidscape-staging-$ANDROID_LABEL.apk.json"
-		cp "$ANDROID_APK.json" "$OUTPUT_DIR/android/voidscape-staging.apk.json"
+	if [[ "$BUNDLE_PROMOTABLE" -eq 1 && "$ANDROID_RELEASE" -eq 1 ]]; then
+		mkdir -p "$OUTPUT_DIR/android/candidate"
+		ANDROID_BUNDLE_APK="$OUTPUT_DIR/android/candidate/voidscape-release.apk"
+		ANDROID_BUNDLE_META="$ANDROID_BUNDLE_APK.json"
+		cp "$ANDROID_APK" "$ANDROID_BUNDLE_APK"
+		chmod 0644 "$ANDROID_BUNDLE_APK"
+		if [[ ! -f "$ANDROID_APK.json" ]]; then
+			echo "ERROR: release APK metadata sidecar is missing: $ANDROID_APK.json" >&2
+			exit 1
+		fi
+		cp "$ANDROID_APK.json" "$ANDROID_BUNDLE_META"
+		chmod 0644 "$ANDROID_BUNDLE_META"
+		if [[ -z "${VOIDSCAPE_ANDROID_EXPECTED_SIGNER_SHA256:-}" ]]; then
+			echo "ERROR: VOIDSCAPE_ANDROID_EXPECTED_SIGNER_SHA256 is required for a promotable APK." >&2
+			exit 1
+		fi
+		ANDROID_CHECK_LOG="$OUTPUT_DIR/android/android-apk-release-check.txt"
+		if ! scripts/check-android-apk-release.sh \
+			--apk "$ANDROID_BUNDLE_APK" \
+			--meta "$ANDROID_BUNDLE_META" \
+			--server-config "$OUTPUT_DIR/server/local.launch-staging.conf" \
+			--expected-signer-sha256 "$VOIDSCAPE_ANDROID_EXPECTED_SIGNER_SHA256" \
+			>"$ANDROID_CHECK_LOG" 2>&1; then
+			cat "$ANDROID_CHECK_LOG" >&2
+			echo "ERROR: Android release checker failed; no public APK alias was created." >&2
+			exit 1
+		fi
+		ANDROID_RELEASE_CHECK="passed"
+	else
+		mkdir -p "$OUTPUT_DIR/android/rehearsal-only"
+		ANDROID_BUNDLE_APK="$OUTPUT_DIR/android/rehearsal-only/voidscape-staging-$ANDROID_LABEL.apk"
+		ANDROID_BUNDLE_META="$ANDROID_BUNDLE_APK.json"
+		cp "$ANDROID_APK" "$ANDROID_BUNDLE_APK"
+		chmod 0644 "$ANDROID_BUNDLE_APK"
+		if [[ -f "$ANDROID_APK.json" ]]; then
+			cp "$ANDROID_APK.json" "$ANDROID_BUNDLE_META"
+			chmod 0644 "$ANDROID_BUNDLE_META"
+		fi
+		if [[ "$ANDROID_RELEASE" -eq 1 ]]; then
+			ANDROID_RELEASE_CHECK="not_run_non_promotable"
+		else
+			ANDROID_RELEASE_CHECK="not_applicable_debug"
+		fi
 	fi
 	restore_sources
 	trap restore_sources EXIT
 else
 	echo "==> Skipping Android APK packaging"
+fi
+
+FINAL_SOURCE_STATUS="$(git -C "$ROOT" status --porcelain=v1 --untracked-files=normal)"
+if [[ "$FINAL_SOURCE_STATUS" != "$INITIAL_SOURCE_STATUS" ]]; then
+	SOURCE_DIRTY=1
+	mark_non_promotable "source_state_changed_during_packaging"
+	if [[ "$ALLOW_DIRTY_STAGING" -ne 1 ]]; then
+		echo "ERROR: Git source state changed during packaging; review tracked and untracked inputs before promotion." >&2
+		exit 1
+	fi
+fi
+CURRENT_FULL_COMMIT="$(git -C "$ROOT" rev-parse --verify 'HEAD^{commit}' 2>/dev/null || true)"
+if [[ "$CURRENT_FULL_COMMIT" != "$FULL_COMMIT" ]]; then
+	echo "ERROR: Git HEAD changed during packaging; refusing ambiguous build metadata." >&2
+	exit 1
+fi
+PROMOTABLE_TEXT="$([[ "$BUNDLE_PROMOTABLE" -eq 1 ]] && echo true || echo false)"
+PROMOTION_BLOCKERS_TEXT="$(promotion_blockers_text)"
+SOURCE_DIRTY_TEXT="$([[ "$SOURCE_DIRTY" -eq 1 ]] && echo true || echo false)"
+
+python3 - "$OUTPUT_DIR/portal/web-portal/build-meta.json" "$FULL_COMMIT" "$SOURCE_DIRTY_TEXT" "$CREATED_AT" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+target, commit, dirty_text, generated_at = sys.argv[1:]
+if not re.fullmatch(r"[0-9a-f]{40}", commit):
+    raise SystemExit("ERROR: portal build metadata requires a full 40-hex commit")
+Path(target).write_text(json.dumps({
+	"status": "publication_pending",
+    "sourcePublicationStatus": "publication_pending",
+	"repositoryUrl": "",
+    "sourceRepositoryUrl": "",
+	"commit": "",
+	"shortCommit": "",
+    "sourceCommit": "",
+	"branch": "",
+	"dirty": dirty_text == "true",
+    "sourceDirty": dirty_text == "true",
+    "generatedAt": generated_at,
+}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+chmod 0644 "$OUTPUT_DIR/portal/web-portal/build-meta.json"
+write_sha256_tree "$OUTPUT_DIR/portal/web-portal" "$OUTPUT_DIR/portal/web-portal.SHA256"
+
+if [[ "$BUNDLE_PROMOTABLE" -eq 1 && "$ANDROID_RELEASE" -eq 1 ]]; then
+	mv "$ANDROID_BUNDLE_APK" "$OUTPUT_DIR/android/voidscape-staging.apk"
+	mv "$ANDROID_BUNDLE_META" "$OUTPUT_DIR/android/voidscape-staging.apk.json"
+	ANDROID_BUNDLE_APK="$OUTPUT_DIR/android/voidscape-staging.apk"
+	ANDROID_BUNDLE_META="$OUTPUT_DIR/android/voidscape-staging.apk.json"
+	rmdir "$OUTPUT_DIR/android/candidate"
+	ANDROID_APK_PROMOTABLE=1
+	cat > "$OUTPUT_DIR/android/README.md" <<'EOF'
+# Android direct-download release APK
+
+The root APK exists only because the bundle is promotable and the signed APK
+release checker passed. Rerun that checker immediately before publication.
+EOF
+elif [[ -n "$ANDROID_BUNDLE_APK" ]]; then
 	cat > "$OUTPUT_DIR/android/README.md" <<EOF
-Android packaging was skipped.
+# REHEARSAL-ONLY Android APK
 
-For release/staging proof, rerun:
-  scripts/package-launch-staging.sh --host $GAME_HOST --portal-url $PORTAL_URL --web-url $WEB_URL
+This bundle is not promotable: \`$PROMOTION_BLOCKERS_TEXT\`. The APK is isolated
+under \`android/rehearsal-only/\`; do not publish or upload it.
+EOF
+else
+	cat > "$OUTPUT_DIR/android/README.md" <<'EOF'
+# Android APK not included
 
-The package script temporarily rebuilds Android with VOIDSCAPE_PUBLIC_HOST=$GAME_HOST,
-then restores the source tree after the APK is copied.
+No direct-download APK is present. Google Play AAB promotion uses its separate
+signed release gate.
 EOF
 fi
 
@@ -512,7 +932,41 @@ cat > "$OUTPUT_DIR/VERIFY-STAGING.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 BUNDLE_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+if [[ "$PROMOTABLE_TEXT" != "true" && "\${VOIDSCAPE_ALLOW_REHEARSAL_VERIFY:-0}" != "1" ]]; then
+	echo "ERROR: bundle is non-promotable ($PROMOTION_BLOCKERS_TEXT); set VOIDSCAPE_ALLOW_REHEARSAL_VERIFY=1 only for an isolated rehearsal." >&2
+	exit 1
+fi
 REPO_ROOT="\${VOIDSCAPE_REPO_ROOT:-\$(pwd)}"
+DEPLOYED_SERVER_DIR="\${VOIDSCAPE_DEPLOYED_SERVER_DIR:-/opt/voidscape/server}"
+DEPLOYED_CLIENT_DIR="\${VOIDSCAPE_DEPLOYED_CLIENT_DIR:-/opt/voidscape/client}"
+DEPLOYED_LAUNCHER_JAR="\${VOIDSCAPE_DEPLOYED_LAUNCHER_JAR:-/opt/voidscape/launcher/VoidscapeLauncher-staging.jar}"
+DEPLOYED_PORTAL_DIR="\${VOIDSCAPE_DEPLOYED_PORTAL_DIR:-/opt/voidscape/web/portal}"
+verify_exact_sha256_tree() {
+	local deployed_root="\$1"
+	local expected_manifest="\$2"
+	"\$BUNDLE_DIR/ops/verify/verify-exact-sha256-tree.py" \
+		"\$deployed_root" "\$expected_manifest"
+}
+if [[ "\${VOIDSCAPE_SKIP_DEPLOYED_BYTE_CHECK:-0}" != "1" ]]; then
+	for pair in \
+		"\$BUNDLE_DIR/server/core.jar:\$DEPLOYED_SERVER_DIR/core.jar" \
+		"\$BUNDLE_DIR/server/plugins.jar:\$DEPLOYED_SERVER_DIR/plugins.jar" \
+		"\$BUNDLE_DIR/server/portal-password-helper.jar:\$DEPLOYED_SERVER_DIR/portal-password-helper.jar" \
+		"\$BUNDLE_DIR/client/Open_RSC_Client.jar:\$DEPLOYED_CLIENT_DIR/Open_RSC_Client.jar" \
+		"\$BUNDLE_DIR/launcher/VoidscapeLauncher-staging.jar:\$DEPLOYED_LAUNCHER_JAR"
+	do
+		expected="\${pair%%:*}"
+		actual="\${pair#*:}"
+		if [[ ! -f "\$actual" ]] || ! cmp -s "\$expected" "\$actual"; then
+			echo "ERROR: deployed artifact bytes differ: \$actual" >&2
+			exit 1
+		fi
+	done
+	verify_exact_sha256_tree "\$DEPLOYED_SERVER_DIR/conf" "\$BUNDLE_DIR/server/conf.SHA256"
+	verify_exact_sha256_tree "\$DEPLOYED_SERVER_DIR/database" "\$BUNDLE_DIR/server/database.SHA256"
+	verify_exact_sha256_tree "\$DEPLOYED_CLIENT_DIR/Cache" "\$BUNDLE_DIR/client/cache.SHA256"
+	verify_exact_sha256_tree "\$DEPLOYED_PORTAL_DIR" "\$BUNDLE_DIR/portal/web-portal.SHA256"
+fi
 if [[ -z "\${VOIDSCAPE_DEPLOYED_SERVER_CONFIG:-}" ]]; then
 	echo "ERROR: set VOIDSCAPE_DEPLOYED_SERVER_CONFIG to a copy of the actual deployed local.conf" >&2
 	exit 2
@@ -529,17 +983,25 @@ if [[ ! -f "\$VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG" ]]; then
 	echo "ERROR: deployed connections config copy not found: \$VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG" >&2
 	exit 2
 fi
-for arg in "\$@"; do
-	case "\$arg" in
-		--run-signup|--skip-signup|--server-config|--connections-config|--skip-server-config)
-			echo "ERROR: VERIFY-STAGING.sh owns \$arg; use its VOIDSCAPE_* environment controls" >&2
-			exit 2
-			;;
-	esac
-done
+if [[ \$# -ne 0 ]]; then
+	echo "ERROR: VERIFY-STAGING.sh accepts no positional or option arguments; its fixed release checks cannot be bypassed." >&2
+	exit 2
+fi
 SIGNUP_MODE=(--skip-signup)
 if [[ "\${VOIDSCAPE_VERIFY_RUN_SIGNUP:-0}" == "1" ]]; then
-	SIGNUP_MODE=(--run-signup)
+	: "\${VOIDSCAPE_VERIFY_SIGNUP_USERNAME:?Set the exact new QA character name}"
+	: "\${VOIDSCAPE_VERIFY_SIGNUP_EMAIL:?Set the email address you can verify now}"
+	: "\${VOIDSCAPE_VERIFY_SIGNUP_PASSWORD:?Set the exact portal/game password}"
+	SIGNUP_MODE=(
+		--run-signup
+		--signup-username "\$VOIDSCAPE_VERIFY_SIGNUP_USERNAME"
+		--signup-email "\$VOIDSCAPE_VERIFY_SIGNUP_EMAIL"
+		--signup-password "\$VOIDSCAPE_VERIFY_SIGNUP_PASSWORD"
+		--qa-user "\$VOIDSCAPE_VERIFY_SIGNUP_USERNAME"
+		--qa-pass "\$VOIDSCAPE_VERIFY_SIGNUP_PASSWORD"
+		--verification-timeout-seconds "\${VOIDSCAPE_VERIFY_EMAIL_TIMEOUT_SECONDS:-240}"
+		--verification-poll-seconds "\${VOIDSCAPE_VERIFY_EMAIL_POLL_SECONDS:-30}"
+	)
 fi
 "\$REPO_ROOT/scripts/verify-launch-staging.mjs" \\
   --portal-url "$PORTAL_URL/" \\
@@ -550,8 +1012,7 @@ fi
   --connections-config "\$VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG" \\
   --expected-client-version "$VERSION" \\
   --out "\$BUNDLE_DIR/logs/verify-staging-\$(date -u +%Y%m%dT%H%M%SZ)" \\
-  "\${SIGNUP_MODE[@]}" \\
-  "\$@"
+  "\${SIGNUP_MODE[@]}"
 EOF
 chmod +x "$OUTPUT_DIR/VERIFY-STAGING.sh"
 
@@ -573,17 +1034,21 @@ Client version: $VERSION
 
 - \`server/core.jar\`, \`server/plugins.jar\`, and the isolated \`server/portal-password-helper.jar\`
 - \`server/database/\`
-- \`server/conf/server/defs/\`
+- \`server/conf/\`
+- \`client/Open_RSC_Client.jar\` and the exact manifest-backed \`client/Cache/\`
 - \`server/local.launch-staging.conf\`
 - \`server/launch-config-contract.json\`
 - \`scripts/\`, \`tools/voidbot/\`, and \`tools/headless_players/\` fleet runtime files
 - \`Deployment_Scripts/systemd/voidscape-headless*\` fleet units and generated non-secret environment
 - \`docs/subsystems/headless-players.md\` and \`docs/OPERATIONS.md\` operator runbooks
 - \`portal/web-portal/\`
+- \`portal/web-portal.SHA256\`
 - \`portal/portal.env.staging\`
 - \`play/\`
 - \`launcher/VoidscapeLauncher-staging.jar\`
 - \`android/voidscape-staging.apk\` when Android packaging was enabled
+- \`ops/database/prepare-production-sqlite-permissions.sh\` and
+  \`ops/verify/verify-exact-sha256-tree.py\` release guards
 
 ## Host Placement
 
@@ -594,15 +1059,21 @@ Suggested single-host layout:
 /opt/voidscape/server/plugins.jar
 /opt/voidscape/server/portal-password-helper.jar
 /opt/voidscape/server/database/
-/opt/voidscape/server/conf/server/defs/
+/opt/voidscape/server/conf/
+/opt/voidscape/server/inc/sqlite/voidscape.db
 /opt/voidscape/server/local.conf
+/opt/voidscape/client/Open_RSC_Client.jar
+/opt/voidscape/client/Cache/
+/opt/voidscape/launcher/VoidscapeLauncher-staging.jar
 /opt/voidscape/scripts/
 /opt/voidscape/tools/voidbot/
 /opt/voidscape/tools/headless_players/
 /opt/voidscape/docs/subsystems/headless-players.md
 /opt/voidscape/docs/OPERATIONS.md
 /opt/voidscape/web/portal/
-/opt/voidscape/web/play/
+/etc/voidscape/portal.env
+/var/www/html/play/
+/var/www/html/voidscape/
 /etc/systemd/system/voidscape-headless.target
 /etc/systemd/system/voidscape-headless@.service
 /etc/systemd/system/voidscape-headless-controller.service
@@ -616,8 +1087,8 @@ or merge every value in \`server/launch-config-contract.json\` plus this bundle'
 \`ws_server_port: $WS_PORT\` into the real private config. The hosted verifier
 rejects a missing, changed, or duplicate contract key.
 
-Copy the bundle's \`scripts/\`, \`tools/\`, \`docs/\`, and
-\`server/conf/server/defs/\` trees to the same paths below \`/opt/voidscape\`.
+Copy the bundle's \`scripts/\`, \`tools/\`, \`docs/\`, \`server/conf/\`,
+\`client/\`, and \`launcher/\` trees to the same paths below \`/opt/voidscape\`.
 Before installing or starting the fleet, create its ten static nologin service users
 with primary group \`voidscape\` (the unit does not use \`DynamicUser=\`):
 
@@ -727,9 +1198,11 @@ front of people. Fill the blanks with the actual deployed paths from the host.
 - Keep \`PORTAL_GOOGLE_CLIENT_ID\` unset unless Google sign-in is intentionally enabled and tested.
 - Confirm \`PORTAL_EMAIL_VERIFICATION_REQUIRED=1\`, \`PORTAL_REQUIRE_EMAIL=1\`, \`PORTAL_EMAIL_PROVIDER=resend\`, \`PORTAL_RESEND_API_KEY\`, and \`PORTAL_PUBLIC_ORIGIN\` are set, then check \`/api/health.config.email.configured\` and \`.verificationRequired\`.
 - Confirm \`PORTAL_GAME_PASSWORD_HELPER_CLASSPATH=/opt/voidscape/server/portal-password-helper.jar\` and that the packaged helper jar passes its stdin check before enabling Character Manager password changes or older native-account claims.
-- Confirm all ten static \`voidscape-headless-<profile>\` identities pass the exact UID, primary-group, home, shell, and supplementary-group checks in \`DEPLOYMENT.md\`; confirm the installed player/controller units both retain \`LimitCORE=0\`.
-- Install \`Deployment_Scripts/systemd/voidscape-headless.env\` as root-owned mode 0644 \`/etc/voidscape/headless.env\` so this bundle's generated game port and client version reach every fleet service.
-- Confirm an approved encryption recipient and off-host sink are ready for the database-paired backup of \`/etc/voidscape/headless-players\`. Never stage, bundle, or archive those files in plaintext.
+- Simulated world activity is out of scope for this no-player candidate: leave all
+  \`voidscape-headless-*\` identities and units uninstalled or disabled. The bundled
+  fleet remains QA tooling only. If it is ever approved as a launch feature, treat
+  its identity, unit, and encrypted credential checks in \`DEPLOYMENT.md\` as a
+  separate gated change.
 - If Android is public, prefer a release APK bundle, confirm \`MANIFEST.txt\` says \`android_apk_type=release\`, and set \`PORTAL_ANDROID_APK\` to that APK if it lives outside the default build path.
 
 ## Backup Paths
@@ -740,8 +1213,8 @@ Record these before overwriting live files:
 Portal backup:
 Play/web-client backup:
 Server jar/config backup:
-Database backup (paired with headless credentials):
-Headless credential/receipt backup (encrypted, off-host):
+Database backup:
+Headless credential/receipt backup: N/A unless simulated activity is separately approved
 Launcher/APK public-download backup:
 \`\`\`
 
@@ -752,58 +1225,42 @@ set -euo pipefail
 stamp="\$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p /opt/voidscape/backups
 tar -czf "/opt/voidscape/backups/portal-prelaunch-\$stamp.tgz" -C /opt/voidscape/web portal
-tar -czf "/opt/voidscape/backups/play-prelaunch-\$stamp.tgz" -C /opt/voidscape/web play
-tar -czf "/opt/voidscape/backups/server-prelaunch-\$stamp.tgz" -C /opt/voidscape server/core.jar server/plugins.jar server/portal-password-helper.jar server/local.conf
-systemctl stop voidscape-headless.target
-python3 /opt/voidscape/scripts/headless-player-helper.py check-sqlite-roster-offline \\
-  --roster /opt/voidscape/tools/headless_players/roster.json \\
-  --connections-config /opt/voidscape/server/connections.conf \\
-  --server-config /opt/voidscape/server/local.conf \\
-  --database /opt/voidscape/server/inc/sqlite/voidscape.db >/dev/null
+install -m 600 /etc/voidscape/portal.env "/opt/voidscape/backups/portal.env-prelaunch-\$stamp"
+tar -czf "/opt/voidscape/backups/portal-state-prelaunch-\$stamp.tgz" -C /var/lib voidscape-portal
+tar -czf "/opt/voidscape/backups/public-web-prelaunch-\$stamp.tgz" -C /var/www/html play voidscape
+tar -czf "/opt/voidscape/backups/server-prelaunch-\$stamp.tgz" -C /opt/voidscape server/core.jar server/plugins.jar server/portal-password-helper.jar server/conf server/database server/local.conf client launcher
 sqlite3 /opt/voidscape/server/inc/sqlite/voidscape.db ".backup '/opt/voidscape/backups/voidscape-\$stamp.sqlite'"
-headless_archive="/mnt/offsite-encrypted/voidscape-headless-\$stamp.tar.age"
-credential_members=()
-for profile in fireee ch0p ultraz vinny six-seven college pknskate p-h-i-s-h fulani az; do
-  credential_members+=("headless-players/\$profile.password")
-  credential_members+=("headless-players/\$profile.provisioned")
-done
-tar --numeric-owner -C /etc/voidscape -cf - "\${credential_members[@]}" |
-  age --encrypt --recipient '<AGE_RECIPIENT>' > "\$headless_archive"
-test -s "\$headless_archive"
-actual_members="\$(mktemp)"
-expected_members="\$(mktemp)"
-trap 'rm -f "\$actual_members" "\$expected_members"' EXIT
-age --decrypt --identity /root/.config/age/keys.txt "\$headless_archive" |
-  tar -tf - | LC_ALL=C sort > "\$actual_members"
-{
-  for profile in fireee ch0p ultraz vinny six-seven college pknskate p-h-i-s-h fulani az; do
-    printf 'headless-players/%s.password\\n' "\$profile"
-    printf 'headless-players/%s.provisioned\\n' "\$profile"
-  done
-} | LC_ALL=C sort > "\$expected_members"
-test "\$(wc -l < "\$actual_members" | tr -d ' ')" -eq 20
-test "\$(grep -Ec '^headless-players/[^/]+[.](password|provisioned)\$' "\$actual_members")" -eq 20
-cmp -s "\$expected_members" "\$actual_members"
-rm -f "\$actual_members" "\$expected_members"
-trap - EXIT
 \`\`\`
 
 If production is MariaDB, use the matching dump/restore commands from
-\`docs/OPERATIONS.md\` instead of the SQLite backup line. The fleet provisioning
-script itself is SQLite-only and must fail closed on MariaDB/MySQL. The encrypted
-credential command streams directly to its off-host artifact; never replace it with
-a plaintext tarball.
+\`docs/OPERATIONS.md\` instead of the SQLite backup line.
 
 ## Deploy
 
 - Copy \`server/core.jar\`, \`server/plugins.jar\`, \`server/portal-password-helper.jar\`, and the release-critical config values into the live server path.
-- Copy \`server/conf/server/defs/\`, \`scripts/\`, \`tools/voidbot/\`, \`tools/headless_players/\`, and \`docs/\` into the matching paths below \`/opt/voidscape\`.
-- Create the exact ten static users from \`docs/subsystems/headless-players.md\`; install the three \`Deployment_Scripts/systemd/voidscape-headless*\` units, run \`systemctl daemon-reload\`, and verify both service kinds report \`LimitCORE=0\`.
-- Install \`Deployment_Scripts/systemd/voidscape-headless.env\` as \`/etc/voidscape/headless.env\` and provision the ordinary accounts only through the explicit SQLite fail-closed command in \`DEPLOYMENT.md\`. Start \`voidscape-headless.target\` only after its root-owned external credentials exist and the paired database plus encrypted off-host credential backup above has succeeded.
-- Copy \`portal/web-portal/\` to the live portal static/app path.
-- Copy \`play/\` to the live \`/play/\` static root.
-- Copy \`launcher/VoidscapeLauncher-staging.jar\` and \`launcher/voidscape-launcher.properties\` to the public download path when ready.
-- Copy \`android/voidscape-staging.apk\` to the public download path when Android direct download should be live; set \`PORTAL_ANDROID_APK\` to that path if it is not the default build output.
+- Create the dedicated \`voidscape-db\` group, add only the shared game/portal
+  service identity \`voidscape\`, and keep every simulated-player identity out.
+
+\`\`\`bash
+getent group voidscape-db >/dev/null || groupadd --system voidscape-db
+usermod -aG voidscape-db voidscape
+id -nG voidscape | tr ' ' '\n' | grep -Fx voidscape-db
+\`\`\`
+
+Restart the \`voidscape\` service identity's processes after changing group
+membership so both game and portal receive the dedicated supplemental group.
+- With both game and portal services stopped, run
+  \`ops/database/prepare-production-sqlite-permissions.sh\` to enforce the
+  reviewed shared SQLite contract (directory \`root:voidscape-db 0770\`, database
+  \`voidscape:voidscape-db 0600\`) before either service starts.
+- Copy \`server/conf/\`, \`scripts/\`, \`tools/voidbot/\`, \`tools/headless_players/\`, and \`docs/\` into the matching paths below \`/opt/voidscape\`.
+- Keep the simulated world-activity fleet disabled by default. Install or start
+  those accounts and units only when simulated players are an explicit launch
+  feature; the bundled fleet remains available as QA tooling.
+- Copy \`portal/web-portal/\` to \`/opt/voidscape/web/portal/\`.
+- Copy \`play/\` to \`/var/www/html/play/\`.
+- Copy \`launcher/VoidscapeLauncher-staging.jar\` and \`launcher/voidscape-launcher.properties\` to \`/opt/voidscape/launcher/\`; publish the launcher only after the deployment gate.
+- Copy \`android/voidscape-staging.apk\` to \`/var/www/html/voidscape/\` only when Android direct download should be live; set \`PORTAL_ANDROID_APK\` to that path if it is not the default build output.
 - Restart the server, portal, and reverse proxy units.
 
 ## Verify
@@ -825,13 +1282,12 @@ the backup paths above.
 
 Use rollback only after stopping or draining player traffic.
 
-1. Stop \`voidscape-headless.target\`, then stop or gate the portal and game server.
+1. Stop or gate the portal and game server; stop the optional headless target too only if it was separately approved and installed.
 2. Restore the previous portal directory from the portal backup.
 3. Restore the previous \`/play/\` directory from the web-client backup.
 4. Restore previous server jars and config from the server backup.
-5. Restore the database backup only if the failed release changed persistent state or corrupted accounts. If fleet rows or credentials changed, keep the target stopped and restore the paired encrypted credential archive before verification.
-6. Require \`check-sqlite-roster-offline\` to pass against the restored rows, then rerun the fleet provisioning verifier; stop on any online-row, receipt, password, or store mismatch. A legacy snapshot containing fleet \`online=1\` flags may be reconciled only by booting the game server with the fleet still disabled so normal startup clears stale sessions, then stopping/gating it again and repeating the offline check.
-7. Restart the game/portal services, start the headless target only after those checks pass, and rerun the non-mutating health checks:
+5. Restore the database backup only if the failed release changed persistent state or corrupted accounts.
+6. Restart the game/portal services and rerun the non-mutating health checks:
    - \`curl -fsS $PORTAL_URL/api/health\`
    - \`curl -fsS $PORTAL_URL/api/public\`
    - \`scripts/verify-web-teavm-deployment.sh $WEB_URL --expected-build-manifest <previous-manifest> --deep-manifest\`
@@ -869,6 +1325,13 @@ cat > "$OUTPUT_DIR/MANIFEST.txt" <<EOF
 created_at=$CREATED_AT
 commit=$FULL_COMMIT
 short_commit=$COMMIT
+source_dirty=$SOURCE_DIRTY_TEXT
+source_publication_status=publication_pending
+source_repository_url=none
+promotable=$PROMOTABLE_TEXT
+promotion_blockers=$PROMOTION_BLOCKERS_TEXT
+server_client_build_mode=$SERVER_CLIENT_BUILD_MODE
+web_build_mode=$WEB_BUILD_MODE
 client_version=$VERSION
 game_host=$GAME_HOST
 game_port=$GAME_PORT
@@ -876,9 +1339,13 @@ ws_port=$WS_PORT
 portal_url=$PORTAL_URL/
 web_url=$WEB_URL
 ws_url=$WS_URL
+android_play_url=$([[ -n "$ANDROID_PLAY_URL" ]] && printf '%s' "$ANDROID_PLAY_URL" || printf '%s' "none")
 server_core_sha256=$(sha256_file "$OUTPUT_DIR/server/core.jar")
 server_plugins_sha256=$(sha256_file "$OUTPUT_DIR/server/plugins.jar")
 server_config_sha256=$(sha256_file "$OUTPUT_DIR/server/local.launch-staging.conf")
+server_conf_manifest_sha256=$(sha256_file "$OUTPUT_DIR/server/conf.SHA256")
+server_database_manifest_sha256=$(sha256_file "$OUTPUT_DIR/server/database.SHA256")
+server_database_file_count=$(wc -l < "$OUTPUT_DIR/server/database.SHA256" | tr -d '[:space:]')
 launch_config_contract_sha256=$(sha256_file "$ROOT/scripts/launch-config-contract.json")
 portal_password_helper_sha256=$(sha256_file "$OUTPUT_DIR/server/portal-password-helper.jar")
 headless_controller_sha256=$(sha256_file "$OUTPUT_DIR/tools/headless_players/controller.py")
@@ -888,16 +1355,33 @@ headless_target_sha256=$(sha256_file "$OUTPUT_DIR/Deployment_Scripts/systemd/voi
 headless_env_sha256=$(sha256_file "$OUTPUT_DIR/Deployment_Scripts/systemd/voidscape-headless.env")
 headless_runbook_sha256=$(sha256_file "$OUTPUT_DIR/docs/subsystems/headless-players.md")
 operations_runbook_sha256=$(sha256_file "$OUTPUT_DIR/docs/OPERATIONS.md")
+client_runtime_sha256=$(sha256_file "$OUTPUT_DIR/client/Open_RSC_Client.jar")
+client_cache_manifest_sha256=$(sha256_file "$OUTPUT_DIR/client/cache.SHA256")
 launcher_sha256=$(sha256_file "$OUTPUT_DIR/launcher/VoidscapeLauncher-staging.jar")
 web_build_manifest_sha256=$(sha256_file "$OUTPUT_DIR/play/voidscape-web-build.json")
+portal_build_meta_sha256=$(sha256_file "$OUTPUT_DIR/portal/web-portal/build-meta.json")
+portal_tree_manifest_sha256=$(sha256_file "$OUTPUT_DIR/portal/web-portal.SHA256")
+sqlite_permissions_helper_sha256=$(sha256_file "$OUTPUT_DIR/ops/database/prepare-production-sqlite-permissions.sh")
+exact_tree_verifier_sha256=$(sha256_file "$OUTPUT_DIR/ops/verify/verify-exact-sha256-tree.py")
+android_apk_type=$ANDROID_APK_TYPE
+android_apk_promotable=$([[ "$ANDROID_APK_PROMOTABLE" -eq 1 ]] && echo true || echo false)
+android_release_check=$ANDROID_RELEASE_CHECK
+android_endpoint_rewritten=$([[ "$ANDROID_ENDPOINT_REWRITTEN" -eq 1 ]] && echo true || echo false)
 EOF
 
-if [[ -f "$OUTPUT_DIR/android/voidscape-staging.apk" ]]; then
-	printf 'android_apk_type=%s\n' "$([[ "$ANDROID_RELEASE" -eq 1 ]] && echo release || echo debug)" >> "$OUTPUT_DIR/MANIFEST.txt"
-	printf 'android_apk_sha256=%s\n' "$(sha256_file "$OUTPUT_DIR/android/voidscape-staging.apk")" >> "$OUTPUT_DIR/MANIFEST.txt"
+if [[ -n "$ANDROID_BUNDLE_APK" && -f "$ANDROID_BUNDLE_APK" ]]; then
+	printf 'android_apk_path=%s\n' "${ANDROID_BUNDLE_APK#$OUTPUT_DIR/}" >> "$OUTPUT_DIR/MANIFEST.txt"
+	printf 'android_apk_sha256=%s\n' "$(sha256_file "$ANDROID_BUNDLE_APK")" >> "$OUTPUT_DIR/MANIFEST.txt"
+	if [[ -n "$ANDROID_BUNDLE_META" && -f "$ANDROID_BUNDLE_META" ]]; then
+		printf 'android_apk_metadata_sha256=%s\n' "$(sha256_file "$ANDROID_BUNDLE_META")" >> "$OUTPUT_DIR/MANIFEST.txt"
+	fi
 fi
 
 if [[ -n "$RSYNC_TARGET" ]]; then
+	if [[ "$BUNDLE_PROMOTABLE" -ne 1 ]]; then
+		echo "ERROR: refusing to rsync a non-promotable rehearsal bundle: $PROMOTION_BLOCKERS_TEXT" >&2
+		exit 1
+	fi
 	if ! command -v rsync >/dev/null 2>&1; then
 		echo "ERROR: --rsync-target requires rsync." >&2
 		exit 1
