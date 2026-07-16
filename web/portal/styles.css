@@ -1019,6 +1019,32 @@ h2 {
 	gap: 18px;
 }
 
+.account-claim-notice {
+	display: flex;
+	grid-column: 1 / -1;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 12px 14px;
+	border-top: 1px solid rgba(83, 220, 207, 0.42);
+	border-bottom: 1px solid rgba(83, 220, 207, 0.42);
+	background: rgba(22, 51, 54, 0.42);
+}
+
+.account-claim-notice[hidden] {
+	display: none;
+}
+
+.account-claim-notice > div {
+	display: grid;
+	gap: 3px;
+}
+
+.account-claim-notice span {
+	color: var(--muted);
+	font-size: 13px;
+}
+
 .account-home-panel,
 .account-actions-panel,
 .subscription-simple {
@@ -1091,6 +1117,25 @@ h2 {
 	min-width: 0;
 	overflow: hidden;
 	font-size: 20px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.staff-presence {
+	max-width: 1120px;
+}
+
+.presence-summary {
+	margin-bottom: 14px;
+}
+
+.admin-presence-table .table-row {
+	grid-template-columns: minmax(150px, 1fr) minmax(76px, 0.42fr) minmax(76px, 0.42fr) minmax(120px, 0.55fr);
+}
+
+.admin-presence-table .table-row span {
+	min-width: 0;
+	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -11341,6 +11386,124 @@ body.features-lightbox-open {
 	border-top: 1px solid var(--line);
 }
 
+body.auth-pending .portal-shell,
+body.auth-signed-out .portal-shell {
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);
+}
+
+body.auth-pending .sidebar,
+body.auth-pending .topbar,
+body.auth-signed-out .sidebar,
+body.auth-signed-out .topbar {
+	display: none;
+}
+
+body.auth-pending .workspace,
+body.auth-signed-out .workspace {
+	grid-column: 1;
+	grid-row: 1;
+	padding: 0;
+}
+
+.auth-entry-view {
+	min-height: 100%;
+}
+
+.portal-auth-stage {
+	display: grid;
+	align-content: center;
+	justify-items: center;
+	gap: 18px;
+	min-height: 100vh;
+	padding: 28px 18px;
+}
+
+.portal-auth-brand {
+	display: block;
+	width: min(280px, 72vw);
+}
+
+.portal-auth-brand img {
+	width: 100%;
+	filter: drop-shadow(0 5px 2px rgba(0, 0, 0, 0.82)) drop-shadow(0 0 16px rgba(143, 85, 223, 0.28));
+}
+
+.portal-auth-panel {
+	width: min(100%, 460px);
+	padding: 24px;
+}
+
+.portal-auth-loading {
+	display: grid;
+	justify-items: center;
+	gap: 5px;
+	min-height: 120px;
+	align-content: center;
+	text-align: center;
+}
+
+.portal-auth-loading span {
+	color: var(--muted);
+	font-size: 13px;
+}
+
+.portal-auth-screen {
+	display: grid;
+	gap: 2px;
+}
+
+.portal-auth-links {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 14px;
+	margin-top: 16px;
+}
+
+.portal-auth-links a,
+.text-button {
+	appearance: none;
+	padding: 0;
+	color: var(--cyan);
+	border: 0;
+	background: transparent;
+	font: inherit;
+	font-size: 13px;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.portal-auth-links a:hover,
+.text-button:hover {
+	color: var(--text);
+	text-decoration: underline;
+}
+
+.game-password-form,
+.recovery-code-rotation {
+	display: grid;
+	gap: 10px;
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid var(--line);
+}
+
+.character-danger-row {
+	gap: 10px;
+}
+
+.character-danger-row .ghost-button,
+.character-danger-row .danger-button {
+	width: 100%;
+}
+
+.recovery-code-rotation {
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: end;
+}
+
 .prelaunch-google {
 	display: grid;
 	gap: 10px;
@@ -11406,15 +11569,6 @@ body.features-lightbox-open {
 	border: 1px solid var(--line);
 	border-radius: 6px;
 	background: rgba(255, 255, 255, 0.04);
-}
-
-.portal-auth-form.is-authenticated label,
-.portal-auth-form.is-authenticated .account-mode {
-	display: none;
-}
-
-.portal-auth-form.is-authenticated .primary-button {
-	display: none;
 }
 
 .empty-roster {
@@ -11498,7 +11652,32 @@ body.features-lightbox-open {
 		display: none;
 	}
 
-	.portal-auth-form .account-mode {
+	.portal-auth-panel {
+		padding: 20px;
+	}
+
+	.portal-auth-links,
+	.character-danger-row {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.portal-auth-links {
+		align-items: flex-start;
+	}
+
+	.account-claim-notice {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.recovery-code-rotation {
+		grid-template-columns: 1fr;
+	}
+
+	.recovery-code-rotation button,
+	.game-password-form .button-row,
+	.game-password-form .button-row button {
 		width: 100%;
 	}
 }

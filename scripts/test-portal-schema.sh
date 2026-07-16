@@ -29,6 +29,22 @@ INSERT INTO web_account_identities (
 INSERT INTO web_recovery_codes (account_id, code_hash, code_hint, status)
 VALUES (1, 'recovery-hash-fixture', '1234', 'active');
 
+INSERT INTO web_password_reset_tokens (
+	account_id, token_hash, request_ip_hash, identifier_type, status, expires_at
+) VALUES (1, 'reset-hash-fixture', 'reset-ip-hash', 'username', 'pending', 9999999999999);
+
+INSERT INTO web_legacy_account_claims (
+	account_id, character_id, player_id, normalized_username,
+	target_email_canonical, target_email_display, password_hash,
+	credential_fingerprint, ownership_marker, token_hash, request_ip_hash,
+	status, expires_at
+) VALUES (
+	1, 1, 77, 'schemahero',
+	'claim@example.com', 'claim@example.com', 'scrypt$pending-fixture',
+	'credential-fingerprint-fixture', '1', 'legacy-claim-token-hash-fixture', 'claim-ip-hash',
+	'pending', 9999999999999
+);
+
 INSERT INTO web_founder_reservations (
 	id, account_id, username, normalized_name, email_canonical, email_display,
 	founder_code, credited_referrals, status
@@ -114,6 +130,31 @@ if sqlite3 "$db_path" "INSERT INTO web_account_identities (account_id, provider,
 	exit 1
 fi
 
+if sqlite3 "$db_path" "INSERT INTO web_password_reset_tokens (account_id, token_hash, identifier_type, status, expires_at) VALUES (1, 'reset-hash-fixture', 'email', 'pending', 9999999999999);" >/dev/null 2>&1; then
+	echo "expected duplicate reset token hash to violate token uniqueness"
+	exit 1
+fi
+
+if sqlite3 "$db_path" "INSERT INTO web_password_reset_tokens (account_id, token_hash, identifier_type, status, expires_at) VALUES (1, 'reset-hash-invalid', 'player-name', 'pending', 9999999999999);" >/dev/null 2>&1; then
+	echo "expected invalid reset identifier type to violate the identifier constraint"
+	exit 1
+fi
+
+if sqlite3 "$db_path" "INSERT INTO web_password_reset_tokens (account_id, token_hash, identifier_type, status, expires_at) VALUES (1, 'reset-hash-invalid-status', 'email', 'active', 9999999999999);" >/dev/null 2>&1; then
+	echo "expected invalid reset token status to violate the status constraint"
+	exit 1
+fi
+
+if sqlite3 "$db_path" "INSERT INTO web_legacy_account_claims (account_id, character_id, player_id, normalized_username, target_email_canonical, target_email_display, ownership_marker, token_hash, status, expires_at) VALUES (1, 1, 77, 'schemahero', 'other@example.com', 'other@example.com', '1', 'legacy-claim-token-hash-fixture', 'pending', 9999999999999);" >/dev/null 2>&1; then
+	echo "expected duplicate legacy claim token hash to violate token uniqueness"
+	exit 1
+fi
+
+if sqlite3 "$db_path" "INSERT INTO web_legacy_account_claims (account_id, character_id, player_id, normalized_username, target_email_canonical, target_email_display, ownership_marker, token_hash, status, expires_at) VALUES (1, 1, 77, 'schemahero', 'other@example.com', 'other@example.com', '1', 'legacy-claim-invalid-status', 'active', 9999999999999);" >/dev/null 2>&1; then
+	echo "expected invalid legacy claim status to violate the status constraint"
+	exit 1
+fi
+
 sqlite3 "$db_path" "INSERT INTO web_founder_reservations (username, normalized_name, email_canonical, email_display, founder_code, status) VALUES ('SchemaHero2', 'schemahero', 'other@example.com', 'other@example.com', 'OTHER-A2', 'released');"
 
 sqlite3 -json "$db_path" <<'SQL'
@@ -121,6 +162,8 @@ SELECT
 	(SELECT COUNT(*) FROM web_accounts) AS accounts,
 	(SELECT COUNT(*) FROM web_account_identities) AS identities,
 	(SELECT COUNT(*) FROM web_recovery_codes) AS recovery_codes,
+	(SELECT COUNT(*) FROM web_password_reset_tokens) AS password_reset_tokens,
+	(SELECT COUNT(*) FROM web_legacy_account_claims) AS legacy_account_claims,
 	(SELECT COUNT(*) FROM web_account_characters) AS character_links,
 	(SELECT COUNT(*) FROM web_founder_reservations) AS founder_reservations,
 	(SELECT COUNT(*) FROM web_founder_referrals) AS founder_referrals,

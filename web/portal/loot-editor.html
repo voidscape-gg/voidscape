@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="Visually prepare Voidscape NPC and Void Chest loot table changes for review.">
+	<title>Voidscape Loot Editor</title>
+	<link rel="icon" href="assets/favicon.png">
+	<link rel="preload" as="font" type="font/woff2" href="assets/instrument-sans-latin-400-600.woff2" crossorigin>
+	<link rel="preload" as="font" type="font/ttf" href="assets/alagard.ttf" crossorigin>
+	<link rel="stylesheet" href="loot-editor.css">
+</head>
+<body data-source-url="assets/loot-editor-data.json">
+	<a class="skip-link" href="#editor-main">Skip to editor</a>
+
+	<header class="editor-topbar">
+		<a class="editor-brand" href="/" aria-label="Voidscape home">
+			<img src="assets/voidscape-wordmark.png" alt="Voidscape">
+		</a>
+		<div class="topbar-title">
+			<strong>Loot editor</strong>
+			<span>Browser draft tool</span>
+		</div>
+		<div class="topbar-actions">
+			<span class="save-state" id="save-state" role="status" aria-live="polite">Loading source data</span>
+			<a href="/loot-editor-guide">How to use</a>
+			<a href="/npcs">View NPC drops</a>
+		</div>
+	</header>
+
+	<div class="load-error" id="load-error" role="alert" hidden>
+		<div>
+			<strong>Loot data could not be loaded.</strong>
+			<p id="load-error-message">Check that the generated data file is available, then try again.</p>
+		</div>
+		<button type="button" id="retry-load">Try again</button>
+	</div>
+
+	<div class="editor-shell" id="editor-shell" aria-busy="true">
+		<aside class="table-browser" aria-label="Loot tables">
+			<div class="browser-heading">
+				<div>
+					<h1>Choose a table</h1>
+					<p>NPC tables and the Void Chest</p>
+				</div>
+				<span class="change-count" id="change-count" aria-label="Changed tables">0</span>
+			</div>
+
+			<label class="search-field" for="table-search">
+				<span>Search tables</span>
+				<input id="table-search" type="search" autocomplete="off" placeholder="NPC name, ID, or table">
+			</label>
+
+			<div class="browser-filters" role="group" aria-label="Filter loot tables">
+				<button type="button" class="filter-button is-active" data-filter="all" aria-pressed="true">All</button>
+				<button type="button" class="filter-button" data-filter="editable" aria-pressed="false">Editable</button>
+				<button type="button" class="filter-button" data-filter="locked" aria-pressed="false">Locked</button>
+			</div>
+
+			<p class="browser-summary" id="browser-summary" aria-live="polite">Loading tables</p>
+			<nav class="table-list" id="table-list" aria-label="Available loot tables"></nav>
+		</aside>
+
+		<main class="editor-main" id="editor-main" tabindex="-1">
+			<div class="editor-loading" id="editor-loading" aria-live="polite">
+				<div class="loading-line loading-title"></div>
+				<div class="loading-line"></div>
+				<div class="loading-line loading-short"></div>
+				<div class="loading-row"></div>
+				<div class="loading-row"></div>
+				<div class="loading-row"></div>
+			</div>
+
+			<section id="editor-content" hidden>
+				<header class="group-header">
+					<div class="group-identity">
+						<div class="group-art" id="group-art" aria-hidden="true"></div>
+						<div>
+							<div class="group-kicker" id="group-kicker">NPC table</div>
+							<h2 id="group-title">Loot table</h2>
+							<p id="group-source">Source details</p>
+						</div>
+					</div>
+					<div class="group-tools">
+						<button type="button" class="button secondary" id="undo-button" disabled>Undo</button>
+						<button type="button" class="button secondary" id="reset-group-button" disabled>Reset table</button>
+					</div>
+				</header>
+
+				<div class="scope-notice" id="scope-notice" role="note"></div>
+				<div class="affected-notice" id="affected-notice" role="note" hidden></div>
+
+				<section class="weight-summary" aria-labelledby="weight-summary-title">
+					<div class="summary-heading">
+						<div>
+							<h3 id="weight-summary-title">Roll weight</h3>
+							<p id="weight-summary-help">The total roll size stays fixed.</p>
+						</div>
+						<strong id="weight-status">0 / 0</strong>
+					</div>
+					<div class="weight-metrics">
+						<div><span>Editable drops</span><strong id="editable-weight">0</strong></div>
+						<div><span>Locked rows</span><strong id="locked-weight">0</strong></div>
+						<div><span id="remainder-label">Remaining Nothing</span><strong id="remaining-weight">0</strong></div>
+						<div><span>Fixed total</span><strong id="total-weight">0</strong></div>
+					</div>
+				</section>
+
+				<div class="validation-box" id="validation-box" role="alert" hidden>
+					<strong>Fix this table before exporting</strong>
+					<ul id="validation-list"></ul>
+				</div>
+
+				<section class="rows-section" aria-labelledby="editable-rows-title">
+					<div class="section-heading">
+						<div>
+							<h3 id="editable-rows-title">Editable drops</h3>
+							<p id="editable-rows-help">Change amounts, noted state, weight, or order.</p>
+						</div>
+						<button type="button" class="button gold" id="add-item-button">Add item</button>
+					</div>
+					<div class="rows-list" id="editable-rows"></div>
+					<div class="rows-empty" id="editable-empty" hidden>
+						<strong>No editable item rows</strong>
+						<p>This table is shown for reference only.</p>
+					</div>
+				</section>
+
+				<section class="rows-section locked-section" id="locked-section" aria-labelledby="locked-rows-title">
+					<div class="section-heading">
+						<div>
+							<h3 id="locked-rows-title">Locked rows</h3>
+							<p>These rows explain the complete table but cannot be changed here.</p>
+						</div>
+					</div>
+					<div class="locked-list" id="locked-rows"></div>
+				</section>
+			</section>
+		</main>
+
+		<aside class="export-panel" aria-labelledby="export-title">
+			<div class="export-panel-inner">
+				<div class="export-heading">
+					<h2 id="export-title">Finish your draft</h2>
+					<p>Your work stays in this browser until you export it.</p>
+				</div>
+
+				<div class="draft-overview" id="draft-overview">
+					<div><span>Changed tables</span><strong id="changed-groups">0</strong></div>
+					<div><span>Validation errors</span><strong id="error-count">0</strong></div>
+				</div>
+
+				<label class="note-field" for="change-note">
+					<span>Change note</span>
+					<textarea id="change-note" rows="4" maxlength="500" placeholder="Describe what you changed and why."></textarea>
+					<small id="note-help">Optional context for the reviewer. 500 characters maximum.</small>
+				</label>
+
+				<div class="export-actions">
+					<button type="button" class="button gold wide" id="export-button" disabled>Export changes</button>
+					<button type="button" class="button secondary wide" id="import-button">Import prior export</button>
+					<input id="import-file" type="file" accept="application/json,.json" hidden>
+					<button type="button" class="text-button" id="reset-all-button" disabled>Reset all browser changes</button>
+				</div>
+
+				<div class="handoff-instruction">
+					<strong>Next step</strong>
+					<p>Attach the exported JSON file in Codex and ask Codex to apply the loot changes.</p>
+				</div>
+
+				<details class="source-details">
+					<summary>Source data</summary>
+					<dl>
+						<div><dt>Fingerprint</dt><dd id="source-fingerprint">Loading</dd></div>
+						<div><dt>Generator</dt><dd id="source-generator">Loading</dd></div>
+					</dl>
+				</details>
+			</div>
+		</aside>
+	</div>
+
+	<dialog class="item-dialog" id="item-dialog" aria-labelledby="item-dialog-title">
+		<form class="dialog-shell" id="item-dialog-form">
+			<header>
+				<div>
+					<h2 id="item-dialog-title">Add an existing item</h2>
+					<p>Search by item name or ID.</p>
+				</div>
+				<button type="button" class="dialog-close" id="item-dialog-close" aria-label="Close item search">Close</button>
+			</header>
+			<label class="search-field dialog-search" for="item-search">
+				<span>Find an item</span>
+				<input id="item-search" type="search" autocomplete="off" placeholder="Coins, rune, or item ID">
+			</label>
+			<p class="catalog-summary" id="catalog-summary" aria-live="polite"></p>
+			<div class="item-results" id="item-results"></div>
+		</form>
+	</dialog>
+
+	<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+	<noscript>
+		<div class="noscript-message">This editor needs JavaScript to manage and export a local draft.</div>
+	</noscript>
+
+	<script src="loot-editor.js" defer></script>
+</body>
+</html>

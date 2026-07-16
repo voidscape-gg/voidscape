@@ -11,7 +11,7 @@ GAME_PORT="43596"
 PORTAL_URL="https://voidscape.gg/"
 WEB_URL="https://voidscape.gg/play/"
 WS_URL="wss://voidscape.gg/play/ws/"
-LAUNCH_AT="2026-07-11T18:00:00Z"
+LAUNCH_AT="2026-07-18T18:00:00Z"
 RUN_BUILD=1
 RUN_PORTAL_API=1
 RUN_PORTAL_SCHEMA=1
@@ -56,7 +56,7 @@ Options:
   --portal-url URL          Portal URL. Default: https://voidscape.gg/.
   --web-url URL             Web client URL. Default: https://voidscape.gg/play/.
   --ws-url URL              WebSocket URL. Default: wss://voidscape.gg/play/ws/.
-  --launch-at ISO           Expected launch timestamp. Default: 2026-07-11T18:00:00Z.
+  --launch-at ISO           Expected launch timestamp. Default: 2026-07-18T18:00:00Z.
   --skip-build              Do not run scripts/build.sh.
   --skip-portal-api         Do not run scripts/test-portal-api.sh.
   --skip-portal-schema      Do not run scripts/test-portal-schema.sh.
@@ -430,7 +430,7 @@ run_android_release_guard() {
 	local rc=$?
 	if [[ "$rc" -eq 0 ]]; then
 		record_check pass "$name" "release build succeeded; signing is configured or unsigned override is explicit" "$log"
-	elif grep -q "Voidscape release APK signing is not configured" "$log"; then
+	elif grep -q "Voidscape release artifact signing is not configured" "$log"; then
 		record_check pass "$name" "unsigned release is blocked until signing is configured" "$log"
 	elif grep -q "Android release inputs are dirty" "$log"; then
 		record_check pass "$name" "dirty Android inputs are blocked from release promotion" "$log"
@@ -441,6 +441,8 @@ run_android_release_guard() {
 }
 
 run_package_check() {
+	run_check "Launch config contract regression" \
+		python3 scripts/test-launch-staging-config.py
 	local args=(
 		scripts/package-launch-staging.sh
 		--host "$HOST"
@@ -466,6 +468,12 @@ run_package_check() {
 			;;
 	esac
 	run_check "Launch-staging package rehearsal" "${args[@]}"
+	run_check "Packaged launch config contract" \
+		node scripts/verify-launch-staging.mjs \
+		--server-config "$PACKAGE_DIR/server/local.launch-staging.conf" \
+		--connections-config server/connections.conf \
+		--server-config-only \
+		--out "$OUT_DIR/launch-config-verifier"
 	if [[ -f "$PACKAGE_DIR/MANIFEST.txt" ]]; then
 		record_check pass "Launch-staging manifest present" "bundle manifest written" "" "$PACKAGE_DIR/MANIFEST.txt"
 	else
@@ -475,6 +483,38 @@ run_package_check() {
 		record_check pass "Release handoff present" "rollback/source-disclosure template written" "" "$PACKAGE_DIR/RELEASE-HANDOFF.md"
 	else
 		record_check fail "Release handoff present" "RELEASE-HANDOFF.md missing" ""
+	fi
+	run_check "Packaged headless-player config" \
+		python3 scripts/headless-player-helper.py check-fleet-runtime-config \
+		--path "$PACKAGE_DIR/server/local.launch-staging.conf"
+	local required_fleet_files=(
+		server/launch-config-contract.json
+		server/conf/server/defs/ItemDefs.json
+		scripts/headless-player-helper.py
+		scripts/provision-headless-players.sh
+		scripts/run-headless-controller.sh
+		scripts/run-headless-player.sh
+		tools/voidbot/cli.py
+		tools/voidbot/protocol.py
+		tools/voidbot/voidbot
+		tools/voidbot/voidbotd.py
+		tools/headless_players/controller.py
+		tools/headless_players/roster.json
+		Deployment_Scripts/systemd/voidscape-headless.target
+		Deployment_Scripts/systemd/voidscape-headless@.service
+		Deployment_Scripts/systemd/voidscape-headless-controller.service
+	)
+	local missing_fleet_files=()
+	local fleet_file
+	for fleet_file in "${required_fleet_files[@]}"; do
+		[[ -f "$PACKAGE_DIR/$fleet_file" ]] || missing_fleet_files+=("$fleet_file")
+	done
+	if [[ "${#missing_fleet_files[@]}" -eq 0 ]]; then
+		record_check pass "Packaged headless-player runtime" \
+			"runtime, definitions, roster, and systemd units present" ""
+	else
+		record_check fail "Packaged headless-player runtime" \
+			"missing: ${missing_fleet_files[*]}" ""
 	fi
 }
 

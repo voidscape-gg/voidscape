@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import org.teavm.jso.JSBody;
+import org.teavm.jso.crypto.Crypto;
+import org.teavm.jso.typedarrays.Uint8Array;
 
 import com.openrsc.client.model.Sprite;
 
@@ -35,9 +37,38 @@ public class WebClientPort implements ClientPort {
 	private int worldMapTouchStartX;
 	private int worldMapTouchStartY;
 	private long worldMapTouchReleaseUntilMillis;
+	private boolean pkCatchingPointerActive;
 
 	public void setClient(mudclient client) {
 		this.client = client;
+	}
+
+	@Override
+	public boolean fillSecureRandom(byte[] destination) {
+		if (destination == null || destination.length != 32) {
+			wipe(destination);
+			return false;
+		}
+		try {
+			if (!Crypto.isSupported()) {
+				wipe(destination);
+				return false;
+			}
+			Uint8Array random = Uint8Array.create(destination.length);
+			Crypto.current().getRandomValues(random);
+			for (int i = 0; i < destination.length; i++) {
+				destination[i] = (byte) random.get(i);
+			}
+			return true;
+		} catch (RuntimeException ignored) {
+			wipe(destination);
+			return false;
+		}
+	}
+
+	private static void wipe(byte[] destination) {
+		if (destination == null) return;
+		for (int i = 0; i < destination.length; i++) destination[i] = 0;
 	}
 
 	@Override
@@ -267,7 +298,7 @@ public class WebClientPort implements ClientPort {
 
 	private void publishClientState() {
 		if (client == null || client.getLocalPlayer() == null) {
-			publishClientState(false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			publishClientState(false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 				0, "", 0, 0, 0, 0, 0, "", "");
 			return;
 		}
@@ -292,6 +323,7 @@ public class WebClientPort implements ClientPort {
 			client.getGameWidth(),
 			client.getGameHeight(),
 			client.cameraRotation,
+			client.getCameraAngle(),
 			client.cameraZoom,
 			osConfig.C_LAST_ZOOM,
 			client.getLoginScreenNumber(),
@@ -476,6 +508,14 @@ public class WebClientPort implements ClientPort {
 		client.mouseX = clamp(x, 0, getCanvasWidth() - 1);
 		client.mouseY = clamp(y, 0, getCanvasHeight() - 1);
 		client.lastMouseAction = 0;
+		if (pkCatchingPointerActive) {
+			if (action == 2 || action == 4) {
+				pkCatchingPointerActive = false;
+				client.currentMouseButtonDown = 0;
+				client.lastMouseButtonDown = 0;
+			}
+			return;
+		}
 
 		if (action == 0) {
 			client.currentMouseButtonDown = button;
@@ -483,11 +523,18 @@ public class WebClientPort implements ClientPort {
 		}
 
 		if (action == 1) {
+			if (client.consumeChristmasCrackerPointerAt(client.mouseX, client.mouseY, button != 2)) {
+				return;
+			}
 			if (button != 2
 				&& (client.closeWelcomeDialogAt(client.mouseX, client.mouseY)
-				|| client.closeServerMessageDialogAt(client.mouseX, client.mouseY)
-				|| client.closeFarmSimDialogAt(client.mouseX, client.mouseY)
+					|| client.closeServerMessageDialogAt(client.mouseX, client.mouseY)
+					|| client.closeFarmSimDialogAt(client.mouseX, client.mouseY)
 				|| client.closeWildWarningDialogAt(client.mouseX, client.mouseY))) {
+				return;
+			}
+			if (client.consumePkCatchingPointerAt(client.mouseX, client.mouseY, button != 2)) {
+				pkCatchingPointerActive = true;
 				return;
 			}
 			client.currentMouseButtonDown = button;
@@ -517,13 +564,23 @@ public class WebClientPort implements ClientPort {
 	}
 
 	private void handleWorldMapTouchEvent(int phase, int x, int y) {
-		if (client == null || client.worldMapPanel == null || !client.worldMapPanel.isVisible()) {
+		if (client == null) return;
+		client.mouseX = clamp(x, 0, getCanvasWidth() - 1);
+		client.mouseY = clamp(y, 0, getCanvasHeight() - 1);
+		if (pkCatchingPointerActive) {
+			if (phase == 2 || phase == 3) pkCatchingPointerActive = false;
+			return;
+		}
+		if (phase == 0 && client.consumePkCatchingPointerAt(client.mouseX, client.mouseY, true)) {
+			pkCatchingPointerActive = true;
+			clearWorldMapTouchState(true);
+			return;
+		}
+		if (client.worldMapPanel == null || !client.worldMapPanel.isVisible()) {
 			clearWorldMapTouchState(true);
 			return;
 		}
 
-		client.mouseX = clamp(x, 0, getCanvasWidth() - 1);
-		client.mouseY = clamp(y, 0, getCanvasHeight() - 1);
 		client.lastMouseAction = 0;
 		client.lastMouseButtonDown = 0;
 
@@ -716,6 +773,9 @@ public class WebClientPort implements ClientPort {
 			if (key == 33) client.pageUp = false;
 			return;
 		}
+		if (client.consumeDuelJournalKeyDown(key)) {
+			return;
+		}
 		if (handleNavigationKeyDown(key)) {
 			return;
 		}
@@ -749,6 +809,7 @@ public class WebClientPort implements ClientPort {
 		if (key == 0) {
 			return;
 		}
+		if (client.consumeDuelJournalKeyDown(key)) return;
 
 		if (isWorldMapSearchFocused()) {
 			client.worldMapPanel.handleSearchKey((char) key, key);
@@ -806,7 +867,8 @@ public class WebClientPort implements ClientPort {
 			return;
 		}
 		client.lastMouseAction = 0;
-		client.runScroll(clamp(amount, -8, 8));
+		int delta = clamp(amount, -8, 8);
+		if (!client.routeDuelJournalScroll(delta)) client.runScroll(delta);
 	}
 
 	private void syncMobileInputHints() {
@@ -830,7 +892,7 @@ public class WebClientPort implements ClientPort {
 	}
 
 	private boolean hasScrollableTouchUi() {
-		if (client.showUiTab != 0 || client.isShowDialogBank()) {
+		if (client.isDuelJournalVisible() || client.showUiTab != 0 || client.isShowDialogBank()) {
 			return true;
 		}
 		return (Config.S_SPAWN_AUCTION_NPCS && client.auctionHouse != null && client.auctionHouse.isVisible())
@@ -1322,7 +1384,7 @@ public class WebClientPort implements ClientPort {
 			"const startVirtualKey = function(control, key) {" +
 			"  key = key | 0;" +
 			"  if (!key || virtualKeys[key]) return;" +
-			"  const state = { startedAt: Date.now(), control: control, interval: 0 };" +
+			"  const state = { startedAt: Date.now(), control: control, interval: 0, stopping: false };" +
 			"  virtualKeys[key] = state;" +
 			"  if (control) control.classList.add('is-held');" +
 			"  queue('k,1,' + key);" +
@@ -1331,9 +1393,10 @@ public class WebClientPort implements ClientPort {
 			"const stopVirtualKey = function(key) {" +
 			"  key = key | 0;" +
 			"  const state = virtualKeys[key];" +
-			"  if (!state) return;" +
-			"  clearInterval(state.interval);" +
+			"  if (!state || state.stopping) return;" +
+			"  state.stopping = true;" +
 			"  const finish = function() {" +
+			"    clearInterval(state.interval);" +
 			"    queue('k,0,' + key);" +
 			"    if (state.control) state.control.classList.remove('is-held');" +
 			"    if (virtualKeys[key] === state) delete virtualKeys[key];" +
@@ -1927,6 +1990,16 @@ public class WebClientPort implements ClientPort {
 				"    if (window.__voidscapeKeyboardWanted) window.__voidscapeFocusKeyboard();" +
 				"  };" +
 				"  inputSurface.addEventListener('pointerdown', function(e) {" +
+				"    try {" +
+				"      const AudioContextClass = window.AudioContext || window.webkitAudioContext;" +
+				"      if (AudioContextClass) {" +
+				"        const audioContext = window.__voidscapeAudioContext || (window.__voidscapeAudioContext = new AudioContextClass());" +
+				"        if (audioContext.state === 'suspended') audioContext.resume().catch(function() {});" +
+				"        const source = audioContext.createBufferSource();" +
+				"        source.buffer = audioContext.createBuffer(1, 1, 22050);" +
+				"        source.connect(audioContext.destination); source.start(0);" +
+				"      }" +
+				"    } catch (ignored) {}" +
 				"    setPanelDrawerOpen(false);" +
 				"    setChatTrayOpen(false);" +
 			"    if (!window.__voidscapeKeyboardWanted) canvas.focus({ preventScroll: true });" +
@@ -2219,6 +2292,7 @@ public class WebClientPort implements ClientPort {
 		"gameWidth",
 		"gameHeight",
 		"cameraRotation",
+		"cameraAngle",
 		"cameraZoom",
 		"lastZoom",
 		"loginScreenNumber",
@@ -2246,6 +2320,7 @@ public class WebClientPort implements ClientPort {
 		"  gameWidth: gameWidth | 0," +
 		"  gameHeight: gameHeight | 0," +
 		"  cameraRotation: cameraRotation | 0," +
+		"  cameraAngle: cameraAngle | 0," +
 		"  cameraZoom: cameraZoom | 0," +
 		"  lastZoom: lastZoom | 0," +
 		"  loginScreenNumber: loginScreenNumber | 0," +
@@ -2278,6 +2353,7 @@ public class WebClientPort implements ClientPort {
 		int gameWidth,
 		int gameHeight,
 		int cameraRotation,
+		int cameraAngle,
 		int cameraZoom,
 		int lastZoom,
 		int loginScreenNumber,

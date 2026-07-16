@@ -6,14 +6,41 @@ cd "$(dirname "$0")/.."
 PORT="${PORT:-8799}"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/voidscape-portal-api.XXXXXX")"
 fixture_db="$tmp_dir/openrsc-fixture.db"
+base_fixture_db="$tmp_dir/openrsc-base-fixture.db"
+launch_fixture_db="$tmp_dir/openrsc-launch-fixture.db"
+default_android_apk="Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk"
+public_android_apk=""
+if [[ -f "$default_android_apk" ]]; then
+	public_android_apk="$default_android_apk"
+fi
 public_admin_token="portal-public-admin-token-fixture-1234567890"
 public_abuse_salt="portal-public-abuse-salt-fixture-1234567890"
 server_pid=""
+captcha_pid=""
+public_pid=""
+no_db_pid=""
+verify_pid=""
 
 cleanup() {
 	if [[ -n "$server_pid" ]]; then
 		kill "$server_pid" >/dev/null 2>&1 || true
 		wait "$server_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$captcha_pid" ]]; then
+		kill "$captcha_pid" >/dev/null 2>&1 || true
+		wait "$captcha_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$public_pid" ]]; then
+		kill "$public_pid" >/dev/null 2>&1 || true
+		wait "$public_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$no_db_pid" ]]; then
+		kill "$no_db_pid" >/dev/null 2>&1 || true
+		wait "$no_db_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$verify_pid" ]]; then
+		kill "$verify_pid" >/dev/null 2>&1 || true
+		wait "$verify_pid" >/dev/null 2>&1 || true
 	fi
 	rm -rf "$tmp_dir"
 }
@@ -44,6 +71,7 @@ CREATE TABLE players (
 	skincolour int(5) DEFAULT 0,
 	headsprite int(5) DEFAULT 1,
 	bodysprite int(5) DEFAULT 2,
+	cameraauto tinyint(1) DEFAULT 0,
 	creation_date int(10) NOT NULL DEFAULT 0,
 	creation_ip varchar(255) NOT NULL DEFAULT '0.0.0.0'
 );
@@ -146,6 +174,14 @@ CREATE TABLE player_cache (
 	value varchar(150) NOT NULL,
 	dbid INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL
 );
+CREATE TABLE player_security_changes (
+	id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+	playerID int(10) NOT NULL,
+	eventAlias varchar(20) NOT NULL,
+	date int(10) NOT NULL DEFAULT 0,
+	ip varchar(255) DEFAULT '0.0.0.0',
+	message text DEFAULT NULL
+);
 CREATE TABLE invitems (
 	playerID int(10) NOT NULL,
 	itemID int(10) NOT NULL,
@@ -210,8 +246,9 @@ INSERT INTO players (
 INSERT INTO players (id, username, group_id, email, pass, salt)
 VALUES (78, 'TakenHero', 10, 'taken@example.com', 'fixture-pass', '');
 INSERT INTO player_cache (playerID, type, key, value) VALUES
-	(77, 1, 'player_title_active', 'conqueror'),
-	(77, 0, 'void_path', '1');
+	(77, 1, 'player_title_active', 'founder'),
+	(77, 0, 'void_path', '1'),
+	(0, 3, 'char_sub:77', '4102444800000');
 INSERT INTO itemstatuses (itemID, catalogID, amount, noted, wielded, durability, kill_log) VALUES
 	(9001, 77, 1, 0, 1, 100, NULL),
 	(9002, 117, 1, 0, 1, 100, NULL),
@@ -232,8 +269,9 @@ INSERT INTO staff_logs (
 			(0, 77, 1, 0, 1, 'Owner', 77, 'SmokeHero', 'staff_mint', 'staff_command', 'inventory', 'item', 122, 509, strftime('%s', 'now'), ''),
 			(0, 117, 5, 0, 1, 'Owner', 77, 'SmokeHero', 'staff_mint', 'staff_command', 'bank', 'bankitem', 122, 509, strftime('%s', 'now', '-10 minutes'), ''),
 			(0, 10, 3, 0, 0, '', 77, 'SmokeHero', 'item_origin', 'npc_drop', 'ground', 'npc_drop', 123, 510, strftime('%s', 'now', '-2 minutes'), 'npc_id=1 npc=rat rare=false'),
-			(9001, 77, 1, 0, 77, 'SmokeHero', 77, 'SmokeHero', 'item_transfer', 'player_inventory', 'ground_player_drop', 'drop', 123, 510, strftime('%s', 'now', '-1 minutes'), 'manual_drop=true');
+	(9001, 77, 1, 0, 77, 'SmokeHero', 77, 'SmokeHero', 'item_transfer', 'player_inventory', 'ground_player_drop', 'drop', 123, 510, strftime('%s', 'now', '-1 minutes'), 'manual_drop=true');
 SQL
+cp "$fixture_db" "$base_fixture_db"
 
 PORTAL_OPENRSC_DB="$fixture_db" \
 	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
@@ -261,8 +299,8 @@ PORT="$PORT" \
 	PORTAL_DATA_DIR="$tmp_dir" \
 	PORTAL_OPENRSC_DB="$fixture_db" \
 	PORTAL_ADMIN_TOKEN="dev-admin" \
-	PORTAL_STARTER_IP_DAILY_LIMIT=2 \
 	PORTAL_SIGNUP_IP_DAILY_LIMIT=3 \
+	PORTAL_CHARACTER_IP_DAILY_LIMIT=2 \
 	node web/portal/dev-server.mjs >/tmp/voidscape-portal-api-smoke.log 2>&1 &
 server_pid="$!"
 
@@ -280,7 +318,7 @@ if (!payload.ok) throw new Error('health endpoint should report ok');
 if (!payload.storage || payload.storage.durable !== true) throw new Error('health endpoint should report durable portal storage when PORTAL_DATA_DIR is set');
 if (!payload.openRscDb || payload.openRscDb.configured !== true) throw new Error('health endpoint should report the OpenRSC DB bridge');
 " "$health_payload"
-PORT="$PORT" PORTAL_ADMIN_TOKEN="dev-admin" PORTAL_SIGNUP_IP_DAILY_LIMIT=3 node web/portal/api-smoke.mjs
+PORT="$PORT" PORTAL_ADMIN_TOKEN="dev-admin" PORTAL_SIGNUP_IP_DAILY_LIMIT=3 PORTAL_CHARACTER_IP_DAILY_LIMIT=2 node web/portal/api-smoke.mjs
 
 signup_code_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'signup_code:VOID%' AND value='1';")"
 if [[ "$signup_code_count" -lt 1 ]]; then
@@ -357,6 +395,66 @@ if [[ "$elevated_players" != "0" ]]; then
 	exit 1
 fi
 
+# ---- CAPTCHA-gated public signup ----
+captcha_port=$((PORT + 4))
+PORT="$captcha_port" \
+	PORTAL_DATA_DIR="$tmp_dir/captcha-store" \
+	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_CAPTCHA_REQUIRED=1 \
+	PORTAL_CAPTCHA_BYPASS_TOKEN="captcha-smoke-token" \
+	PORTAL_CAPTCHA_SITE_KEY="captcha-smoke-site-key" \
+	node web/portal/dev-server.mjs >/tmp/voidscape-portal-captcha-smoke.log 2>&1 &
+captcha_pid="$!"
+
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${captcha_port}/api/health" >/dev/null 2>&1; then
+		break
+	fi
+	sleep 0.1
+done
+
+captcha_health_payload="$(curl -fsS "http://127.0.0.1:${captcha_port}/api/health")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!payload.config || payload.config.publicReady !== true) throw new Error('captcha health should report public config ready');
+if (!payload.config.captcha || payload.config.captcha.configured !== true) throw new Error('captcha health should report configured captcha');
+if (payload.config.captcha.signupRequired !== true) throw new Error('captcha health should report signup captcha required');
+if (payload.config.captcha.bypassConfigured !== true) throw new Error('captcha health should report configured bypass for smoke tests');
+if ((payload.config.issues || []).length) throw new Error('captcha health should not report config issues: ' + JSON.stringify(payload.config.issues));
+" "$captcha_health_payload"
+
+captcha_public_payload="$(curl -fsS "http://127.0.0.1:${captcha_port}/api/public")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!payload.captcha || payload.captcha.signupRequired !== true) throw new Error('/api/public should expose signup captcha requirement');
+if (payload.captcha.configured !== true) throw new Error('/api/public should expose configured captcha state');
+if (payload.captcha.siteKey !== 'captcha-smoke-site-key') throw new Error('/api/public should expose the public captcha site key');
+" "$captcha_public_payload"
+
+captcha_missing="$(curl -s -w '\n%{http_code}' -X POST "http://127.0.0.1:${captcha_port}/api/founder/reservations" -H 'content-type: application/json' -d '{"username":"CaptchaNo","email":"captcha-no@example.com"}')"
+captcha_missing_status="$(tail -n1 <<<"$captcha_missing")"
+if [[ "$captcha_missing_status" != "403" ]] || ! grep -q '"error": "captcha_required"' <<<"$captcha_missing"; then
+	echo "captcha-gated signup should reject missing captcha tokens"
+	exit 1
+fi
+
+captcha_bad="$(curl -s -w '\n%{http_code}' -X POST "http://127.0.0.1:${captcha_port}/api/founder/reservations" -H 'content-type: application/json' -d '{"username":"CaptchaBad","email":"captcha-bad@example.com","captchaToken":"bad-token"}')"
+captcha_bad_status="$(tail -n1 <<<"$captcha_bad")"
+if [[ "$captcha_bad_status" != "403" ]] || ! grep -q '"error": "captcha_failed"' <<<"$captcha_bad"; then
+	echo "captcha-gated signup should reject bad captcha tokens"
+	exit 1
+fi
+
+captcha_ok="$(curl -fsS -X POST "http://127.0.0.1:${captcha_port}/api/founder/reservations" -H 'content-type: application/json' -d '{"username":"CaptchaOk","email":"captcha-ok@example.com","captchaToken":"captcha-smoke-token"}')"
+grep -q '"CaptchaOk"' <<<"$captcha_ok" || { echo "captcha-gated signup should accept the bypass token in smoke tests"; exit 1; }
+
+kill "$captcha_pid" >/dev/null 2>&1 || true
+wait "$captcha_pid" >/dev/null 2>&1 || true
+captcha_pid=""
+
 # ---- PORTAL_PUBLIC_MODE lockdown ----
 public_port=$((PORT + 1))
 	PORT="$public_port" \
@@ -365,7 +463,8 @@ public_port=$((PORT + 1))
 	PORTAL_ADMIN_TOKEN="$public_admin_token" \
 	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
 	PORTAL_PUBLIC_MODE=1 \
-	PORTAL_LAUNCH_AT="2026-07-11T18:00:00Z" \
+	PORTAL_LAUNCH_AT="2026-07-18T18:00:00Z" \
+	PORTAL_ANDROID_APK="$public_android_apk" \
 	node web/portal/dev-server.mjs >/tmp/voidscape-portal-public-smoke.log 2>&1 &
 public_pid="$!"
 trap 'kill "$public_pid" >/dev/null 2>&1 || true; cleanup' EXIT
@@ -396,6 +495,22 @@ expect_status() {
 	fi
 }
 
+expect_invalid_game_password() {
+	local response_file="$tmp_dir/invalid-game-password.json"
+	local actual
+	actual="$(curl -sS -o "$response_file" -w '%{http_code}' "$@")"
+	if [[ "$actual" != "400" ]]; then
+		echo "password contract: expected HTTP 400 from $*, got $actual"
+		exit 1
+	fi
+	node -e '
+const payload = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+if (payload.error !== "invalid_game_password") {
+	throw new Error("expected invalid_game_password, got " + JSON.stringify(payload));
+}
+' "$response_file"
+}
+
 # the one public write path still works and mints a code
 public_signup="$(curl -fsS -X POST "http://127.0.0.1:${public_port}/api/founder/reservations" -H 'content-type: application/json' -d '{"username":"PublicGuy","email":"public-guy@example.com"}')"
 grep -q '"code": "VOID-' <<<"$public_signup" || { echo "public-mode signup should mint a code"; exit 1; }
@@ -420,7 +535,6 @@ fi
 if [[ -f "PC_Launcher/OpenRSC.jar" ]]; then
 	expect_status 200 "http://127.0.0.1:${public_port}/downloads/launcher"
 fi
-default_android_apk="Android_Client/Open RSC Android Client/build/outputs/apk/debug/voidscape.apk"
 if [[ -f "$default_android_apk" ]]; then
 	expect_status 200 "http://127.0.0.1:${public_port}/downloads/android-apk"
 else
@@ -434,7 +548,7 @@ grep -q '"playersOnline": 0' <<<"$public_payload" || { echo "public-mode /api/pu
 grep -q '"mode": "hybrid-p2p-enabled"' <<<"$public_payload" || { echo "public-mode /api/public should expose the global launch world mode"; exit 1; }
 grep -q '"subscriptionGrantsMembers": false' <<<"$public_payload" || { echo "public-mode /api/public should expose subscription as non-membership-gating"; exit 1; }
 grep -q '"launch": {' <<<"$public_payload" || { echo "public-mode /api/public should expose launch countdown metadata"; exit 1; }
-grep -q '"openAt": "2026-07-11T18:00:00.000Z"' <<<"$public_payload" || { echo "public-mode /api/public should expose the configured launch timestamp"; exit 1; }
+grep -q '"openAt": "2026-07-18T18:00:00.000Z"' <<<"$public_payload" || { echo "public-mode /api/public should expose the configured launch timestamp"; exit 1; }
 grep -q '"Mobile web client"' <<<"$public_payload" || { echo "public-mode /api/public should expose the mobile web client action"; exit 1; }
 grep -q '"iOS and Android browsers"' <<<"$public_payload" || { echo "public-mode /api/public should label the web client as mobile-only"; exit 1; }
 grep -q '"Voidscape launcher"' <<<"$public_payload" || { echo "public-mode /api/public should expose the launcher download"; exit 1; }
@@ -469,19 +583,15 @@ if (apkBuilt) {
 	fi
 
 	landing_html="$(curl -fsS "http://127.0.0.1:${public_port}/")"
-	grep -q '<title>Voidscape Prelaunch</title>' <<<"$landing_html" || { echo "landing page should be prelaunch-branded"; exit 1; }
+	grep -q '<title>Voidscape - Reserve your name</title>' <<<"$landing_html" || { echo "landing page should be launch-branded"; exit 1; }
 	grep -q 'Launch opens in' <<<"$landing_html" || { echo "landing page should include the launch countdown"; exit 1; }
 	if grep -q 'href="https://voidscape.gg/play/"' <<<"$landing_html"; then
 		echo "prelaunch landing should not send visitors to the web client before launch"
 		exit 1
 	fi
-	if grep -q 'data-funnel-event="play_web"' <<<"$landing_html"; then
-		echo "prelaunch landing should not tag play-web clicks before launch"
-		exit 1
-	fi
-	grep -q 'Reserve Name + Free Card' <<<"$landing_html" || { echo "landing page should prioritize the reserve/free-card CTA"; exit 1; }
-	grep -q 'data-prelaunch-auth-cta' <<<"$landing_html" || { echo "landing page should include a visible account sign-in CTA"; exit 1; }
-	grep -q 'One account. Every platform.' <<<"$landing_html" || { echo "landing page should explain platform support without play buttons"; exit 1; }
+	grep -q 'Reserve + claim free week' <<<"$landing_html" || { echo "landing page should prioritize the reserve/free-card CTA"; exit 1; }
+	grep -q 'data-signin' <<<"$landing_html" || { echo "landing page should include a visible account sign-in CTA"; exit 1; }
+	grep -q 'web, desktop &amp; mobile' <<<"$landing_html" || { echo "landing page should explain platform support without play buttons"; exit 1; }
 	grep -q 'href="/features"' <<<"$landing_html" || { echo "landing page should link to the full feature guide"; exit 1; }
 	grep -q 'href="/transparency"' <<<"$landing_html" || { echo "landing page should link to the transparency page"; exit 1; }
 	grep -q 'href="/privacy"' <<<"$landing_html" || { echo "landing page should link to the privacy policy"; exit 1; }
@@ -491,9 +601,8 @@ if (apkBuilt) {
 		echo "landing page should not use upstream-only source disclosure"
 		exit 1
 	fi
-	grep -q 'landing-install-help' <<<"$landing_html" || { echo "landing page should include install help"; exit 1; }
-	grep -q 'id="download-actions" hidden' <<<"$landing_html" || { echo "landing page should keep post-launch download actions hidden before launch"; exit 1; }
-	grep -q 'id="landing-launch-proof" hidden' <<<"$landing_html" || { echo "landing page should keep launch proof hidden before launch"; exit 1; }
+	grep -q 'Desktop launcher' <<<"$landing_html" || { echo "landing page should include install help"; exit 1; }
+	grep -q 'id="play-block" hidden' <<<"$landing_html" || { echo "landing page should keep post-launch play actions hidden before launch"; exit 1; }
 	features_html="$(curl -fsS "http://127.0.0.1:${public_port}/features")"
 	grep -q '<title>Voidscape Features</title>' <<<"$features_html" || { echo "/features should serve the feature guide"; exit 1; }
 	grep -q 'Prelaunch feature guide' <<<"$features_html" || { echo "/features should use prelaunch wording"; exit 1; }
@@ -503,10 +612,6 @@ if (apkBuilt) {
 	fi
 	if grep -q 'Why reserve early' <<<"$landing_html"; then
 		echo "prelaunch landing should not include the redundant why-reserve strip"
-		exit 1
-	fi
-	if grep -q 'data-funnel-event="download_launcher"' <<<"$landing_html"; then
-		echo "prelaunch landing should not promote launcher downloads before launch"
 		exit 1
 	fi
 	if grep -q 'class="landing-integrity' <<<"$landing_html"; then
@@ -599,16 +704,18 @@ wait "$android_public_pid" >/dev/null 2>&1 || true
 trap cleanup EXIT
 
 # ---- PORTAL_LAUNCH_SIGNUP_MODE public account flow ----
+cp "$base_fixture_db" "$launch_fixture_db"
 launch_port=$((PORT + 2))
 PORT="$launch_port" \
 	PORTAL_DATA_DIR="$tmp_dir/launch-store" \
-	PORTAL_OPENRSC_DB="$fixture_db" \
+	PORTAL_OPENRSC_DB="$launch_fixture_db" \
 	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
 	PORTAL_ADMIN_TOKEN="$public_admin_token" \
 	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
 	PORTAL_PUBLIC_MODE=1 \
 	PORTAL_LAUNCH_SIGNUP_MODE=1 \
-	PORTAL_LAUNCH_AT="2026-07-11T18:00:00Z" \
+	PORTAL_CHARACTER_ACCOUNT_HOURLY_LIMIT=2 \
+	PORTAL_LAUNCH_AT="2026-07-18T18:00:00Z" \
 	PORTAL_GOOGLE_CLIENT_ID="test-google-client" \
 	PORTAL_EMAIL_PROVIDER=resend \
 	PORTAL_EMAIL_DRY_RUN=1 \
@@ -627,6 +734,13 @@ done
 
 launch_public_payload="$(curl -fsS "http://127.0.0.1:${launch_port}/api/public")"
 launch_health_payload="$(curl -fsS "http://127.0.0.1:${launch_port}/api/health")"
+launch_portal_headers="$(curl -fsSI "http://127.0.0.1:${launch_port}/portal")"
+grep -qi '^content-security-policy:' <<<"$launch_portal_headers" || { echo "portal HTML should send a Content-Security-Policy header"; exit 1; }
+grep -qi '^x-frame-options: DENY' <<<"$launch_portal_headers" || { echo "portal HTML should deny framing"; exit 1; }
+grep -qi '^x-content-type-options: nosniff' <<<"$launch_portal_headers" || { echo "portal HTML should send nosniff"; exit 1; }
+launch_api_headers="$(curl -fsS -D - -o /dev/null "http://127.0.0.1:${launch_port}/api/health")"
+grep -qi '^content-security-policy:' <<<"$launch_api_headers" || { echo "portal JSON should send a Content-Security-Policy header"; exit 1; }
+grep -qi '^referrer-policy:' <<<"$launch_api_headers" || { echo "portal JSON should send a Referrer-Policy header"; exit 1; }
 node -e "
 const payload = JSON.parse(process.argv[1]);
 if (!payload.publicMode) throw new Error('launch health should report public mode');
@@ -671,6 +785,24 @@ if [[ -f "Client_Base/Open_RSC_Client.jar" ]]; then
 	fi
 fi
 
+# Launch signup shares one password with the first game character. It accepts
+# only letters and numbers and keeps the launch-specific 8-20 limit.
+expect_status 400 -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-d '{"username":"BadLaunch","email":"bad-launch@example.com","password":"Ab12345"}'
+for invalid_launch_password in \
+	'A12345678901234567890' \
+	'Bad!Pass1' \
+	'Bad Pass1' \
+	'Bad`Pass1' \
+	'Bad£Pass1' \
+	'Bad💥Pass1' \
+	$'Bad\nPass1'; do
+	expect_invalid_game_password -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
+		-H 'content-type: application/json' \
+		-d "$(node -e 'process.stdout.write(JSON.stringify({username:"BadLaunch",email:"bad-launch@example.com",password:process.argv[1]}))' "$invalid_launch_password")"
+done
+
 launch_signup="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
 	-H 'content-type: application/json' \
 	-d '{"username":"LaunchGuy","email":"launch-guy@example.com","password":"Launchpass1"}')"
@@ -690,6 +822,18 @@ if [[ -z "$launch_token" ]]; then
 	echo "launch-signup registration returned an empty token"
 	exit 1
 fi
+synthetic_signup="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-d '{"username":"NativeTest","email":"native-player-test@native.voidscape.invalid","password":"Nativepass1"}')"
+grep -q '"NativeTest"' <<<"$synthetic_signup" || { echo "synthetic-email fixture account should still register"; exit 1; }
+synthetic_reset_request="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/password-reset/request" \
+	-H 'content-type: application/json' \
+	-d '{"identifier":"NativeTest"}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.accepted !== true) throw new Error('synthetic-email recovery should keep the generic accepted response');
+if (payload.maskedEmail) throw new Error('synthetic-email recovery must not claim that a reset email was sent');
+" "$synthetic_reset_request"
 for _ in {1..30}; do
 	launch_emails="$(curl -fsS -H "x-portal-admin-token: ${public_admin_token}" "http://127.0.0.1:${launch_port}/api/admin/emails")"
 	if node -e "
@@ -708,6 +852,7 @@ const event = (payload.events || []).find((row) => row.type === 'signup_confirma
 if (!event) throw new Error('launch signup should queue a confirmation email event');
 if (event.status !== 'sent') throw new Error('dry-run confirmation email should be marked sent, got ' + event.status);
 if (event.username !== 'LaunchGuy') throw new Error('confirmation email event should include the reserved username');
+if ((payload.events || []).some((row) => String(row.email || '').endsWith('.invalid'))) throw new Error('synthetic .invalid accounts must not queue email');
 " "$launch_emails"
 launch_email_backfill="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/emails/signup-confirmations" \
 	-H "x-portal-admin-token: ${public_admin_token}" \
@@ -716,7 +861,7 @@ launch_email_backfill="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/
 node -e "
 const payload = JSON.parse(process.argv[1]);
 if (payload.dryRun !== true) throw new Error('confirmation backfill dry run should not send');
-if (payload.eligible < 1) throw new Error('confirmation backfill should see the launch account as eligible');
+if (payload.eligible !== 1) throw new Error('confirmation backfill should exclude synthetic .invalid accounts');
 if (payload.queued !== 0 || payload.sent !== 0) throw new Error('confirmation backfill dry run should queue/send nothing');
 " "$launch_email_backfill"
 launch_live_email_dry="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/emails/launch-live" \
@@ -726,9 +871,20 @@ launch_live_email_dry="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/
 node -e "
 const payload = JSON.parse(process.argv[1]);
 if (payload.dryRun !== true) throw new Error('launch-live dry run should not send');
-if (payload.eligible < 1) throw new Error('launch-live dry run should see the launch account as eligible');
+if (payload.eligible !== 1) throw new Error('launch-live dry run should exclude synthetic .invalid accounts');
 if (payload.queued !== 0 || payload.sent !== 0) throw new Error('launch-live dry run should queue/send nothing');
 " "$launch_live_email_dry"
+launch_48h_email_dry="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/emails/launch-48h" \
+	-H "x-portal-admin-token: ${public_admin_token}" \
+	-H 'content-type: application/json' \
+	-d '{"dryRun":true}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.dryRun !== true) throw new Error('launch-48h dry run should not send');
+if (payload.type !== 'launch_48h') throw new Error('launch-48h dry run should report the launch_48h type');
+if (payload.eligible !== 1) throw new Error('launch-48h dry run should exclude synthetic .invalid accounts');
+if (payload.queued !== 0 || payload.sent !== 0) throw new Error('launch-48h dry run should queue/send nothing');
+" "$launch_48h_email_dry"
 
 launch_account="$(curl -fsS -H "authorization: Bearer ${launch_token}" "http://127.0.0.1:${launch_port}/api/account")"
 grep -q '"email": "launch-guy@example.com"' <<<"$launch_account" || { echo "launch-signup session should read the created account"; exit 1; }
@@ -754,7 +910,7 @@ fi
 launch_recovery_codes="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/security/recovery-codes" \
 	-H "authorization: Bearer ${launch_token}" \
 	-H 'content-type: application/json' \
-	-d '{}')"
+	-d '{"currentPassword":"Launchpass1"}')"
 node -e "
 const payload = JSON.parse(process.argv[1]);
 if (!Array.isArray(payload.codes) || payload.codes.length !== 8) throw new Error('launch-signup recovery endpoint should generate eight one-time codes');
@@ -774,15 +930,19 @@ launch_recovered="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accou
 	-d "{\"email\":\"launch-guy@example.com\",\"code\":\"${launch_recovery_code}\",\"newPassword\":\"Launchpass2\"}")"
 node -e "
 const payload = JSON.parse(process.argv[1]);
-if (!payload.token) throw new Error('launch-signup password recovery should issue a new session');
-if (!payload.security || !payload.security.recoveryCodes || payload.security.recoveryCodes.activeCount !== 7) throw new Error('launch-signup password recovery should consume exactly one recovery code');
-if (!Array.isArray(payload.characters) || payload.characters.length !== 1) throw new Error('launch-signup password recovery should preserve the character roster');
+if (payload.ok !== true) throw new Error('launch-signup password recovery should complete successfully');
+if (payload.token) throw new Error('launch-signup password recovery should return to sign-in instead of issuing a session');
 " "$launch_recovered"
-launch_recovered_token="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.token || '');" "$launch_recovered")"
-if [[ -z "$launch_recovered_token" || "$launch_recovered_token" == "$launch_token" || "$launch_recovered_token" == "$launch_login_token" ]]; then
-	echo "launch-signup password recovery should create a fresh session token"
-	exit 1
-fi
+for _ in {1..10}; do
+	expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/recover-password" \
+		-H 'content-type: application/json' \
+		-H 'x-forwarded-for: 203.0.113.88' \
+		-d '{"email":"recovery-spray@example.com","code":"VOID-BAD-BAD","newPassword":"Recoverpass1"}'
+done
+expect_status 429 -X POST "http://127.0.0.1:${launch_port}/api/accounts/recover-password" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 203.0.113.88' \
+	-d '{"email":"recovery-spray@example.com","code":"VOID-BAD-BAD","newPassword":"Recoverpass1"}'
 expect_status 401 -H "authorization: Bearer ${launch_token}" "http://127.0.0.1:${launch_port}/api/account"
 expect_status 401 -H "authorization: Bearer ${launch_login_token}" "http://127.0.0.1:${launch_port}/api/account"
 expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
@@ -791,8 +951,14 @@ expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
 launch_login_after_recovery="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
 	-H 'content-type: application/json' \
 	-d '{"email":"launch-guy@example.com","password":"Launchpass2"}')"
-grep -q '"token":' <<<"$launch_login_after_recovery" || { echo "launch-signup recovered password should support returning login"; exit 1; }
-launch_token="$launch_recovered_token"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!payload.token) throw new Error('launch-signup recovered password should support returning login');
+if (!payload.security || !payload.security.recoveryCodes || payload.security.recoveryCodes.activeCount !== 0) {
+  throw new Error('password recovery should revoke every remaining recovery code');
+}
+" "$launch_login_after_recovery"
+launch_token="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.token || '');" "$launch_login_after_recovery")"
 
 # VS-049: per-IP login throttle. X-Forwarded-For from a loopback peer is trusted by
 # clientIp(), so a synthetic remote IP can accrue failures while the battery's own
@@ -816,6 +982,25 @@ launch_local_login="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/acc
 	-H 'content-type: application/json' \
 	-d '{"email":"launch-guy@example.com","password":"Launchpass2"}')"
 grep -q '"token":' <<<"$launch_local_login" || { echo "loopback without x-forwarded-for should stay exempt from the login throttle"; exit 1; }
+launch_local_token="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.token || '');" "$launch_local_login")"
+if [[ -z "$launch_local_token" ]]; then
+	echo "loopback login returned an empty token"
+	exit 1
+fi
+launch_logout="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/logout" \
+	-H "authorization: Bearer ${launch_local_token}")"
+grep -q '"ok": true' <<<"$launch_logout" || { echo "logout endpoint should return ok"; exit 1; }
+expect_status 401 -H "authorization: Bearer ${launch_local_token}" "http://127.0.0.1:${launch_port}/api/account"
+for i in {1..9}; do
+	expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+		-H 'content-type: application/json' \
+		-H "x-forwarded-for: 198.51.100.${i}" \
+		-d '{"email":"launch-guy@example.com","password":"WrongPass2"}'
+done
+expect_status 429 -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.250' \
+	-d '{"email":"launch-guy@example.com","password":"Launchpass2"}'
 
 # VS-051: a garbage Google credential must fail on the credential (401
 # invalid_google_token), not trip the username check first (the old ordering
@@ -824,18 +1009,18 @@ expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/google" 
 	-H 'content-type: application/json' \
 	-d '{"credential":"garbage"}'
 
-launch_player_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchGuy' AND group_id=10;")"
+launch_player_count="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchGuy' AND group_id=10;")"
 if [[ "$launch_player_count" != "1" ]]; then
 	echo "launch-signup registration should create one normal User-ranked OpenRSC player"
 	exit 1
 fi
-launch_link_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players p JOIN player_cache pc ON pc.playerID=p.id AND pc.key='web_account_id' AND pc.value='1' WHERE p.username='LaunchGuy';")"
+launch_link_count="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM players p JOIN player_cache pc ON pc.playerID=p.id AND pc.key='web_account_id' AND pc.value='1' WHERE p.username='LaunchGuy';")"
 if [[ "$launch_link_count" != "1" ]]; then
 	echo "launch-signup OpenRSC player should be linked to the web account"
 	exit 1
 fi
 
-launch_starter_card_state="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
+launch_starter_card_state="$(sqlite3 "$launch_fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
 if [[ "$launch_starter_card_state" != "1" ]]; then
 	echo "launch-signup registration should sync one waiting starter card marker"
 	exit 1
@@ -847,12 +1032,19 @@ const payload = JSON.parse(process.argv[1]);
 if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('admin account state should show starter card waiting');
 if (payload.rewards.starterSubscriptionCards !== 1) throw new Error('admin account state should expose one waiting starter card');
 " "$launch_admin_waiting"
-launch_starter_marker_total_before_extra="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter_card:%';")"
+launch_starter_marker_total_before_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter_card:%';")"
 
+# Game-only creation keeps its 4-20 limit and accepts letters and numbers only.
+for invalid_game_password in 'A12' 'A12345678901234567890' 'Bad!' 'Bad Pass1' 'Bad`Pass1' 'Bad£Pass1' 'Bad💥Pass1' $'Bad\nPass1'; do
+	expect_invalid_game_password -X POST "http://127.0.0.1:${launch_port}/api/characters" \
+		-H "authorization: Bearer ${launch_token}" \
+		-H 'content-type: application/json' \
+		-d "$(node -e 'process.stdout.write(JSON.stringify({name:"BadAlt",gamePassword:process.argv[1]}))' "$invalid_game_password")"
+done
 launch_extra_character="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/characters" \
 	-H "authorization: Bearer ${launch_token}" \
 	-H 'content-type: application/json' \
-	-d '{"name":"LaunchAlt","gamePassword":"Launchalt1"}')"
+	-d '{"name":"LaunchAlt","gamePassword":"A1b2"}')"
 node -e "
 const payload = JSON.parse(process.argv[1]);
 if (!Array.isArray(payload.characters) || payload.characters.length !== 2) throw new Error('creating a second launch character should use a second character slot');
@@ -864,22 +1056,22 @@ if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('second cha
 if (payload.rewards.starterSubscriptionCards !== 1) throw new Error('second character creation should not grant another starter card');
 if (!Array.isArray(payload.rewards.cards) || payload.rewards.cards.length !== 1) throw new Error('second character creation should leave exactly one visible starter-card entitlement');
 " "$launch_extra_character"
-launch_player_count_after_extra="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username IN ('LaunchGuy', 'LaunchAlt') AND group_id=10;")"
+launch_player_count_after_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM players WHERE username IN ('LaunchGuy', 'LaunchAlt') AND group_id=10;")"
 if [[ "$launch_player_count_after_extra" != "2" ]]; then
 	echo "second launch character creation should create exactly two normal User-ranked OpenRSC players"
 	exit 1
 fi
-launch_extra_link_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players p JOIN player_cache pc ON pc.playerID=p.id AND pc.key='web_account_id' AND pc.value='1' WHERE p.username='LaunchAlt';")"
+launch_extra_link_count="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM players p JOIN player_cache pc ON pc.playerID=p.id AND pc.key='web_account_id' AND pc.value='1' WHERE p.username='LaunchAlt';")"
 if [[ "$launch_extra_link_count" != "1" ]]; then
 	echo "second launch OpenRSC player should be linked to the same web account"
 	exit 1
 fi
-launch_starter_marker_count_after_extra="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter_card:1' AND value='1';")"
+launch_starter_marker_count_after_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter_card:1' AND value='1';")"
 if [[ "$launch_starter_marker_count_after_extra" != "1" ]]; then
 	echo "second launch character creation should preserve exactly one waiting starter card marker"
 	exit 1
 fi
-launch_starter_marker_total_after_extra="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter_card:%';")"
+launch_starter_marker_total_after_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter_card:%';")"
 if [[ "$launch_starter_marker_total_after_extra" != "$launch_starter_marker_total_before_extra" ]]; then
 	echo "second launch character creation should not mint additional starter-card markers"
 	exit 1
@@ -890,6 +1082,164 @@ const extra = payload.characters.find((character) => character.name === 'LaunchA
 if (!extra || !extra.id) throw new Error('second launch character should expose a portal id');
 process.stdout.write(String(extra.id));
 " "$launch_extra_character")"
+launch_extra_password_before="$(sqlite3 -separator '|' "$launch_fixture_db" "SELECT pass, salt FROM players WHERE username='LaunchAlt' LIMIT 1;")"
+node - "$launch_extra_password_before" <<'NODE'
+const { spawnSync } = require("child_process");
+const [stored, salt] = process.argv[2].split("|");
+const encode = (value) => Buffer.from(value, "utf8").toString("base64url");
+const result = spawnSync("java", [
+	"-cp",
+	"server/core.jar",
+	"com.openrsc.server.util.rsc.PortalPasswordHasher"
+], {
+	input: `check\n${encode("A1b2")}\n${encode(salt)}\n${encode(stored)}\n`,
+	encoding: "utf8"
+});
+if (result.status !== 0 || result.stdout.trim() !== "true") {
+	throw new Error("additional-character password should survive into the canonical game hash: " + result.stderr);
+}
+NODE
+for invalid_game_password in 'N!2w' 'N 2w'; do
+	expect_invalid_game_password -X POST "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}/game-password" \
+		-H "authorization: Bearer ${launch_token}" \
+		-H 'content-type: application/json' \
+		-d "$(node -e 'process.stdout.write(JSON.stringify({currentPassword:"Launchpass2",newPassword:process.argv[1]}))' "$invalid_game_password")"
+done
+expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}/game-password" \
+	-H "authorization: Bearer ${launch_token}" \
+	-H 'content-type: application/json' \
+	-d '{"currentPassword":"Wrongpass1","newPassword":"N2w3"}'
+launch_extra_password_after_bad="$(sqlite3 -separator '|' "$launch_fixture_db" "SELECT pass, salt FROM players WHERE username='LaunchAlt' LIMIT 1;")"
+if [[ "$launch_extra_password_after_bad" != "$launch_extra_password_before" ]]; then
+	echo "wrong account-password confirmation must not change a game password"
+	exit 1
+fi
+sqlite3 "$launch_fixture_db" "UPDATE players SET online=1 WHERE username='LaunchAlt';"
+expect_status 409 -X POST "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}/game-password" \
+	-H "authorization: Bearer ${launch_token}" \
+	-H 'content-type: application/json' \
+	-d '{"currentPassword":"Launchpass2","newPassword":"N2w3"}'
+sqlite3 "$launch_fixture_db" "UPDATE players SET online=0 WHERE username='LaunchAlt';"
+launch_game_password_reset="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}/game-password" \
+	-H "authorization: Bearer ${launch_token}" \
+	-H 'content-type: application/json' \
+	-d '{"currentPassword":"Launchpass2","newPassword":"N2w3"}')"
+grep -q '"ok": true' <<<"$launch_game_password_reset" || { echo "game-password reset should report success for the owned character"; exit 1; }
+launch_extra_password_after="$(sqlite3 -separator '|' "$launch_fixture_db" "SELECT pass, salt FROM players WHERE username='LaunchAlt' LIMIT 1;")"
+if [[ "$launch_extra_password_after" == "$launch_extra_password_before" ]]; then
+	echo "game-password reset should rotate the OpenRSC password hash"
+	exit 1
+fi
+launch_extra_salt_before="${launch_extra_password_before#*|}"
+launch_extra_salt_after="${launch_extra_password_after#*|}"
+if [[ "$launch_extra_salt_after" != "$launch_extra_salt_before" ]]; then
+	echo "game-password reset must preserve the shared OpenRSC recovery salt"
+	exit 1
+fi
+node - "$launch_extra_password_after" <<'NODE'
+const { spawnSync } = require("child_process");
+const [stored, salt] = process.argv[2].split("|");
+const encode = (value) => Buffer.from(value, "utf8").toString("base64url");
+if (!stored.startsWith("$2y$10$")) throw new Error("game-password reset should upgrade to canonical OpenRSC bcrypt");
+const result = spawnSync("java", [
+	"-cp",
+	"server/core.jar",
+	"com.openrsc.server.util.rsc.PortalPasswordHasher"
+], {
+	input: `check\n${encode("N2w3")}\n${encode(salt)}\n${encode(stored)}\n`,
+	encoding: "utf8"
+});
+if (result.status !== 0 || result.stdout.trim() !== "true") {
+	throw new Error("game-password reset should pass DataConversions.checkPassword: " + result.stderr);
+}
+NODE
+launch_password_audit="$(sqlite3 -separator '|' "$launch_fixture_db" "SELECT eventAlias, message FROM player_security_changes psc JOIN players p ON p.id=psc.playerID WHERE p.username='LaunchAlt' ORDER BY psc.id DESC LIMIT 1;")"
+if [[ "$launch_password_audit" != "pass_change|Portal account game-password reset" ]]; then
+	echo "game-password reset should write one secret-free OpenRSC security audit"
+	exit 1
+fi
+expect_status 401 -X DELETE "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}"
+launch_other_account="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-d '{"username":"OtherGuy","email":"other-guy@example.com","password":"Otherpass1"}')"
+launch_other_token="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.token || '');" "$launch_other_account")"
+launch_other_account_id="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(String(payload.account && payload.account.id || ''));" "$launch_other_account")"
+if [[ -z "$launch_other_token" || -z "$launch_other_account_id" ]]; then
+	echo "second launch account should return token and account id"
+	exit 1
+fi
+expect_status 404 -X DELETE "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}" \
+	-H "authorization: Bearer ${launch_other_token}"
+expect_status 404 -X POST "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}/game-password" \
+	-H "authorization: Bearer ${launch_other_token}" \
+	-H 'content-type: application/json' \
+	-d '{"currentPassword":"Otherpass1","newPassword":"Stolenpass1"}'
+curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/${launch_other_account_id}/status" \
+	-H "x-portal-admin-token: ${public_admin_token}" \
+	-H 'content-type: application/json' \
+	-d '{"status":"review","note":"test review login lock"}' >/dev/null
+expect_status 401 -H "authorization: Bearer ${launch_other_token}" "http://127.0.0.1:${launch_port}/api/account"
+expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"other-guy@example.com","password":"Otherpass1"}'
+curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/${launch_other_account_id}/status" \
+	-H "x-portal-admin-token: ${public_admin_token}" \
+	-H 'content-type: application/json' \
+	-d '{"status":"active"}' >/dev/null
+launch_other_relogin="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"other-guy@example.com","password":"Otherpass1"}')"
+launch_other_relogin_token="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.token || '');" "$launch_other_relogin")"
+if [[ -z "$launch_other_relogin_token" ]]; then
+	echo "reactivated account should be able to log in"
+	exit 1
+fi
+curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/${launch_other_account_id}/status" \
+	-H "x-portal-admin-token: ${public_admin_token}" \
+	-H 'content-type: application/json' \
+	-d '{"status":"locked","note":"test locked login block"}' >/dev/null
+expect_status 401 -H "authorization: Bearer ${launch_other_relogin_token}" "http://127.0.0.1:${launch_port}/api/account"
+expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"other-guy@example.com","password":"Otherpass1"}'
+sqlite3 "$launch_fixture_db" "UPDATE players SET online=1 WHERE username='LaunchAlt';"
+expect_status 409 -X DELETE "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}" \
+	-H "authorization: Bearer ${launch_token}"
+launch_alt_online_still_present="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchAlt' AND online=1;")"
+if [[ "$launch_alt_online_still_present" != "1" ]]; then
+	echo "blocked online delete should leave the OpenRSC player row untouched"
+	exit 1
+fi
+sqlite3 "$launch_fixture_db" "UPDATE players SET online=0 WHERE username='LaunchAlt';"
+sqlite3 "$launch_fixture_db" "UPDATE player_cache SET value='${launch_other_account_id}' WHERE key='web_account_id' AND playerID=(SELECT id FROM players WHERE username='LaunchAlt');"
+expect_status 409 -X DELETE "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}" \
+	-H "authorization: Bearer ${launch_token}"
+sqlite3 "$launch_fixture_db" "UPDATE player_cache SET value='1' WHERE key='web_account_id' AND playerID=(SELECT id FROM players WHERE username='LaunchAlt');"
+no_db_port=$((PORT + 5))
+mkdir -p "$tmp_dir/launch-no-db-store"
+cp "$tmp_dir/launch-store/dev-store.json" "$tmp_dir/launch-no-db-store/dev-store.json"
+PORT="$no_db_port" \
+	PORTAL_DATA_DIR="$tmp_dir/launch-no-db-store" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_EMAIL_PROVIDER=resend \
+	PORTAL_EMAIL_DRY_RUN=1 \
+	PORTAL_EMAIL_FROM="Voidscape <launch@voidscape.gg>" \
+	node web/portal/dev-server.mjs >/tmp/voidscape-portal-no-db-delete-smoke.log 2>&1 &
+no_db_pid="$!"
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${no_db_port}/api/health" >/dev/null 2>&1; then
+		break
+	fi
+	sleep 0.1
+done
+expect_status 503 -X DELETE "http://127.0.0.1:${no_db_port}/api/characters/${launch_extra_id}" \
+	-H "authorization: Bearer ${launch_token}"
+kill "$no_db_pid" >/dev/null 2>&1 || true
+wait "$no_db_pid" >/dev/null 2>&1 || true
+no_db_pid=""
 launch_delete_extra="$(curl -fsS -X DELETE "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}" \
 	-H "authorization: Bearer ${launch_token}")"
 node -e "
@@ -899,12 +1249,12 @@ if (payload.characters.some((character) => character.name === 'LaunchAlt')) thro
 if (!payload.characters.some((character) => character.name === 'LaunchGuy')) throw new Error('deleting the second launch character should keep the first character');
 if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('character deletion should leave the waiting starter card alone');
 " "$launch_delete_extra"
-launch_alt_after_delete="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchAlt';")"
+launch_alt_after_delete="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchAlt';")"
 if [[ "$launch_alt_after_delete" != "0" ]]; then
 	echo "deleting a launch-created character should remove the OpenRSC player row"
 	exit 1
 fi
-launch_alt_link_after_delete="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE key='web_account_id' AND playerID NOT IN (SELECT id FROM players);")"
+launch_alt_link_after_delete="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE key='web_account_id' AND playerID NOT IN (SELECT id FROM players);")"
 if [[ "$launch_alt_link_after_delete" != "0" ]]; then
 	echo "deleting a launch-created character should not leave orphaned web-account links"
 	exit 1
@@ -919,7 +1269,7 @@ const payload = JSON.parse(process.argv[1]);
 if (payload.rewards.starterCardStatus !== 'none') throw new Error('admin revoke should clear an unclaimed starter card');
 if (payload.rewards.starterSubscriptionCards !== 0) throw new Error('admin revoke should leave zero waiting starter cards');
 " "$launch_revoke"
-launch_waiting_after_revoke="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter_card:1' AND value='1';")"
+launch_waiting_after_revoke="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter_card:1' AND value='1';")"
 if [[ "$launch_waiting_after_revoke" != "0" ]]; then
 	echo "admin starter-card revoke should clear the unclaimed OpenRSC marker"
 	exit 1
@@ -934,13 +1284,13 @@ const payload = JSON.parse(process.argv[1]);
 if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('admin grant should restore starter card waiting state');
 if (payload.rewards.starterSubscriptionCards !== 1) throw new Error('admin grant should expose one waiting starter card');
 " "$launch_grant"
-launch_waiting_after_grant="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
+launch_waiting_after_grant="$(sqlite3 "$launch_fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
 if [[ "$launch_waiting_after_grant" != "1" ]]; then
 	echo "admin starter-card grant should restore the OpenRSC marker"
 	exit 1
 fi
 
-sqlite3 "$fixture_db" "UPDATE player_cache SET value='2' WHERE playerID=0 AND key='starter_card:1';"
+sqlite3 "$launch_fixture_db" "UPDATE player_cache SET value='2' WHERE playerID=0 AND key='starter_card:1';"
 launch_account_claimed="$(curl -fsS -H "authorization: Bearer ${launch_token}" "http://127.0.0.1:${launch_port}/api/account")"
 node -e "
 const payload = JSON.parse(process.argv[1]);
@@ -958,7 +1308,7 @@ const payload = JSON.parse(process.argv[1]);
 if (payload.rewards.starterCardStatus !== 'claimed') throw new Error('admin revoke should not erase an already claimed starter card');
 if (payload.rewards.starterSubscriptionCardsClaimed !== 1) throw new Error('claimed starter card should remain visible after revoke');
 " "$launch_revoke_claimed"
-launch_claimed_after_revoke="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
+launch_claimed_after_revoke="$(sqlite3 "$launch_fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
 if [[ "$launch_claimed_after_revoke" != "2" ]]; then
 	echo "admin starter-card revoke should preserve an already claimed marker"
 	exit 1
@@ -967,7 +1317,7 @@ fi
 expect_status 409 -X POST "http://127.0.0.1:${launch_port}/api/characters" \
 	-H "authorization: Bearer ${launch_token}" \
 	-H 'content-type: application/json' \
-	-d '{"name":"LaunchGuy","gamePassword":"playpass"}'
+	-d '{"name":"LaunchGuy","gamePassword":"PlayPass1"}'
 google_nonce_payload="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/oauth/google/nonce" -H 'content-type: application/json' -d '{}')"
 grep -q '"nonce":' <<<"$google_nonce_payload" || { echo "launch-signup Google nonce endpoint should mint a nonce when configured"; exit 1; }
 google_nonce="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.nonce || '');" "$google_nonce_payload")"
@@ -977,15 +1327,723 @@ if [[ -z "$google_nonce" ]]; then
 fi
 expect_status 401 -X POST "http://127.0.0.1:${launch_port}/api/accounts/google" \
 	-H 'content-type: application/json' \
-	-d "{\"credential\":\"bad-token\",\"nonce\":\"${google_nonce}\",\"username\":\"GoogleGuy\",\"gamePassword\":\"googlepass\"}"
+	-d "{\"credential\":\"bad-token\",\"nonce\":\"${google_nonce}\",\"username\":\"GoogleGuy\",\"gamePassword\":\"GooglePass1\"}"
 expect_status 404 -X POST "http://127.0.0.1:${launch_port}/api/accounts/google/dev" -H 'content-type: application/json' -d '{}'
 expect_status 404 -X POST "http://127.0.0.1:${launch_port}/api/founder/simulate-referral" -H 'content-type: application/json' -d '{}'
 expect_status 404 -X POST "http://127.0.0.1:${launch_port}/api/character-links/simulate-verify" -H 'content-type: application/json' -d '{}'
+launch_availability="$(curl -fsS "http://127.0.0.1:${launch_port}/api/openrsc/characters/LaunchGuy?availability=1")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.available !== false) throw new Error('public launch availability check should report existing character unavailable');
+" "$launch_availability"
 expect_status 404 "http://127.0.0.1:${launch_port}/api/openrsc/characters/LaunchGuy"
 
 kill "$launch_pid" >/dev/null 2>&1 || true
 wait "$launch_pid" >/dev/null 2>&1 || true
 trap cleanup EXIT
+
+
+# ---- Launch signup with required email verification ----
+verify_db="$tmp_dir/openrsc-verify.db"
+cp "$base_fixture_db" "$verify_db"
+sqlite3 "$verify_db" "UPDATE players SET creation_date=strftime('%s','now'), creation_ip='198.51.100.70' WHERE username='SmokeHero';"
+verify_port=$((PORT + 6))
+PORT="$verify_port" \
+	PORTAL_DATA_DIR="$tmp_dir/verify-store" \
+	PORTAL_OPENRSC_DB="$verify_db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_EMAIL_PROVIDER=resend \
+	PORTAL_EMAIL_DRY_RUN=1 \
+	PORTAL_EMAIL_FROM="Voidscape <launch@voidscape.gg>" \
+	PORTAL_EMAIL_VERIFICATION_REQUIRED=1 \
+	PORTAL_EMAIL_VERIFICATION_IP_LIMIT=3 \
+	PORTAL_EMAIL_VERIFICATION_EMAIL_LIMIT=3 \
+	PORTAL_EMAIL_VERIFICATION_WINDOW_MINUTES=60 \
+	PORTAL_SIGNUP_IP_HOURLY_LIMIT=1 \
+	PORTAL_SIGNUP_IP_DAILY_LIMIT=1 \
+	PORTAL_CHARACTER_IP_HOURLY_LIMIT=1 \
+	PORTAL_CHARACTER_IP_DAILY_LIMIT=1 \
+	PORTAL_CHARACTER_ACCOUNT_HOURLY_LIMIT=1 \
+	PORTAL_CHARACTER_ACCOUNT_DAILY_LIMIT=1 \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	node web/portal/dev-server.mjs >/tmp/voidscape-portal-email-verification-smoke.log 2>&1 &
+verify_pid="$!"
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${verify_port}/api/health" >/dev/null 2>&1; then
+		break
+	fi
+	sleep 0.1
+done
+verify_signup="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.70' \
+	-d '{"username":"VerifyGuy","email":"verify-guy@example.com","password":"VerifyPass1"}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.verificationRequired !== true) throw new Error('verified launch signup should require email verification');
+if (payload.token) throw new Error('pending email verification signup must not issue a session token');
+if (payload.email !== 'verify-guy@example.com') throw new Error('pending signup should echo the target email');
+const ttlHours = (Date.parse(payload.expiresAt || '') - Date.now()) / 3600000;
+if (ttlHours < 47.9 || ttlHours > 48.1) throw new Error('default email verification TTL should be 48 hours, got ' + ttlHours);
+" "$verify_signup"
+
+# Sending verification mail is independently throttled and must not consume the
+# completed-account signup allowance for a shared IP.
+verify_second_pending="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.70' \
+	-d '{"username":"PendingTwo","email":"pending-two@example.com","password":"PendingPass2"}')"
+node -e "const p=JSON.parse(process.argv[1]); if(p.verificationRequired!==true) throw new Error('verification send should not double-count as a completed signup');" "$verify_second_pending"
+
+verify_pending_before_retry="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const p=(s.emailVerifications||[]).find(x=>x.emailCanonical==='verify-guy@example.com'&&x.status==='pending'); process.stdout.write(JSON.stringify({username:p.username,passwordHash:p.passwordHash,gamePasswordSealed:p.gamePasswordSealed,tokenHash:p.tokenHash,expiresAt:p.expiresAt}));" "$tmp_dir/verify-store/dev-store.json")"
+verify_retry_signup="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.74' \
+	-d '{"username":"HijackName","email":"verify-guy@example.com","password":"Hijackpass1"}')"
+node -e "const p=JSON.parse(process.argv[1]); if(p.verificationRequired!==true || p.username!=='VerifyGuy') throw new Error('an active pending signup should be reused without accepting replacement credentials');" "$verify_retry_signup"
+verify_pending_after_retry="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const p=(s.emailVerifications||[]).find(x=>x.emailCanonical==='verify-guy@example.com'&&x.status==='pending'); process.stdout.write(JSON.stringify({username:p.username,passwordHash:p.passwordHash,gamePasswordSealed:p.gamePasswordSealed,tokenHash:p.tokenHash,expiresAt:p.expiresAt}));" "$tmp_dir/verify-store/dev-store.json")"
+if [[ "$verify_pending_after_retry" != "$verify_pending_before_retry" ]]; then
+	echo "retrying registration must not replace an active pending signup's username, credentials, token, or expiry"
+	exit 1
+fi
+
+verify_event_count_before_resend="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); process.stdout.write(String((s.emailEvents||[]).filter(e=>e.type==='email_verification').length));" "$tmp_dir/verify-store/dev-store.json")"
+verify_unknown_resend="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email/resend" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.71' \
+	-d '{"email":"not-pending@example.com"}')"
+verify_known_resend="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email/resend" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.71' \
+	-d '{"email":"verify-guy@example.com"}')"
+node -e "
+const unknown = JSON.parse(process.argv[1]);
+const known = JSON.parse(process.argv[2]);
+if (JSON.stringify(unknown) !== JSON.stringify({accepted:true})) throw new Error('unknown resend should return only the generic accepted state');
+if (JSON.stringify(known) !== JSON.stringify(unknown)) throw new Error('known and unknown resend responses must be indistinguishable');
+" "$verify_unknown_resend" "$verify_known_resend"
+verify_event_count_after_resend="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); process.stdout.write(String((s.emailEvents||[]).filter(e=>e.type==='email_verification').length));" "$tmp_dir/verify-store/dev-store.json")"
+if [[ "$verify_event_count_after_resend" != "$((verify_event_count_before_resend + 1))" ]]; then
+	echo "only the known pending signup should queue a resend email"
+	exit 1
+fi
+
+# The per-email limit cannot be bypassed by rotating source IPs. The original
+# request, safe registration retry, and explicit resend consumed three sends.
+expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email/resend" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.73' \
+	-d '{"email":"verify-guy@example.com"}'
+
+# The same endpoint also limits one source that rotates target addresses.
+for suffix in 1 2 3; do
+	curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email/resend" \
+		-H 'content-type: application/json' \
+		-H 'x-forwarded-for: 198.51.100.80' \
+		-d "{\"email\":\"unknown-${suffix}@example.com\"}" >/dev/null
+done
+expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email/resend" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.80' \
+	-d '{"email":"unknown-4@example.com"}'
+grep -q '"event":"portal_rate_limit_decision"' /tmp/voidscape-portal-email-verification-smoke.log || { echo "rate-limit decisions should be logged"; exit 1; }
+if grep -Eq '198\.51\.100\.(73|80)|verify-guy@example\.com|unknown-4@example\.com' /tmp/voidscape-portal-email-verification-smoke.log; then
+	echo "rate-limit decision logs must not contain raw IP or email values"
+	exit 1
+fi
+verify_before_players="$(sqlite3 "$verify_db" "SELECT COUNT(*) FROM players WHERE username='VerifyGuy';")"
+if [[ "$verify_before_players" != "0" ]]; then
+	echo "pending email verification signup must not create an OpenRSC player"
+	exit 1
+fi
+verify_before_accounts="$(node -e "const store = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); process.stdout.write(String((store.accounts || []).filter((account) => account.emailCanonical === 'verify-guy@example.com').length));" "$tmp_dir/verify-store/dev-store.json")"
+if [[ "$verify_before_accounts" != "0" ]]; then
+	echo "pending email verification signup must not create a portal account"
+	exit 1
+fi
+node - "$tmp_dir/verify-store/dev-store.json" "$public_abuse_salt" <<'NODE'
+const fs = require("fs");
+const { createHash, createDecipheriv } = require("crypto");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const pending = (store.emailVerifications || []).find((row) =>
+	row.status === "pending" && row.emailCanonical === "verify-guy@example.com"
+);
+if (!pending || !pending.gamePasswordSealed) throw new Error("pending signup game-password seal not found");
+const [version, ivText, tagText, encryptedText] = String(pending.gamePasswordSealed).split(".");
+if (version !== "v1" || !ivText || !tagText || !encryptedText) throw new Error("game-password seal should use v1 format");
+const key = createHash("sha256").update(`${process.argv[3]}:portal-seal`).digest();
+const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64url"));
+decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+const password = Buffer.concat([
+	decipher.update(Buffer.from(encryptedText, "base64url")),
+	decipher.final()
+]).toString("utf8");
+if (password !== "VerifyPass1") throw new Error("pending signup must seal the game password byte-for-byte");
+NODE
+verify_token="$(node - "$tmp_dir/verify-store/dev-store.json" "$public_abuse_salt" <<'NODE'
+const fs = require("fs");
+const { createHash, createDecipheriv } = require("crypto");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const salt = process.argv[3];
+const pending = (store.emailVerifications || []).find((row) =>
+	row.status === "pending" && row.emailCanonical === "verify-guy@example.com"
+);
+if (!pending || !pending.verificationTokenSealed) {
+	throw new Error("pending signup with sealed verification token not found");
+}
+const [version, ivText, tagText, encryptedText] = String(pending.verificationTokenSealed).split(".");
+if (version !== "v1" || !ivText || !tagText || !encryptedText) {
+	throw new Error("verification token seal should use v1 format");
+}
+const key = createHash("sha256").update(`${salt}:portal-seal`).digest();
+const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64url"));
+decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+process.stdout.write(Buffer.concat([
+	decipher.update(Buffer.from(encryptedText, "base64url")),
+	decipher.final()
+]).toString("utf8"));
+NODE
+)"
+if [[ -z "$verify_token" ]]; then
+	echo "email verification dry-run token could not be decrypted"
+	exit 1
+fi
+verify_redirect_headers="$(curl -sS -D - -o /dev/null "http://127.0.0.1:${verify_port}/api/accounts/verify-email?token=${verify_token}")"
+if ! grep -qE '^HTTP/[0-9.]+ 303' <<<"$verify_redirect_headers"; then
+	echo "email verification GET should be a non-mutating 303 confirmation redirect"
+	exit 1
+fi
+if ! grep -qiE '^location: /portal\?auth=verify#verify=' <<<"$verify_redirect_headers"; then
+	echo "email verification GET should redirect to the fragment-based confirmation screen"
+	exit 1
+fi
+verify_after_scanner_accounts="$(node -e "const store = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); process.stdout.write(String((store.accounts || []).filter((account) => account.emailCanonical === 'verify-guy@example.com').length));" "$tmp_dir/verify-store/dev-store.json")"
+if [[ "$verify_after_scanner_accounts" != "0" ]]; then
+	echo "email verification GET must not create an account before explicit confirmation"
+	exit 1
+fi
+verify_complete="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.70' \
+	-d "{\"token\":\"${verify_token}\"}")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!payload.token) throw new Error('email verification should issue a session token');
+if (!payload.account || payload.account.email !== 'verify-guy@example.com') throw new Error('email verification should create the portal account');
+if (!Array.isArray(payload.characters) || !payload.characters.some((character) => character.name === 'VerifyGuy' && character.source === 'openrsc-sqlite-created')) {
+	throw new Error('email verification should create and link the first OpenRSC character');
+}
+if (!payload.rewards || payload.rewards.starterCardStatus !== 'waiting') throw new Error('email verification should reserve the starter card');
+" "$verify_complete"
+verify_session_token="$(node -e "const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.token || '');" "$verify_complete")"
+verify_game_password="$(sqlite3 -separator '|' "$verify_db" "SELECT pass, salt FROM players WHERE username='VerifyGuy' LIMIT 1;")"
+node - "$verify_game_password" <<'NODE'
+const { spawnSync } = require("child_process");
+const [stored, salt] = process.argv[2].split("|");
+const encode = (value) => Buffer.from(value, "utf8").toString("base64url");
+const result = spawnSync("java", [
+	"-cp",
+	"server/core.jar",
+	"com.openrsc.server.util.rsc.PortalPasswordHasher"
+], {
+	input: `check\n${encode("VerifyPass1")}\n${encode(salt)}\n${encode(stored)}\n`,
+	encoding: "utf8"
+});
+if (result.status !== 0 || result.stdout.trim() !== "true") {
+	throw new Error("verified signup password should survive into the canonical game hash: " + result.stderr);
+}
+NODE
+node -e "
+const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));
+const p=(s.emailVerifications||[]).find(x=>x.emailCanonical==='verify-guy@example.com');
+if(!p || p.status!=='verified') throw new Error('verification row should be marked verified');
+if(p.passwordHash || p.gamePasswordSealed || p.tokenHash || p.verificationTokenSealed) throw new Error('used verification credentials should be cleared');
+if((s.emailEvents||[]).filter(e=>e.pendingSignupId===p.id).some(e=>e.metadata&&e.metadata.verificationTokenSealed)) throw new Error('verification email events should not retain used token material');
+" "$tmp_dir/verify-store/dev-store.json"
+expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/characters" \
+	-H "authorization: Bearer ${verify_session_token}" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.70' \
+	-d '{"name":"VerifyTwo","gamePassword":"VerifyPass2"}'
+
+# A clean signup IP gets one full additional-character allowance after the
+# initial character, proving the initial marker is subtracted from the bucket.
+pending_two_token="$(node - "$tmp_dir/verify-store/dev-store.json" "$public_abuse_salt" <<'NODE'
+const fs = require("fs");
+const { createHash, createDecipheriv } = require("crypto");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const pending = (store.emailVerifications || []).find((row) =>
+	row.status === "pending" && row.emailCanonical === "pending-two@example.com"
+);
+if (!pending || !pending.verificationTokenSealed) throw new Error("second pending signup token not found");
+const [version, ivText, tagText, encryptedText] = pending.verificationTokenSealed.split(".");
+if (version !== "v1") throw new Error("second pending signup token seal should use v1");
+const key = createHash("sha256").update(`${process.argv[3]}:portal-seal`).digest();
+const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64url"));
+decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+process.stdout.write(Buffer.concat([
+	decipher.update(Buffer.from(encryptedText, "base64url")),
+	decipher.final()
+]).toString("utf8"));
+NODE
+)"
+pending_two_complete="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.90' \
+	-d "{\"token\":\"${pending_two_token}\"}")"
+pending_two_session="$(node -e "const p=JSON.parse(process.argv[1]); if(!p.characters.some(c=>c.name==='PendingTwo')) throw new Error('second pending signup should create its initial character'); process.stdout.write(p.token||'');" "$pending_two_complete")"
+pending_two_additional="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/characters" \
+	-H "authorization: Bearer ${pending_two_session}" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.90' \
+	-d '{"name":"PendingExtra","gamePassword":"ExtraPass3"}')"
+node -e "const p=JSON.parse(process.argv[1]); if(!p.characters.some(c=>c.name==='PendingExtra')) throw new Error('first additional character should not be consumed by the signup character');" "$pending_two_additional"
+expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/characters" \
+	-H "authorization: Bearer ${pending_two_session}" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.90' \
+	-d '{"name":"PendingThird","gamePassword":"ThirdPass4"}'
+verify_reset_request="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/password-reset/request" \
+	-H 'content-type: application/json' \
+	-d '{"identifier":"VerifyGuy"}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.accepted !== true) throw new Error('username recovery should return the generic accepted state');
+if (payload.maskedEmail !== 'v***@e***.com') throw new Error('username recovery should expose only the approved masked email hint');
+" "$verify_reset_request"
+verify_unknown_reset="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/password-reset/request" \
+	-H 'content-type: application/json' \
+	-d '{"identifier":"NobodyHere"}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.accepted !== true || payload.maskedEmail !== '') throw new Error('unknown username recovery should stay generic');
+" "$verify_unknown_reset"
+verify_reset_token="$(node - "$tmp_dir/verify-store/dev-store.json" "$public_abuse_salt" <<'NODE'
+const fs = require("fs");
+const { createHash, createDecipheriv } = require("crypto");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const salt = process.argv[3];
+const event = (store.emailEvents || []).find((row) =>
+	row.type === "password_reset" && row.emailCanonical === "verify-guy@example.com"
+);
+if (!event || !event.metadata || !event.metadata.resetTokenSealed) {
+	throw new Error("password-reset email event with sealed token not found");
+}
+const [version, ivText, tagText, encryptedText] = String(event.metadata.resetTokenSealed).split(".");
+if (version !== "v1" || !ivText || !tagText || !encryptedText) {
+	throw new Error("password-reset token seal should use v1 format");
+}
+const key = createHash("sha256").update(`${salt}:portal-seal`).digest();
+const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64url"));
+decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+const token = Buffer.concat([
+	decipher.update(Buffer.from(encryptedText, "base64url")),
+	decipher.final()
+]).toString("utf8");
+const reset = (store.passwordResetTokens || []).find((row) => row.id === event.passwordResetTokenId);
+if (!reset || reset.tokenHash !== createHash("sha256").update(token).digest("base64url")) {
+	throw new Error("password-reset store should retain only the token hash");
+}
+if (JSON.stringify(reset).includes(token)) throw new Error("password-reset row must not retain plaintext token material");
+process.stdout.write(token);
+NODE
+)"
+if [[ -z "$verify_reset_token" ]]; then
+	echo "password-reset dry-run token could not be decrypted"
+	exit 1
+fi
+expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/password-reset/complete" \
+	-H 'content-type: application/json' \
+	-d '{"token":"invalid-token-value-that-is-long-enough-12345","newPassword":"Verifynew1"}'
+verify_reset_complete="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/password-reset/complete" \
+	-H 'content-type: application/json' \
+	-d "{\"token\":\"${verify_reset_token}\",\"newPassword\":\"Verifynew1\"}")"
+grep -q '"ok": true' <<<"$verify_reset_complete" || { echo "password-reset token should rotate the portal password"; exit 1; }
+if grep -q '"token":' <<<"$verify_reset_complete"; then
+	echo "password-reset completion should return to sign-in without issuing a session"
+	exit 1
+fi
+expect_status 401 -H "authorization: Bearer ${verify_session_token}" "http://127.0.0.1:${verify_port}/api/account"
+expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/password-reset/complete" \
+	-H 'content-type: application/json' \
+	-d "{\"token\":\"${verify_reset_token}\",\"newPassword\":\"Verifyagain1\"}"
+expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"verify-guy@example.com","password":"VerifyPass1"}'
+verify_reset_login="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"verify-guy@example.com","password":"Verifynew1"}')"
+grep -q '"token":' <<<"$verify_reset_login" || { echo "password-reset account should sign in explicitly with the new password"; exit 1; }
+expect_status 400 -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email" \
+	-H 'content-type: application/json' \
+	-d "{\"token\":\"${verify_token}\"}"
+verify_after_players="$(sqlite3 "$verify_db" "SELECT COUNT(*) FROM players WHERE username='VerifyGuy';")"
+if [[ "$verify_after_players" != "1" ]]; then
+	echo "email verification should create exactly one OpenRSC player"
+	exit 1
+fi
+verify_waiting_card="$(sqlite3 "$verify_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter_card:1' AND value='1';")"
+if [[ "$verify_waiting_card" != "1" ]]; then
+	echo "email verification should create one waiting starter-card marker"
+	exit 1
+fi
+
+# ---- Older native-character account claim ----
+native_backfill="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/admin/accounts/backfill-native" \
+	-H "x-portal-admin-token: ${public_admin_token}" \
+	-H 'content-type: application/json' \
+	-d '{"apply":true,"grantMissingStarterCard":true}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.createdAccounts !== 2) throw new Error('native backfill should create two synthetic portal accounts, got ' + payload.createdAccounts);
+if (payload.createdCharacters !== 2) throw new Error('native backfill should create two native character links, got ' + payload.createdCharacters);
+if (payload.linkedPlayers !== 2) throw new Error('native backfill should stamp two ownership markers, got ' + payload.linkedPlayers);
+if (payload.starterCardsGranted !== 2) throw new Error('native backfill should preserve the promotion for both older accounts');
+if (payload.subscriptionsMigrated !== 1 || !payload.gameWrites || payload.gameWrites.accountSubscriptionsUpserted !== 1) {
+	throw new Error('native backfill should migrate the active character subscription to its portal account');
+}
+" "$native_backfill"
+
+legacy_store="$tmp_dir/verify-store/dev-store.json"
+legacy_before="$(node - "$legacy_store" <<'NODE'
+const store = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
+const character = (store.characters || []).find((row) => row.name === "SmokeHero");
+const account = character && (store.accounts || []).find((row) => row.id === character.accountId);
+if (!account || account.syntheticEmail !== true || account.requiresEmailUpgrade !== true || account.passwordHash) {
+	throw new Error("SmokeHero should start as a passwordless synthetic account");
+}
+const entitlements = (store.entitlements || []).filter((row) => row.accountId === account.id);
+process.stdout.write(JSON.stringify({
+	accountId: account.id,
+	characterId: character.id,
+	playerId: character.playerId,
+	characterSource: character.source,
+	entitlements: entitlements.length,
+	accountSource: account.source,
+	subscriptionExpiresAt: account.subscriptionExpiresAt
+}));
+NODE
+)"
+legacy_account_id="$(node -e "process.stdout.write(String(JSON.parse(process.argv[1]).accountId));" "$legacy_before")"
+legacy_subscription_marker="$(sqlite3 "$verify_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='acct_sub:${legacy_account_id}' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$legacy_subscription_marker" != "4102444800000" ]]; then
+	echo "native backfill must preserve an active character subscription in the account-level marker"
+	exit 1
+fi
+
+legacy_reset_request="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/password-reset/request" \
+	-H 'content-type: application/json' \
+	-d '{"identifier":"SmokeHero"}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.accepted !== true || payload.maskedEmail !== '') {
+	throw new Error('older native recovery must not claim that mail was sent to a synthetic address');
+}
+" "$legacy_reset_request"
+
+expect_status 400 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-d '{"username":"SmokeHero","currentGamePassword":"","email":"legacy-owner@example.com","newPassword":"LegacyWeb1!"}'
+expect_status 400 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-d '{"username":"SmokeHero","currentGamePassword":"fixture-pass","email":"not-an-email","newPassword":"LegacyWeb1!"}'
+expect_status 400 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-d '{"username":"SmokeHero","currentGamePassword":"fixture-pass","email":"legacy-owner@example.com","newPassword":"short"}'
+expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.20' \
+	-d '{"username":"SmokeHero","currentGamePassword":"wrong-pass","email":"legacy-owner@example.com","newPassword":"LegacyWeb1!"}'
+expect_status 409 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.20' \
+	-d '{"username":"SmokeHero","currentGamePassword":"fixture-pass","email":"verify-guy@example.com","newPassword":"LegacyWeb1!"}'
+
+legacy_claim_request="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.20' \
+	-d '{"username":"SmokeHero","currentGamePassword":"fixture-pass","email":"legacy-owner@example.com","newPassword":"LegacyWeb1!"}')"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.accepted !== true || payload.verificationRequired !== true || !payload.expiresAt) {
+	throw new Error('valid older-account proof should queue email verification');
+}
+if (payload.token) throw new Error('claim request must not expose its verification token');
+" "$legacy_claim_request"
+
+legacy_taken_collision_request="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.21' \
+	-d '{"username":"TakenHero","currentGamePassword":"fixture-pass","email":"legacy-owner@example.com","newPassword":"TakenLegacy1!"}')"
+grep -q '"verificationRequired": true' <<<"$legacy_taken_collision_request" || { echo "second pending legacy claim should reach email verification"; exit 1; }
+
+legacy_claim_token_for_email() {
+	local email="$1"
+	local username="${2:-}"
+	node - "$legacy_store" "$public_abuse_salt" "$email" "$username" <<'NODE'
+const fs = require("fs");
+const { createHash, createDecipheriv } = require("crypto");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const salt = process.argv[3];
+const email = process.argv[4];
+const username = process.argv[5];
+const character = username ? (store.characters || []).find((row) => row.name === username) : null;
+const claim = (store.legacyAccountClaims || []).filter((row) =>
+	row.targetEmailCanonical === email && (!character || row.characterId === character.id)
+).at(-1);
+const event = claim && (store.emailEvents || []).find((row) => row.legacyAccountClaimId === claim.id);
+if (!event || !event.metadata || !event.metadata.claimTokenSealed) {
+	throw new Error("legacy claim email event with sealed token not found for " + email);
+}
+if (!claim || claim.status !== "pending" || !String(claim.passwordHash || "").startsWith("scrypt$")) {
+	throw new Error("pending legacy claim should retain only the new website password hash");
+}
+const [version, ivText, tagText, encryptedText] = String(event.metadata.claimTokenSealed).split(".");
+if (version !== "v1" || !ivText || !tagText || !encryptedText) throw new Error("legacy claim token seal should use v1 format");
+const key = createHash("sha256").update(`${salt}:portal-seal`).digest();
+const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64url"));
+decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+const token = Buffer.concat([
+	decipher.update(Buffer.from(encryptedText, "base64url")),
+	decipher.final()
+]).toString("utf8");
+if (claim.tokenHash !== createHash("sha256").update(token).digest("base64url")) {
+	throw new Error("legacy claim should retain only the token hash");
+}
+if (JSON.stringify(claim).includes(token)) throw new Error("legacy claim row must not retain plaintext token material");
+process.stdout.write(token);
+NODE
+}
+
+legacy_claim_token="$(legacy_claim_token_for_email legacy-owner@example.com SmokeHero)"
+legacy_taken_collision_token="$(node - "$legacy_store" "$public_abuse_salt" <<'NODE'
+const fs = require("fs");
+const { createHash, createDecipheriv } = require("crypto");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const salt = process.argv[3];
+const taken = (store.characters || []).find((row) => row.name === "TakenHero");
+const claim = (store.legacyAccountClaims || []).filter((row) =>
+	row.characterId === taken.id && row.targetEmailCanonical === "legacy-owner@example.com" && row.status === "pending"
+).at(-1);
+const event = claim && (store.emailEvents || []).find((row) => row.legacyAccountClaimId === claim.id);
+if (!event || !event.metadata || !event.metadata.claimTokenSealed) throw new Error("TakenHero collision token not found");
+const [version, ivText, tagText, encryptedText] = event.metadata.claimTokenSealed.split(".");
+if (version !== "v1") throw new Error("invalid TakenHero token seal");
+const key = createHash("sha256").update(`${salt}:portal-seal`).digest();
+const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64url"));
+decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+process.stdout.write(Buffer.concat([decipher.update(Buffer.from(encryptedText, "base64url")), decipher.final()]).toString("utf8"));
+NODE
+)"
+if [[ -z "$legacy_claim_token" || -z "$legacy_taken_collision_token" ]]; then
+	echo "legacy claim dry-run tokens could not be decrypted"
+	exit 1
+fi
+legacy_superseded_token="$legacy_claim_token"
+legacy_replacement_request="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.20' \
+	-d '{"username":"SmokeHero","currentGamePassword":"fixture-pass","email":"legacy-owner@example.com","newPassword":"LegacyWeb2!"}')"
+grep -q '"verificationRequired": true' <<<"$legacy_replacement_request" || { echo "replacement legacy claim should queue a new verification"; exit 1; }
+expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/complete" \
+	-H 'content-type: application/json' \
+	-d "{\"token\":\"${legacy_superseded_token}\"}"
+legacy_claim_token="$(legacy_claim_token_for_email legacy-owner@example.com SmokeHero)"
+if grep -qE 'fixture-pass|LegacyWeb1!|LegacyWeb2!|TakenLegacy1!' "$legacy_store"; then
+	echo "legacy claim store must not retain plaintext game or website passwords"
+	exit 1
+fi
+
+legacy_claim_redirect="$(curl -sS -D - -o /dev/null "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/verify?token=${legacy_claim_token}")"
+if ! grep -qE '^HTTP/[0-9.]+ 303' <<<"$legacy_claim_redirect"; then
+	echo "legacy claim GET should be a non-mutating 303 confirmation redirect"
+	exit 1
+fi
+if ! grep -qiE '^location: /portal\?auth=claim-confirm#claim=' <<<"$legacy_claim_redirect"; then
+	echo "legacy claim GET should redirect to a fragment-based confirmation screen"
+	exit 1
+fi
+legacy_before_confirm="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const c=s.characters.find(x=>x.name==='SmokeHero'); const a=s.accounts.find(x=>x.id===c.accountId); process.stdout.write(String(a.syntheticEmail===true && a.requiresEmailUpgrade===true && !a.passwordHash));" "$legacy_store")"
+if [[ "$legacy_before_confirm" != "true" ]]; then
+	echo "legacy claim GET must not mutate the synthetic account"
+	exit 1
+fi
+
+legacy_game_pass_before="$(sqlite3 "$verify_db" "SELECT pass || '|' || salt FROM players WHERE id=77;")"
+legacy_marker_before="$(sqlite3 "$verify_db" "SELECT value FROM player_cache WHERE playerID=77 AND key='web_account_id' ORDER BY dbid DESC LIMIT 1;")"
+legacy_claim_complete="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/complete" \
+	-H 'content-type: application/json' \
+	-d "{\"token\":\"${legacy_claim_token}\"}")"
+grep -q '"ok": true' <<<"$legacy_claim_complete" || { echo "legacy claim confirmation should upgrade the account"; exit 1; }
+if grep -q '"token":' <<<"$legacy_claim_complete"; then
+	echo "legacy claim completion should return to sign-in without issuing a session"
+	exit 1
+fi
+expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/complete" \
+	-H 'content-type: application/json' \
+	-d "{\"token\":\"${legacy_claim_token}\"}"
+expect_status 409 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/complete" \
+	-H 'content-type: application/json' \
+	-d "{\"token\":\"${legacy_taken_collision_token}\"}"
+
+expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-d '{"username":"SmokeHero","currentGamePassword":"fixture-pass","email":"another-owner@example.com","newPassword":"AnotherWeb1!"}'
+expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"legacy-owner@example.com","password":"wrong-password"}'
+legacy_login="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/login" \
+	-H 'content-type: application/json' \
+	-d '{"email":"legacy-owner@example.com","password":"LegacyWeb2!"}')"
+legacy_login_token="$(node -e "const p=JSON.parse(process.argv[1]); if(!p.token) throw new Error('claimed account should require and accept a clean login'); process.stdout.write(p.token);" "$legacy_login")"
+legacy_account_state="$(curl -fsS -H "authorization: Bearer ${legacy_login_token}" "http://127.0.0.1:${verify_port}/api/account")"
+node -e "
+const before = JSON.parse(process.argv[1]);
+const state = JSON.parse(process.argv[2]);
+if (!state.account || state.account.id !== before.accountId || state.account.email !== 'legacy-owner@example.com') throw new Error('claim must preserve the account id and expose the verified email');
+const character = (state.characters || []).find((row) => row.id === before.characterId);
+if (!character || character.playerId !== before.playerId || character.source !== before.characterSource) throw new Error('claim must preserve the native character link and source');
+if (!state.rewards || state.rewards.starterSubscriptionCards !== 1) throw new Error('claim must preserve the starter-card promotion');
+" "$legacy_before" "$legacy_account_state"
+legacy_after="$(node - "$legacy_store" <<'NODE'
+const store = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
+const character = store.characters.find((row) => row.name === "SmokeHero");
+const account = store.accounts.find((row) => row.id === character.accountId);
+const entitlements = store.entitlements.filter((row) => row.accountId === account.id);
+const claim = store.legacyAccountClaims.find((row) => row.accountId === account.id && row.status === "used");
+process.stdout.write(JSON.stringify({
+	accountId: account.id,
+	characterId: character.id,
+	playerId: character.playerId,
+	characterSource: character.source,
+	entitlements: entitlements.length,
+	accountSource: account.source,
+	subscriptionExpiresAt: account.subscriptionExpiresAt,
+	syntheticEmail: account.syntheticEmail,
+	requiresEmailUpgrade: account.requiresEmailUpgrade,
+	claimPasswordCleared: Boolean(claim && !claim.passwordHash && !claim.credentialFingerprint)
+}));
+NODE
+)"
+node -e "
+const before = JSON.parse(process.argv[1]);
+const after = JSON.parse(process.argv[2]);
+for (const key of ['accountId','characterId','playerId','characterSource','entitlements','accountSource','subscriptionExpiresAt']) {
+	if (after[key] !== before[key]) throw new Error('claim changed preserved field ' + key);
+}
+if (after.syntheticEmail !== false || after.requiresEmailUpgrade !== false) throw new Error('claim should clear synthetic upgrade flags');
+if (after.claimPasswordCleared !== true) throw new Error('used claim should clear pending credential material');
+" "$legacy_before" "$legacy_after"
+legacy_game_pass_after="$(sqlite3 "$verify_db" "SELECT pass || '|' || salt FROM players WHERE id=77;")"
+legacy_marker_after="$(sqlite3 "$verify_db" "SELECT value FROM player_cache WHERE playerID=77 AND key='web_account_id' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$legacy_game_pass_after" != "$legacy_game_pass_before" || "$legacy_marker_after" != "$legacy_marker_before" ]]; then
+	echo "legacy claim must not change the game password, salt, or ownership marker"
+	exit 1
+fi
+
+legacy_changed_request="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-d '{"username":"TakenHero","currentGamePassword":"fixture-pass","email":"changed-owner@example.com","newPassword":"ChangedWeb1!"}')"
+grep -q '"verificationRequired": true' <<<"$legacy_changed_request" || { echo "credential-change claim fixture should queue verification"; exit 1; }
+legacy_changed_token="$(legacy_claim_token_for_email changed-owner@example.com TakenHero)"
+sqlite3 "$verify_db" "UPDATE players SET pass='changed-pass' WHERE id=78;"
+expect_status 409 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/complete" \
+	-H 'content-type: application/json' \
+	-d "{\"token\":\"${legacy_changed_token}\"}"
+sqlite3 "$verify_db" "UPDATE players SET pass='fixture-pass' WHERE id=78;"
+
+legacy_expired_request="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-d '{"username":"TakenHero","currentGamePassword":"fixture-pass","email":"expired-owner@example.com","newPassword":"ExpiredWeb1!"}')"
+grep -q '"verificationRequired": true' <<<"$legacy_expired_request" || { echo "expired claim fixture should queue verification"; exit 1; }
+legacy_expired_token="$(legacy_claim_token_for_email expired-owner@example.com TakenHero)"
+node - "$legacy_store" <<'NODE'
+const fs = require("fs");
+const path = process.argv[2];
+const store = JSON.parse(fs.readFileSync(path, "utf8"));
+const claim = (store.legacyAccountClaims || []).find((row) => row.targetEmailCanonical === "expired-owner@example.com" && row.status === "pending");
+if (!claim) throw new Error("pending expiry fixture claim not found");
+claim.expiresAtMs = Date.now() - 1000;
+claim.expiresAt = new Date(claim.expiresAtMs).toISOString();
+const temporary = path + ".expiry-test.tmp";
+fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + "\n");
+fs.renameSync(temporary, path);
+NODE
+expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/complete" \
+	-H 'content-type: application/json' \
+	-d "{\"token\":\"${legacy_expired_token}\"}"
+node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const c=s.legacyAccountClaims.find(x=>x.targetEmailCanonical==='expired-owner@example.com'); if(!c || c.status!=='expired' || c.passwordHash || c.credentialFingerprint) throw new Error('expired claim should clear pending credential material');" "$legacy_store"
+
+legacy_marker_request="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-d '{"username":"TakenHero","currentGamePassword":"fixture-pass","email":"marker-owner@example.com","newPassword":"MarkerWeb1!"}')"
+grep -q '"verificationRequired": true' <<<"$legacy_marker_request" || { echo "ownership-marker claim fixture should queue verification"; exit 1; }
+legacy_marker_token="$(legacy_claim_token_for_email marker-owner@example.com TakenHero)"
+sqlite3 "$verify_db" "INSERT INTO player_cache (playerID,type,key,value) VALUES (78,0,'web_account_id','999');"
+expect_status 409 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/complete" \
+	-H 'content-type: application/json' \
+	-d "{\"token\":\"${legacy_marker_token}\"}"
+
+for _ in {1..5}; do
+	expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+		-H 'content-type: application/json' \
+		-H 'x-forwarded-for: 198.51.100.30' \
+		-d '{"username":"ClaimGhost","currentGamePassword":"fixture-pass","email":"ghost@example.com","newPassword":"GhostWeb1!"}'
+done
+expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.30' \
+	-d '{"username":"ClaimGhost","currentGamePassword":"fixture-pass","email":"ghost@example.com","newPassword":"GhostWeb1!"}'
+expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.32' \
+	-d '{"username":"ClaimGhost","currentGamePassword":"fixture-pass","email":"ghost@example.com","newPassword":"GhostWeb1!"}'
+for suffix in {1..10}; do
+	expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+		-H 'content-type: application/json' \
+		-H 'x-forwarded-for: 198.51.100.31' \
+		-d "{\"username\":\"Ghost${suffix}\",\"currentGamePassword\":\"fixture-pass\",\"email\":\"ghost${suffix}@example.com\",\"newPassword\":\"GhostWeb1!\"}"
+done
+expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.31' \
+	-d '{"username":"GhostEleven","currentGamePassword":"fixture-pass","email":"ghost11@example.com","newPassword":"GhostWeb1!"}'
+
+for _ in {1..10}; do
+	expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/complete" \
+		-H 'content-type: application/json' \
+		-H 'x-forwarded-for: 198.51.100.40' \
+		-d '{"token":"invalid-legacy-claim-token-value-1234567890"}'
+done
+expect_status 429 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/complete" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.40' \
+	-d '{"token":"invalid-legacy-claim-token-value-1234567890"}'
+
+node - "$legacy_store" <<'NODE'
+const fs = require("fs");
+const path = process.argv[2];
+const store = JSON.parse(fs.readFileSync(path, "utf8"));
+const event = (store.emailEvents || []).find((row) => row.type === "legacy_account_claim");
+if (!event) throw new Error("legacy claim email fixture not found");
+event.status = "sending";
+event.updatedAt = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+const temporary = path + ".interrupted-email-test.tmp";
+fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + "\n");
+fs.renameSync(temporary, path);
+NODE
+expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \
+	-H 'content-type: application/json' \
+	-H 'x-forwarded-for: 198.51.100.41' \
+	-d '{"username":"MailRecovery","currentGamePassword":"fixture-pass","email":"mail-recovery@example.com","newPassword":"MailWeb1!"}'
+node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const e=s.emailEvents.find(x=>x.type==='legacy_account_claim'); if(!e || e.status!=='failed' || e.lastError!=='email_delivery_interrupted') throw new Error('interrupted email delivery should recover to a retryable failure');" "$legacy_store"
+
+kill "$verify_pid" >/dev/null 2>&1 || true
+wait "$verify_pid" >/dev/null 2>&1 || true
+verify_pid=""
 
 # Simulate one in-game redemption, then check the admin signup list reflects it.
 sqlite3 "$fixture_db" "UPDATE player_cache SET value='2' WHERE playerID=0 AND key=(SELECT key FROM player_cache WHERE playerID=0 AND key LIKE 'signup_code:%' ORDER BY dbid LIMIT 1);"

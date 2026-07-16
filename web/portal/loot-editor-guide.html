@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="A simple picture guide for using the Voidscape Loot Editor.">
+	<title>How to Use the Voidscape Loot Editor</title>
+	<link rel="icon" href="assets/favicon.png">
+	<link rel="preload" as="font" type="font/woff2" href="assets/instrument-sans-latin-400-600.woff2" crossorigin>
+	<link rel="preload" as="font" type="font/ttf" href="assets/alagard.ttf" crossorigin>
+	<link rel="stylesheet" href="loot-editor.css">
+	<link rel="stylesheet" href="loot-editor-guide.css">
+</head>
+<body>
+	<a class="skip-link" href="#guide-main">Skip to guide</a>
+
+	<header class="editor-topbar">
+		<a class="editor-brand" href="/" aria-label="Voidscape home">
+			<img src="assets/voidscape-wordmark.png" alt="Voidscape">
+		</a>
+		<div class="topbar-title">
+			<strong>Loot editor guide</strong>
+			<span>Four easy steps</span>
+		</div>
+		<div class="topbar-actions">
+			<a href="/loot-editor">Open loot editor</a>
+			<a href="/npcs">View NPC drops</a>
+		</div>
+	</header>
+
+	<main class="guide-shell" id="guide-main" tabindex="-1">
+		<header class="guide-hero">
+			<p class="guide-kicker">Quick picture guide</p>
+			<h1>How to change loot drops</h1>
+			<p class="guide-lede">Follow these four steps. Your work saves in your browser while you go.</p>
+			<div class="guide-safe-note">
+				<strong>Safe to try:</strong>
+				<span>Nothing changes in the live game. The server owner reviews your file first.</span>
+			</div>
+			<a class="button gold guide-start" href="/loot-editor">Open the loot editor</a>
+		</header>
+
+		<section class="guide-step" aria-labelledby="guide-step-1">
+			<div class="guide-step-number" aria-hidden="true">1</div>
+			<div class="guide-step-content">
+				<h2 id="guide-step-1">Choose what you want to edit</h2>
+				<p>Type an NPC name in <strong>Search tables</strong>, or choose <strong>Void Chest</strong>.</p>
+				<p>Click the result you want. A table marked <strong>Edit</strong> can be changed. A table marked <strong>Locked</strong> can only be viewed.</p>
+				<figure class="guide-picture">
+					<a href="assets/loot-editor-guide/01-choose-table.jpg" target="_blank" rel="noopener">
+						<img src="assets/loot-editor-guide/01-choose-table.jpg" alt="The loot editor with the table list on the left and Void Chest selected.">
+					</a>
+					<figcaption>Use the list on the left. Tap the picture to make it bigger.</figcaption>
+				</figure>
+			</div>
+		</section>
+
+		<section class="guide-step" aria-labelledby="guide-step-2">
+			<div class="guide-step-number" aria-hidden="true">2</div>
+			<div class="guide-step-content">
+				<h2 id="guide-step-2">Change a drop</h2>
+				<p>Click a number, delete it, and type the new number.</p>
+				<div class="guide-terms">
+					<div><strong>Amount</strong><span>How many of the item the player gets.</span></div>
+					<div><strong>Weight</strong><span>How often it drops. A bigger weight means a better chance.</span></div>
+				</div>
+				<p>The percentage beside the item shows its chance. Your change saves in this browser automatically.</p>
+				<div class="guide-rule">
+					<strong>Watch the Roll weight box.</strong>
+					<span>For normal NPCs, unused weight becomes Nothing. For the Void Chest, the total must stay exact and Unassigned weight must be 0.</span>
+				</div>
+				<figure class="guide-picture">
+					<a href="assets/loot-editor-guide/02-edit-drop.jpg" target="_blank" rel="noopener">
+						<img src="assets/loot-editor-guide/02-edit-drop.jpg" alt="An NPC drop row with editable Amount and Weight number boxes.">
+					</a>
+					<figcaption>Change Amount for quantity, or Weight for drop chance.</figcaption>
+				</figure>
+			</div>
+		</section>
+
+		<section class="guide-step" aria-labelledby="guide-step-3">
+			<div class="guide-step-number" aria-hidden="true">3</div>
+			<div class="guide-step-content">
+				<h2 id="guide-step-3">Add an item if you need one</h2>
+				<p>Click <strong>Add item</strong>. Type the item name, then click <strong>Add</strong> beside the correct item.</p>
+				<p>The new item starts with small numbers. Set its Amount and Weight after you add it. Use <strong>Remove</strong> if you do not want a drop anymore.</p>
+				<figure class="guide-picture">
+					<a href="assets/loot-editor-guide/03-add-item.jpg" target="_blank" rel="noopener">
+						<img src="assets/loot-editor-guide/03-add-item.jpg" alt="The Add an existing item window showing a search for dragonstone and Add buttons.">
+					</a>
+					<figcaption>Search for the item, then click Add beside the right one.</figcaption>
+				</figure>
+			</div>
+		</section>
+
+		<section class="guide-step" aria-labelledby="guide-step-4">
+			<div class="guide-step-number" aria-hidden="true">4</div>
+			<div class="guide-step-content">
+				<h2 id="guide-step-4">Export and send your changes</h2>
+				<p>Go to <strong>Finish your draft</strong>. Make sure <strong>Validation errors</strong> says <strong>0</strong>.</p>
+				<p>You can add a short note, then click <strong>Export changes</strong>. Your computer downloads a small <strong>.json</strong> file.</p>
+				<div class="guide-rule">
+					<strong>Do not open or edit that file.</strong>
+					<span>Send it to the server owner. If you are using Codex, attach it and write: “Please apply these loot changes.”</span>
+				</div>
+				<figure class="guide-picture">
+					<a href="assets/loot-editor-guide/04-export.jpg" target="_blank" rel="noopener">
+						<img src="assets/loot-editor-guide/04-export.jpg" alt="The Finish your draft area showing zero validation errors and the Export changes button.">
+					</a>
+					<figcaption>Check for 0 errors, then click Export changes.</figcaption>
+				</figure>
+			</div>
+		</section>
+
+		<section class="guide-help" aria-labelledby="guide-help-title">
+			<h2 id="guide-help-title">If you make a mistake</h2>
+			<ul>
+				<li>Click <strong>Undo</strong> to undo your last change.</li>
+				<li>Click <strong>Reset table</strong> to put the open table back to normal.</li>
+				<li>If a red error appears, fix the numbers before you export.</li>
+			</ul>
+		</section>
+
+		<footer class="guide-footer">
+			<p>That is all you need to do.</p>
+			<a class="button gold" href="/loot-editor">Open the loot editor</a>
+		</footer>
+	</main>
+</body>
+</html>

@@ -7,12 +7,21 @@ CREATE TABLE IF NOT EXISTS web_accounts (
     email_display VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255),
     status VARCHAR(24) NOT NULL DEFAULT 'active',
+    source VARCHAR(64) NOT NULL DEFAULT 'portal',
+    synthetic_email TINYINT(1) NOT NULL DEFAULT 0,
+    requires_email_upgrade TINYINT(1) NOT NULL DEFAULT 0,
+    native_player_id BIGINT UNSIGNED,
+    email_verified_at DATETIME(3),
+    password_changed_at DATETIME(3),
+    legacy_claimed_at DATETIME(3),
     subscription_expires_at BIGINT NOT NULL DEFAULT 0,
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     PRIMARY KEY (id),
     UNIQUE KEY uq_web_accounts_email (email_canonical),
-    KEY idx_web_accounts_status (status)
+    KEY idx_web_accounts_status (status),
+    CONSTRAINT chk_web_accounts_synthetic_email CHECK (synthetic_email IN (0, 1)),
+    CONSTRAINT chk_web_accounts_requires_email_upgrade CHECK (requires_email_upgrade IN (0, 1))
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS web_account_identities (
@@ -69,6 +78,57 @@ CREATE TABLE IF NOT EXISTS web_recovery_codes (
     CONSTRAINT fk_web_recovery_codes_account
         FOREIGN KEY (account_id) REFERENCES web_accounts (id) ON DELETE CASCADE,
     CONSTRAINT chk_web_recovery_codes_status CHECK (status IN ('active', 'used', 'revoked'))
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS web_password_reset_tokens (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    account_id BIGINT UNSIGNED NOT NULL,
+    token_hash VARCHAR(128) NOT NULL,
+    request_ip_hash VARCHAR(128),
+    identifier_type VARCHAR(24) NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'pending',
+    expires_at BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    used_at DATETIME(3),
+    revoked_at DATETIME(3),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_web_password_reset_tokens_hash (token_hash),
+    KEY idx_web_password_reset_tokens_account (account_id, status),
+    KEY idx_web_password_reset_tokens_expiry (status, expires_at),
+    CONSTRAINT fk_web_password_reset_tokens_account
+        FOREIGN KEY (account_id) REFERENCES web_accounts (id) ON DELETE CASCADE,
+    CONSTRAINT chk_web_password_reset_tokens_identifier CHECK (identifier_type IN ('email', 'username')),
+    CONSTRAINT chk_web_password_reset_tokens_status CHECK (status IN ('pending', 'used', 'revoked', 'expired'))
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS web_legacy_account_claims (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    account_id BIGINT UNSIGNED NOT NULL,
+    character_id BIGINT UNSIGNED NOT NULL,
+    player_id BIGINT UNSIGNED NOT NULL,
+    normalized_username VARCHAR(12) NOT NULL,
+    target_email_canonical VARCHAR(255) NOT NULL,
+    target_email_display VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255),
+    credential_fingerprint VARCHAR(128),
+    ownership_marker VARCHAR(64) NOT NULL,
+    token_hash VARCHAR(128) NOT NULL,
+    request_ip_hash VARCHAR(128),
+    status VARCHAR(24) NOT NULL DEFAULT 'pending',
+    expires_at BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    used_at DATETIME(3),
+    revoked_at DATETIME(3),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_web_legacy_account_claims_token (token_hash),
+    KEY idx_web_legacy_account_claims_account (account_id, status),
+    KEY idx_web_legacy_account_claims_email (target_email_canonical, status),
+    KEY idx_web_legacy_account_claims_expiry (status, expires_at),
+    CONSTRAINT fk_web_legacy_account_claims_account
+        FOREIGN KEY (account_id) REFERENCES web_accounts (id) ON DELETE CASCADE,
+    CONSTRAINT chk_web_legacy_account_claims_status CHECK (status IN ('pending', 'used', 'revoked', 'expired'))
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS web_account_characters (

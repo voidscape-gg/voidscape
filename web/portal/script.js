@@ -64,6 +64,13 @@
 	var characterMessage = document.getElementById("character-message");
 	var queueCharacter = document.getElementById("queue-character");
 	var deleteCharacter = ensureDeleteCharacterButton();
+	var showGamePasswordReset = document.getElementById("show-game-password-reset");
+	var gamePasswordForm = document.getElementById("game-password-form");
+	var gamePasswordAccount = document.getElementById("game-password-account");
+	var gamePasswordNew = document.getElementById("game-password-new");
+	var gamePasswordConfirm = document.getElementById("game-password-confirm");
+	var gamePasswordSubmit = document.getElementById("game-password-submit");
+	var cancelGamePasswordReset = document.getElementById("cancel-game-password-reset");
 	var characterName = document.getElementById("character-name");
 	var characterPassword = document.getElementById("character-password");
 	var snapshotName = document.getElementById("snapshot-name");
@@ -176,14 +183,50 @@
 	var dashboardCharacterCount = document.getElementById("dashboard-character-count");
 	var dashboardCardState = document.getElementById("dashboard-card-state");
 	var dashboardSecurityState = document.getElementById("dashboard-security-state");
+	var accountClaimNotice = document.getElementById("account-claim-notice");
+	var accountClaimContinue = document.getElementById("account-claim-continue");
 	var portalAuthForm = document.getElementById("portal-auth-form");
-	var portalAuthUsernameRow = document.getElementById("portal-auth-username-row");
-	var portalAuthUsername = document.getElementById("portal-auth-username");
 	var portalAuthEmail = document.getElementById("portal-auth-email");
 	var portalAuthPassword = document.getElementById("portal-auth-password");
 	var portalAuthSubmit = document.getElementById("portal-auth-submit");
 	var portalAuthMessage = document.getElementById("portal-auth-message");
-	var portalAuthModeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-portal-auth-mode]"));
+	var portalAuthLoading = document.getElementById("portal-auth-loading");
+	var portalAuthPanels = Array.prototype.slice.call(document.querySelectorAll("[data-auth-panel]"));
+	var portalAuthShowButtons = Array.prototype.slice.call(document.querySelectorAll("[data-auth-show]"));
+	var emailVerificationForm = document.getElementById("email-verification-form");
+	var emailVerificationSubmit = document.getElementById("email-verification-submit");
+	var emailVerificationMessage = document.getElementById("email-verification-message");
+	var verificationResendForm = document.getElementById("verification-resend-form");
+	var verificationResendEmail = document.getElementById("verification-resend-email");
+	var verificationResendSubmit = document.getElementById("verification-resend-submit");
+	var verificationResendMessage = document.getElementById("verification-resend-message");
+	var passwordResetRequestForm = document.getElementById("password-reset-request-form");
+	var passwordResetIdentifier = document.getElementById("password-reset-identifier");
+	var passwordResetRequestSubmit = document.getElementById("password-reset-request-submit");
+	var passwordResetRequestMessage = document.getElementById("password-reset-request-message");
+	var passwordResetForm = document.getElementById("password-reset-form");
+	var passwordResetNew = document.getElementById("password-reset-new");
+	var passwordResetConfirm = document.getElementById("password-reset-confirm");
+	var passwordResetSubmit = document.getElementById("password-reset-submit");
+	var passwordResetMessage = document.getElementById("password-reset-message");
+	var legacyClaimForm = document.getElementById("legacy-claim-form");
+	var legacyClaimUsername = document.getElementById("legacy-claim-username");
+	var legacyClaimGamePassword = document.getElementById("legacy-claim-game-password");
+	var legacyClaimEmail = document.getElementById("legacy-claim-email");
+	var legacyClaimPassword = document.getElementById("legacy-claim-password");
+	var legacyClaimPasswordConfirm = document.getElementById("legacy-claim-password-confirm");
+	var legacyClaimSubmit = document.getElementById("legacy-claim-submit");
+	var legacyClaimMessage = document.getElementById("legacy-claim-message");
+	var legacyClaimConfirmForm = document.getElementById("legacy-claim-confirm-form");
+	var legacyClaimConfirmSubmit = document.getElementById("legacy-claim-confirm-submit");
+	var legacyClaimConfirmMessage = document.getElementById("legacy-claim-confirm-message");
+	var signedOutRecoveryCodeForm = document.getElementById("recovery-code-form");
+	var recoveryCodeEmail = document.getElementById("recovery-code-email");
+	var recoveryCodeValue = document.getElementById("recovery-code-value");
+	var recoveryCodePassword = document.getElementById("recovery-code-password");
+	var recoveryCodeConfirm = document.getElementById("recovery-code-confirm");
+	var recoveryCodeSubmit = document.getElementById("recovery-code-submit");
+	var recoveryCodeMessage = document.getElementById("recovery-code-message");
 	var accountLogout = ensureAccountLogoutButton();
 	var securityScore = document.getElementById("security-score");
 	var securityEmailCheck = document.getElementById("security-email-check");
@@ -191,6 +234,9 @@
 	var securityPasswordCheck = document.getElementById("security-password-check");
 	var securitySessionCheck = document.getElementById("security-session-check");
 	var generateRecovery = document.getElementById("generate-recovery");
+	var recoveryCodeRotationForm = document.getElementById("recovery-code-rotation-form");
+	var recoveryCurrentPasswordRow = document.getElementById("recovery-current-password-row");
+	var recoveryCurrentPassword = document.getElementById("recovery-current-password");
 	var recoveryCodes = document.getElementById("recovery-codes");
 	var passwordForm = document.getElementById("password-form");
 	var currentPassword = document.getElementById("current-password");
@@ -225,6 +271,14 @@
 	var adminCharacterTable = document.getElementById("admin-character-table");
 	var adminSignalTable = document.getElementById("admin-signal-table");
 	var adminAuditTable = document.getElementById("admin-audit-table");
+	var adminPresenceActive = document.getElementById("admin-presence-active");
+	var adminPresenceActiveNote = document.getElementById("admin-presence-active-note");
+	var adminPresenceRecent = document.getElementById("admin-presence-recent");
+	var adminPresenceVisible = document.getElementById("admin-presence-visible");
+	var adminPresenceUpdated = document.getElementById("admin-presence-updated");
+	var adminPresenceStatus = document.getElementById("admin-presence-status");
+	var adminPresenceRefresh = document.getElementById("admin-presence-refresh");
+	var adminPresenceTable = document.getElementById("admin-presence-table");
 	var betaHub = document.getElementById("beta-hub");
 	var betaDiscordName = document.getElementById("beta-discord-name");
 	var betaCode = document.getElementById("beta-code");
@@ -247,9 +301,13 @@
 	var sessionKey = "voidscape.portal.sessionToken";
 	var adminTokenKey = "voidscape.portal.adminToken";
 	var sessionToken = localStorage.getItem(sessionKey) || "";
+	var authStatus = sessionToken ? "checking" : "signed-out";
 	var adminToken = localStorage.getItem(adminTokenKey) || "";
 	var accountMode = "reserve";
-	var portalAuthMode = "register";
+	var portalAuthMode = initialPortalAuthMode();
+	var emailVerificationToken = emailVerificationTokenFromLocation();
+	var passwordResetToken = passwordResetTokenFromLocation();
+	var legacyAccountClaimToken = legacyAccountClaimTokenFromLocation();
 	var publicModeActive = false;
 	var launchSignupModeActive = false;
 	var publicModeViews = {
@@ -266,12 +324,15 @@
 	var activeReferralCode = captureReferralFromLocation();
 	var pendingLinkChallenge = null;
 	var adminAccount = null;
+	var adminPresenceTimer = 0;
+	var adminPresenceInFlight = false;
 	var betaResources = null;
 	var betaAccount = null;
 	var betaDownloadRows = [];
-	var launchCountdownState = null;
-	var launchCountdownTimer = 0;
-	var launchOpenActive = false;
+		var launchCountdownState = null;
+		var launchCountdownTimer = 0;
+		var launchOpenActive = false;
+		var launchStarterCardOpen = true;
 	var googleClientId = "";
 	var googleNonce = "";
 	var googleButtonRendered = false;
@@ -283,6 +344,12 @@
 		activity: "account",
 		public: "account"
 	};
+	var protectedAccountViews = {
+		dashboard: true,
+		characters: true,
+		subscription: true,
+		security: true
+	};
 
 	var defaultCharacterKit = {
 		path: "Game login",
@@ -292,8 +359,8 @@
 		appearanceData: { hairColour: 2, topColour: 4, trouserColour: 8, skinColour: 1 }
 	};
 
-	var characters = loadRoster();
-	var selectedCharacter = localStorage.getItem(selectedKey) || (characters[0] && characters[0].name) || "";
+	var characters = [];
+	var selectedCharacter = "";
 	if (adminTokenInput) adminTokenInput.value = adminToken;
 
 	var ranks = [
@@ -323,11 +390,9 @@
 		["kill", "GraveTax escaped with 19 lobsters and a skull.", "1h"]
 	];
 
+	setAuthStatus(authStatus);
 	renderAll();
-	activateView((window.location.hash || "#account").replace("#", "") || "account");
-	window.setTimeout(function () {
-		activateView((window.location.hash || "#account").replace("#", "") || "account");
-	}, 0);
+	activateView("account");
 	hydrateFromApi();
 
 	viewLinks.forEach(function (link) {
@@ -379,7 +444,18 @@
 	setupFunnelTracking();
 
 	window.addEventListener("hashchange", function () {
-		activateView((window.location.hash || "#account").replace("#", "") || "account");
+		if (authStatus !== "authenticated") return;
+		activateView((window.location.hash || "#dashboard").replace("#", "") || "dashboard");
+	});
+
+	window.addEventListener("storage", function (event) {
+		if (event.key !== sessionKey) return;
+		if (!event.newValue) {
+			clearSession("You signed out in another tab.");
+			if (window.location.protocol !== "file:") window.location.replace("/");
+			return;
+		}
+		if (event.newValue !== sessionToken) window.location.reload();
 	});
 
 	window.addEventListener("focus", function () {
@@ -406,7 +482,7 @@
 			}
 			var gamePassword = characterPassword ? characterPassword.value : "";
 			if (!isGamePassword(gamePassword, 4)) {
-				characterMessage.textContent = "Game password must be 4-20 letters and numbers.";
+				characterMessage.textContent = gamePasswordRequirement(4, "Game password");
 				if (characterPassword) characterPassword.focus();
 				return;
 			}
@@ -442,8 +518,10 @@
 					characterMessage.textContent = error.code === "character_limit_reached"
 						? "Roster is full. Web accounts are capped at 10 characters."
 						: "That character name is already taken.";
+				} else if (error.status === 429) {
+					characterMessage.textContent = "Too many recent character creations. Wait a little and try again.";
 				} else if (error.status === 400 && error.code === "invalid_game_password") {
-					characterMessage.textContent = "Enter a 4-20 letter and number game password for this character.";
+					characterMessage.textContent = gamePasswordRequirement(4, "Game password");
 					if (characterPassword) characterPassword.focus();
 				} else if (error.status === 404 && error.code === "not_available_during_prelaunch") {
 					characterMessage.textContent = "Public prelaunch mode only accepts reservations. Character creation opens with the account portal.";
@@ -479,8 +557,13 @@
 
 	if (accountLogout) {
 		accountLogout.addEventListener("click", function () {
-			clearSession("Signed out.");
-			activateView("dashboard");
+			logoutToLanding();
+		});
+	}
+
+	if (accountClaimContinue) {
+		accountClaimContinue.addEventListener("click", function () {
+			logoutForLegacyClaim();
 		});
 	}
 
@@ -517,16 +600,22 @@
 				activateView("dashboard");
 				return;
 			}
-			if (!window.confirm("Delete " + character.name + "? This cannot be undone.")) return;
+			var deletesGameLogin = isPortalCreatedCharacter(character);
+			var confirmCopy = deletesGameLogin
+				? "Delete " + character.name + "? This removes the game login and cannot be undone."
+				: "Remove " + character.name + " from this account manager? The game save stays in OpenRSC.";
+			if (!window.confirm(confirmCopy)) return;
 			deleteCharacter.disabled = true;
 			if (queueCharacter) queueCharacter.disabled = true;
-			characterMessage.textContent = "Deleting " + character.name + "...";
+			characterMessage.textContent = (deletesGameLogin ? "Deleting " : "Removing ") + character.name + "...";
 			try {
 				var state = await apiRequest("/api/characters/" + encodeURIComponent(character.id), {
 					method: "DELETE"
 				});
 				applyAccountState(state);
-				characterMessage.textContent = character.name + " deleted.";
+				characterMessage.textContent = deletesGameLogin
+					? character.name + " deleted."
+					: character.name + " removed from this account manager.";
 			} catch (error) {
 				if (error.status === 401) {
 					clearSession();
@@ -536,11 +625,84 @@
 					await refreshCharactersFromApi(true);
 				} else if (error.status === 409 && error.code === "character_online") {
 					characterMessage.textContent = "Log out of that character in-game before deleting it.";
+				} else if (error.status === 409 && (error.code === "character_link_mismatch" || error.code === "character_link_missing" || error.code === "character_delete_conflict")) {
+					characterMessage.textContent = "Character link changed in the game database. Refresh and try again.";
+				} else if (error.status === 503 && error.code === "openrsc_db_not_configured") {
+					characterMessage.textContent = "Game database is unavailable, so this character was not deleted.";
 				} else {
 					characterMessage.textContent = "Character delete failed: " + (error.code || "api_error") + ".";
 				}
 			} finally {
 				updateCharacterControls();
+			}
+		});
+	}
+
+	if (showGamePasswordReset) {
+		showGamePasswordReset.addEventListener("click", function () {
+			var character = selectedRosterCharacter();
+			if (!canResetGamePassword(character)) {
+				characterMessage.textContent = "Game-password reset is available for characters created through this account.";
+				return;
+			}
+			gamePasswordForm.hidden = false;
+			characterMessage.textContent = "Resetting the game password for " + character.name + ".";
+			if (gamePasswordAccount) gamePasswordAccount.focus();
+		});
+	}
+
+	if (cancelGamePasswordReset) {
+		cancelGamePasswordReset.addEventListener("click", function () {
+			closeGamePasswordReset();
+			characterMessage.textContent = "Game password reset cancelled.";
+		});
+	}
+
+	if (gamePasswordForm) {
+		gamePasswordForm.addEventListener("submit", async function (event) {
+			event.preventDefault();
+			var character = selectedRosterCharacter();
+			var nextPassword = gamePasswordNew ? gamePasswordNew.value : "";
+			var confirmed = gamePasswordConfirm ? gamePasswordConfirm.value : "";
+			if (!sessionToken || !canResetGamePassword(character)) {
+				characterMessage.textContent = "Select a linked character and sign in again.";
+				return;
+			}
+			if (!isGamePassword(nextPassword, 4)) {
+				characterMessage.textContent = gamePasswordRequirement(4, "Game password");
+				gamePasswordNew.focus();
+				return;
+			}
+			if (nextPassword !== confirmed) {
+				characterMessage.textContent = "Game passwords do not match.";
+				gamePasswordConfirm.focus();
+				return;
+			}
+			gamePasswordSubmit.disabled = true;
+			characterMessage.textContent = "Updating " + character.name + "...";
+			try {
+				await apiRequest("/api/characters/" + encodeURIComponent(character.id) + "/game-password", {
+					method: "POST",
+					body: {
+						currentPassword: gamePasswordAccount ? gamePasswordAccount.value : "",
+						newPassword: nextPassword
+					}
+				});
+				closeGamePasswordReset();
+				characterMessage.textContent = character.name + " game password updated.";
+			} catch (error) {
+				if (error.status === 401 && !["invalid_current_password", "reauthentication_required"].includes(error.code)) clearSession();
+				characterMessage.textContent = error.code === "invalid_current_password"
+					? "Account password did not match."
+					: error.code === "reauthentication_required"
+						? "Sign in again before changing a game password."
+					: error.status === 429
+							? "Too many game-password changes. Wait before trying again."
+							: error.code === "character_online"
+								? "Log out of that character in-game before changing its password."
+							: "Game password update failed: " + (error.code || "api_error") + ".";
+			} finally {
+				gamePasswordSubmit.disabled = false;
 			}
 		});
 	}
@@ -698,22 +860,36 @@
 		});
 	}
 
-	if (generateRecovery) {
-		generateRecovery.addEventListener("click", async function () {
+	if (recoveryCodeRotationForm) {
+		recoveryCodeRotationForm.addEventListener("submit", async function (event) {
+			event.preventDefault();
 			if (!sessionToken) {
 				securityMessage.textContent = "Sign in before generating recovery codes.";
+				return;
+			}
+			if (recoveryCurrentPasswordRow && !recoveryCurrentPasswordRow.hidden && !(recoveryCurrentPassword && recoveryCurrentPassword.value)) {
+				securityMessage.textContent = "Confirm your account password before rotating recovery codes.";
+				recoveryCurrentPassword.focus();
 				return;
 			}
 			generateRecovery.disabled = true;
 			securityMessage.textContent = "Generating recovery codes...";
 			try {
-				var result = await apiRequest("/api/security/recovery-codes", { method: "POST" });
+				var result = await apiRequest("/api/security/recovery-codes", {
+					method: "POST",
+					body: { currentPassword: recoveryCurrentPassword ? recoveryCurrentPassword.value : "" }
+				});
 				applyAccountState(result);
 				renderRecoveryCodes(result.codes || []);
+				if (recoveryCurrentPassword) recoveryCurrentPassword.value = "";
 				securityMessage.textContent = "Recovery codes generated. Store them before leaving this page.";
 			} catch (error) {
-				if (error.status === 401) clearSession();
-				securityMessage.textContent = "Recovery code rotation failed: " + error.code + ".";
+				if (error.status === 401 && !["invalid_current_password", "reauthentication_required"].includes(error.code)) clearSession();
+				securityMessage.textContent = error.code === "invalid_current_password"
+					? "Account password did not match."
+					: error.code === "reauthentication_required"
+						? "Sign in again before rotating recovery codes."
+						: "Recovery code rotation failed: " + error.code + ".";
 			} finally {
 				generateRecovery.disabled = false;
 			}
@@ -781,7 +957,16 @@
 	}
 
 	if (adminTokenInput) {
-		adminTokenInput.addEventListener("change", saveAdminTokenFromInput);
+		adminTokenInput.addEventListener("change", function () {
+			saveAdminTokenFromInput();
+			updateAdminPresencePolling();
+		});
+	}
+
+	if (adminPresenceRefresh) {
+		adminPresenceRefresh.addEventListener("click", function () {
+			refreshAdminPresence();
+		});
 	}
 
 	if (adminApplyStatus) {
@@ -877,16 +1062,71 @@
 	}
 
 	if (portalAuthForm) {
-		portalAuthModeButtons.forEach(function (button) {
-			button.addEventListener("click", function () {
-				setPortalAuthMode(button.getAttribute("data-portal-auth-mode") || "register");
-			});
-		});
 		portalAuthForm.addEventListener("submit", async function (event) {
 			event.preventDefault();
 			handlePortalAuth();
 		});
-		setPortalAuthMode(portalAuthMode);
+	}
+
+	portalAuthShowButtons.forEach(function (button) {
+		button.addEventListener("click", function () {
+			var nextMode = button.getAttribute("data-auth-show") || "login";
+			if (nextMode === "claim" && legacyClaimUsername && !legacyClaimUsername.value && passwordResetIdentifier) {
+				var recoveryIdentifier = passwordResetIdentifier.value.trim();
+				if (recoveryIdentifier && !recoveryIdentifier.includes("@")) legacyClaimUsername.value = recoveryIdentifier;
+			}
+			if (portalAuthMode === "claim-confirm" && nextMode !== "claim-confirm") legacyAccountClaimToken = "";
+			setPortalAuthMode(nextMode);
+		});
+	});
+
+	if (passwordResetRequestForm) {
+		passwordResetRequestForm.addEventListener("submit", function (event) {
+			event.preventDefault();
+			handlePasswordResetRequest();
+		});
+	}
+
+	if (emailVerificationForm) {
+		emailVerificationForm.addEventListener("submit", function (event) {
+			event.preventDefault();
+			handleEmailVerification();
+		});
+	}
+
+	if (verificationResendForm) {
+		verificationResendForm.addEventListener("submit", function (event) {
+			event.preventDefault();
+			handleVerificationResend();
+		});
+	}
+
+	if (passwordResetForm) {
+		passwordResetForm.addEventListener("submit", function (event) {
+			event.preventDefault();
+			handlePasswordResetComplete();
+		});
+	}
+
+	if (legacyClaimForm) {
+		legacyClaimForm.addEventListener("submit", function (event) {
+			event.preventDefault();
+			handleLegacyAccountClaimRequest();
+		});
+	}
+
+	if (legacyClaimConfirmForm) {
+		legacyClaimConfirmForm.addEventListener("submit", function (event) {
+			event.preventDefault();
+			handleLegacyAccountClaimComplete();
+		});
+	}
+
+	if (signedOutRecoveryCodeForm) {
+		signedOutRecoveryCodeForm.addEventListener("submit", function (event) {
+			event.preventDefault();
+			handleRecoveryCodeReset();
+		});
 	}
 
 	function handlePrelaunchAuthCta() {
@@ -917,20 +1157,19 @@
 	}
 
 	function setPortalAuthMode(mode) {
-		portalAuthMode = mode === "login" ? "login" : "register";
-		portalAuthModeButtons.forEach(function (button) {
-			button.classList.toggle("is-active", button.getAttribute("data-portal-auth-mode") === portalAuthMode);
+		portalAuthMode = ["login", "verify", "resend", "request", "reset", "code", "claim", "claim-confirm"].includes(mode) ? mode : "login";
+		if (portalAuthMode === "verify" && !emailVerificationToken) portalAuthMode = "login";
+		if (portalAuthMode === "reset" && !passwordResetToken) portalAuthMode = "request";
+		if (portalAuthMode === "claim-confirm" && !legacyAccountClaimToken) portalAuthMode = "claim";
+		portalAuthPanels.forEach(function (panel) {
+			panel.hidden = panel.getAttribute("data-auth-panel") !== portalAuthMode;
 		});
-		if (portalAuthUsernameRow) portalAuthUsernameRow.hidden = portalAuthMode === "login";
-		if (portalAuthPassword) {
-			portalAuthPassword.setAttribute("autocomplete", portalAuthMode === "login" ? "current-password" : "new-password");
-		}
-		if (portalAuthSubmit) portalAuthSubmit.textContent = portalAuthMode === "login" ? "Sign in" : "Create portal account";
-		if (portalAuthMessage) {
-			portalAuthMessage.textContent = portalAuthMode === "login"
-				? "Sign in to manage your roster, subscription status, and security settings."
-				: "Create the web account first. Game logins still use their own 4-20 character password.";
-		}
+		if (authStatus === "signed-out") updatePortalAuthUrl(portalAuthMode);
+		window.setTimeout(function () {
+			var panel = portalAuthPanels.find(function (entry) { return !entry.hidden; });
+			var input = panel && panel.querySelector("input");
+			if (input) input.focus();
+		}, 0);
 	}
 
 	async function handlePortalAuth() {
@@ -940,12 +1179,6 @@
 		}
 		var email = (portalAuthEmail && portalAuthEmail.value || "").trim();
 		var password = portalAuthPassword ? portalAuthPassword.value : "";
-		var username = normalizeName(portalAuthUsername && portalAuthUsername.value || "");
-		if (portalAuthMode === "register" && !/^[a-zA-Z0-9 ]{2,12}$/.test(username)) {
-			if (portalAuthMessage) portalAuthMessage.textContent = "Choose a 2-12 character username.";
-			if (portalAuthUsername) portalAuthUsername.focus();
-			return;
-		}
 		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
 			if (portalAuthMessage) portalAuthMessage.textContent = "Enter a valid email address.";
 			if (portalAuthEmail) portalAuthEmail.focus();
@@ -958,47 +1191,298 @@
 		}
 
 		if (portalAuthSubmit) portalAuthSubmit.disabled = true;
-		if (portalAuthMessage) portalAuthMessage.textContent = portalAuthMode === "login" ? "Signing in..." : "Creating portal account...";
+		if (portalAuthMessage) portalAuthMessage.textContent = "Signing in...";
 		try {
-			var path = portalAuthMode === "login" ? "/api/accounts/login" : "/api/accounts/register";
-			var body = portalAuthMode === "login"
-				? { email: email, password: password }
-				: { username: username, email: email, password: password };
-			var state = await apiRequest(path, {
+			var state = await apiRequest("/api/accounts/login", {
 				method: "POST",
-				body: body
+				body: { email: email, password: password },
+				noAuth: true,
+				preserveSessionOn401: true
 			});
 			applyAccountState(state);
+			setAuthStatus("authenticated");
 			if (portalAuthPassword) portalAuthPassword.value = "";
-			if (portalAuthMessage) {
-				portalAuthMessage.textContent = portalAuthMode === "login"
-					? "Signed in. Character tools are ready."
-					: "Portal account created. Add game logins from the Characters page.";
-			}
-			if (portalAuthForm) portalAuthForm.classList.add("is-authenticated");
+			cleanPortalDashboardUrl();
+			activateView("dashboard");
 		} catch (error) {
 			if (error.status === 404 && error.code === "not_available_during_prelaunch") {
 				if (portalAuthMessage) portalAuthMessage.textContent = "Public prelaunch mode only accepts reservations. Full account tools stay closed until release.";
-			} else if (error.status === 409 && error.code === "account_exists") {
-				setPortalAuthMode("login");
-				if (portalAuthMessage) portalAuthMessage.textContent = "That email already has an account. Sign in instead.";
-			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved")) {
-				if (portalAuthMessage) portalAuthMessage.textContent = "That username is already reserved.";
 			} else if (error.status === 401) {
 				if (portalAuthMessage) portalAuthMessage.textContent = "Email or password did not match.";
+			} else if (error.status === 409 && error.code === "already_signed_in") {
+				window.location.reload();
 			} else {
-				if (portalAuthMessage) portalAuthMessage.textContent = "Portal account request failed: " + (error.code || "api_error") + ".";
+				if (portalAuthMessage) portalAuthMessage.textContent = "Sign in failed: " + (error.code || "api_error") + ".";
 			}
 		} finally {
 			if (portalAuthSubmit) portalAuthSubmit.disabled = false;
 		}
 	}
 
+	async function handlePasswordResetRequest() {
+		var identifier = passwordResetIdentifier ? passwordResetIdentifier.value.trim() : "";
+		if (!identifier) {
+			passwordResetRequestMessage.textContent = "Enter your account email or a character username.";
+			passwordResetIdentifier.focus();
+			return;
+		}
+		passwordResetRequestSubmit.disabled = true;
+		passwordResetRequestMessage.textContent = "Sending recovery email...";
+		try {
+			var result = await apiRequest("/api/accounts/password-reset/request", {
+				method: "POST",
+				body: { identifier: identifier },
+				noAuth: true,
+				preserveSessionOn401: true
+			});
+			passwordResetRequestMessage.textContent = result.maskedEmail
+				? "Recovery email sent to " + result.maskedEmail + "."
+				: identifier.includes("@")
+					? "If that account exists and has a verified email, a recovery message is on its way."
+					: "No recovery email was sent. Older characters can be claimed with their current game password.";
+		} catch (error) {
+			passwordResetRequestMessage.textContent = error.status === 429
+				? "Too many recovery requests. Wait before trying again."
+				: "Recovery email is unavailable right now. Try again shortly.";
+		} finally {
+			passwordResetRequestSubmit.disabled = false;
+		}
+	}
+
+	async function handleEmailVerification() {
+		if (!emailVerificationToken) {
+			emailVerificationMessage.textContent = "This verification link is missing or invalid.";
+			return;
+		}
+		emailVerificationSubmit.disabled = true;
+		emailVerificationMessage.textContent = "Verifying email and creating your account...";
+		try {
+			var state = await apiRequest("/api/accounts/verify-email", {
+				method: "POST",
+				body: { token: emailVerificationToken },
+				noAuth: true,
+				preserveSessionOn401: true
+			});
+			emailVerificationToken = "";
+			applyAccountState(state);
+			setAuthStatus("authenticated");
+			cleanPortalDashboardUrl();
+			activateView("dashboard");
+		} catch (error) {
+			emailVerificationMessage.textContent = error.status === 410
+				? "That verification link expired. Create the account again to request a new one."
+				: "That verification link is invalid or has already been used.";
+		} finally {
+			emailVerificationSubmit.disabled = false;
+		}
+	}
+
+	async function handleVerificationResend() {
+		var email = verificationResendEmail ? verificationResendEmail.value.trim() : "";
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			verificationResendMessage.textContent = "Enter the email used for signup.";
+			verificationResendEmail.focus();
+			return;
+		}
+		verificationResendSubmit.disabled = true;
+		verificationResendMessage.textContent = "Requesting another verification email...";
+		try {
+			await apiRequest("/api/accounts/verify-email/resend", {
+				method: "POST",
+				body: { email: email },
+				noAuth: true,
+				preserveSessionOn401: true
+			});
+			verificationResendMessage.textContent = "If the signup is still pending, another verification email is on its way.";
+		} catch (error) {
+			verificationResendMessage.textContent = error.status === 429
+				? "Too many recent email requests. Wait a little and try again."
+				: "Verification email could not be requested right now. Try again shortly.";
+		} finally {
+			verificationResendSubmit.disabled = false;
+		}
+	}
+
+	async function handlePasswordResetComplete() {
+		var nextPassword = passwordResetNew ? passwordResetNew.value : "";
+		var confirmed = passwordResetConfirm ? passwordResetConfirm.value : "";
+		if (!passwordResetToken) {
+			passwordResetMessage.textContent = "This recovery link is missing or invalid. Request another one.";
+			return;
+		}
+		if (nextPassword.length < 8) {
+			passwordResetMessage.textContent = "New password must be at least 8 characters.";
+			passwordResetNew.focus();
+			return;
+		}
+		if (nextPassword !== confirmed) {
+			passwordResetMessage.textContent = "Passwords do not match.";
+			passwordResetConfirm.focus();
+			return;
+		}
+		passwordResetSubmit.disabled = true;
+		passwordResetMessage.textContent = "Resetting password...";
+		try {
+			await apiRequest("/api/accounts/password-reset/complete", {
+				method: "POST",
+				body: { token: passwordResetToken, newPassword: nextPassword },
+				noAuth: true,
+				preserveSessionOn401: true
+			});
+			passwordResetToken = "";
+			passwordResetNew.value = "";
+			passwordResetConfirm.value = "";
+			setPortalAuthMode("login");
+			portalAuthMessage.textContent = "Password reset. Sign in with your new password.";
+		} catch (error) {
+			passwordResetMessage.textContent = error.status === 401
+				? "That recovery link is invalid or expired. Request another one."
+				: "Password reset failed: " + (error.code || "api_error") + ".";
+		} finally {
+			passwordResetSubmit.disabled = false;
+		}
+	}
+
+	async function handleLegacyAccountClaimRequest() {
+		var username = legacyClaimUsername ? legacyClaimUsername.value.trim().replace(/\s+/g, " ") : "";
+		var gamePassword = legacyClaimGamePassword ? legacyClaimGamePassword.value : "";
+		var email = legacyClaimEmail ? legacyClaimEmail.value.trim() : "";
+		var nextPassword = legacyClaimPassword ? legacyClaimPassword.value : "";
+		var confirmed = legacyClaimPasswordConfirm ? legacyClaimPasswordConfirm.value : "";
+		if (!/^[a-zA-Z0-9 ]{2,12}$/.test(username)) {
+			legacyClaimMessage.textContent = "Enter your 2-12 character username.";
+			legacyClaimUsername.focus();
+			return;
+		}
+		if (!gamePassword.trim() || gamePassword.trim().length > 20) {
+			legacyClaimMessage.textContent = "Enter your current game password.";
+			legacyClaimGamePassword.focus();
+			return;
+		}
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			legacyClaimMessage.textContent = "Enter a valid email address.";
+			legacyClaimEmail.focus();
+			return;
+		}
+		if (nextPassword.length < 8 || nextPassword.length > 128) {
+			legacyClaimMessage.textContent = "Website password must be 8-128 characters.";
+			legacyClaimPassword.focus();
+			return;
+		}
+		if (nextPassword !== confirmed) {
+			legacyClaimMessage.textContent = "Website passwords do not match.";
+			legacyClaimPasswordConfirm.focus();
+			return;
+		}
+
+		legacyClaimSubmit.disabled = true;
+		legacyClaimMessage.textContent = "Checking the character and sending verification...";
+		try {
+			await apiRequest("/api/accounts/legacy-claim/request", {
+				method: "POST",
+				body: {
+					username: username,
+					currentGamePassword: gamePassword,
+					email: email,
+					newPassword: nextPassword
+				},
+				noAuth: true,
+				preserveSessionOn401: true
+			});
+			legacyClaimGamePassword.value = "";
+			legacyClaimPassword.value = "";
+			legacyClaimPasswordConfirm.value = "";
+			legacyClaimMessage.textContent = "Verification email queued. Check your inbox to finish claiming your character.";
+		} catch (error) {
+			if (error.status === 400 && error.code === "invalid_game_password") {
+				legacyClaimMessage.textContent = "Enter the exact 4-20 character password used by the older game client.";
+			} else if (error.status === 401) {
+				legacyClaimMessage.textContent = "Character username or game password did not match an unclaimed older account.";
+			} else if (error.status === 409) {
+				legacyClaimMessage.textContent = "That email cannot be used for this claim. Sign in if it already belongs to you, or contact support.";
+			} else if (error.status === 429) {
+				legacyClaimMessage.textContent = "Too many claim attempts. Wait before trying again.";
+			} else {
+				legacyClaimMessage.textContent = "Account claim is unavailable right now. Try again shortly.";
+			}
+		} finally {
+			legacyClaimSubmit.disabled = false;
+		}
+	}
+
+	async function handleLegacyAccountClaimComplete() {
+		if (!legacyAccountClaimToken) {
+			legacyClaimConfirmMessage.textContent = "This account claim link is missing or invalid. Start again.";
+			return;
+		}
+		legacyClaimConfirmSubmit.disabled = true;
+		legacyClaimConfirmMessage.textContent = "Confirming your email and account...";
+		try {
+			await apiRequest("/api/accounts/legacy-claim/complete", {
+				method: "POST",
+				body: { token: legacyAccountClaimToken },
+				noAuth: true,
+				preserveSessionOn401: true
+			});
+			legacyAccountClaimToken = "";
+			setPortalAuthMode("login");
+			portalAuthMessage.textContent = "Account claimed. Sign in with your verified email and new website password.";
+		} catch (error) {
+			legacyClaimConfirmMessage.textContent = error.status === 401
+				? "That claim link is invalid, expired, or already used. Start again."
+				: error.status === 409
+					? "The account or requested email changed before confirmation. Start again or contact support."
+					: "Account claim failed: " + (error.code || "api_error") + ".";
+		} finally {
+			legacyClaimConfirmSubmit.disabled = false;
+		}
+	}
+
+	async function handleRecoveryCodeReset() {
+		var email = recoveryCodeEmail ? recoveryCodeEmail.value.trim() : "";
+		var code = recoveryCodeValue ? recoveryCodeValue.value.trim() : "";
+		var nextPassword = recoveryCodePassword ? recoveryCodePassword.value : "";
+		var confirmed = recoveryCodeConfirm ? recoveryCodeConfirm.value : "";
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !code) {
+			recoveryCodeMessage.textContent = "Enter your account email and recovery code.";
+			return;
+		}
+		if (nextPassword.length < 8 || nextPassword !== confirmed) {
+			recoveryCodeMessage.textContent = nextPassword.length < 8 ? "New password must be at least 8 characters." : "Passwords do not match.";
+			return;
+		}
+		recoveryCodeSubmit.disabled = true;
+		recoveryCodeMessage.textContent = "Checking recovery code...";
+		try {
+			await apiRequest("/api/accounts/recover-password", {
+				method: "POST",
+				body: { email: email, code: code, newPassword: nextPassword },
+				noAuth: true,
+				preserveSessionOn401: true
+			});
+			recoveryCodeValue.value = "";
+			recoveryCodePassword.value = "";
+			recoveryCodeConfirm.value = "";
+			if (portalAuthEmail) portalAuthEmail.value = email;
+			setPortalAuthMode("login");
+			portalAuthMessage.textContent = "Password reset. Sign in with your new password.";
+		} catch (error) {
+			recoveryCodeMessage.textContent = error.status === 401
+				? "Email or recovery code did not match."
+				: "Recovery failed: " + (error.code || "api_error") + ".";
+		} finally {
+			recoveryCodeSubmit.disabled = false;
+		}
+	}
+
 	function showPrelaunchClaimSuccess(state) {
 		if (!founderForm || !prelaunchSuccess) return;
-		var rewards = state && state.rewards ? state.rewards : null;
-		var hasCard = rewards && rewards.starterSubscriptionCards > 0;
-		if (!launchSignupModeActive && !hasCard && !(state && state.founder && state.founder.starterCardUnlocked)) return;
+			var rewards = state && state.rewards ? state.rewards : null;
+			var hasCard = rewards && rewards.starterSubscriptionCards > 0;
+			var cardCopy = hasCard
+				? "Your first character uses this username and your starter card is reserved for the Lumbridge Subscription Vendor."
+				: "Your first character uses this username. The launch starter-card window is closed, but your account is ready to play.";
+			if (!launchSignupModeActive && !hasCard && !(state && state.founder && state.founder.starterCardUnlocked)) return;
 		document.body.classList.add("prelaunch-claimed");
 		var firstCharacter = state && Array.isArray(state.characters) && state.characters.length ? state.characters[0] : null;
 		var founderUsername = state && state.founder ? state.founder.username : firstCharacter ? firstCharacter.name : founderName.value;
@@ -1025,17 +1509,17 @@
 		if (successTitle) {
 			successTitle.textContent = needsGameLogin ? "Set your game password" : "Account ready for launch";
 		}
-		if (successCopy) {
-			successCopy.textContent = needsGameLogin
-				? "Your web account and name reservation are saved. Create the playable login with a separate 4-20 character game password."
-				: "Your first character uses this username and your starter card is reserved for launch day.";
-		}
+			if (successCopy) {
+				successCopy.textContent = needsGameLogin
+					? "Your web account and name reservation are saved. Create the playable login with a separate 4-20 character game password."
+					: cardCopy;
+			}
 		if (signupCodeBlock) signupCodeBlock.hidden = true;
-		if (signupCodeHelp) {
-			signupCodeHelp.textContent = hasCard
-				? "Your starter subscription card is reserved at the Lumbridge Subscription Vendor."
-				: "Your account is active. If the starter card needs review, staff can release it without blocking play.";
-		}
+			if (signupCodeHelp) {
+				signupCodeHelp.textContent = hasCard
+					? "Your starter subscription card is reserved at the Lumbridge Subscription Vendor."
+					: "Your account is active. The free starter-card launch window has ended.";
+			}
 		if (prelaunchGameOnboarding) {
 			prelaunchGameOnboarding.hidden = !needsGameLogin;
 		}
@@ -1069,7 +1553,7 @@
 			return;
 		}
 		if (!isGamePassword(gamePassword, 4)) {
-			founderMessage.textContent = "Game password must be 4-20 letters and numbers.";
+			founderMessage.textContent = gamePasswordRequirement(4, "Game password");
 			if (prelaunchGamePassword) prelaunchGamePassword.focus();
 			return;
 		}
@@ -1097,7 +1581,7 @@
 				clearSession();
 				founderMessage.textContent = "Sign in to the portal again to continue.";
 			} else if (error.status === 400 && error.code === "invalid_game_password") {
-				founderMessage.textContent = "Game password must be 4-20 letters and numbers.";
+				founderMessage.textContent = gamePasswordRequirement(4, "Game password");
 				if (prelaunchGamePassword) prelaunchGamePassword.focus();
 			} else if (error.status === 409) {
 				founderMessage.textContent = "That username is already taken. Open Manage characters to choose another.";
@@ -1121,8 +1605,8 @@
 				if (founderEmail) founderEmail.focus();
 				return;
 			}
-			if (webPassword.length < 8 || webPassword.length > 20) {
-				founderMessage.textContent = "Password must be 8-20 characters.";
+			if (webPassword.length < 8 || webPassword.length > 128) {
+				founderMessage.textContent = "Website password must be 8-128 characters.";
 				if (founderPassword) founderPassword.focus();
 				return;
 			}
@@ -1167,12 +1651,14 @@
 			return;
 		}
 		if (launchSignupModeActive && !isGamePassword(webPassword, 8)) {
-			founderMessage.textContent = "Password must be 8-20 letters and numbers for your web account and first game login.";
+			founderMessage.textContent = gamePasswordRequirement(8, "Password") + " It is used for your web account and first game login.";
 			if (founderPassword) founderPassword.focus();
 			return;
 		}
 		if (founderSubmit) founderSubmit.disabled = true;
-		founderMessage.textContent = launchSignupModeActive ? "Reserving your name and starter card..." : "Reserving " + name + "...";
+			founderMessage.textContent = launchSignupModeActive
+				? (launchStarterCardOpen ? "Reserving your name and starter card..." : "Creating your account and first character...")
+				: "Reserving " + name + "...";
 		try {
 			if (launchSignupModeActive) {
 				var accountState = await apiRequest("/api/accounts/register", {
@@ -1184,11 +1670,22 @@
 						referrerCode: currentReferralCode() || undefined
 					}
 				});
+				if (accountState.verificationRequired) {
+					if (founderPassword) founderPassword.value = "";
+					if (prelaunchSuccessName) prelaunchSuccessName.textContent = accountState.username || name || "-";
+					if (prelaunchSuccessAccount) prelaunchSuccessAccount.textContent = accountState.email || email || "-";
+					if (prelaunchSuccessStatus) prelaunchSuccessStatus.textContent = "Email verification sent";
+					if (prelaunchSuccess) prelaunchSuccess.hidden = false;
+					founderMessage.textContent = "Check your email to verify. Your account, first character, and starter card are created only after verification.";
+					return;
+				}
 				applyAccountState(accountState);
 				if (founderPassword) founderPassword.value = "";
 				if (characterName) characterName.value = name;
 				showPrelaunchClaimSuccess(accountState);
-				founderMessage.textContent = "Account and first character ready. Your starter card is waiting for launch.";
+				founderMessage.textContent = starterCardWaiting(accountState)
+					? "Account and first character ready. Your starter card is waiting for launch."
+					: "Account and first character ready.";
 				return;
 			}
 			var result = await apiRequest("/api/founder/reservations", {
@@ -1217,13 +1714,15 @@
 					? "Enter a valid email address for your web account."
 					: "Enter a valid email address. Your code is tied to it.";
 			} else if (launchSignupModeActive && error.status === 400 && error.code === "invalid_password") {
-				founderMessage.textContent = "Password must be 8-20 letters and numbers for your web account and first game login.";
+				founderMessage.textContent = gamePasswordRequirement(8, "Password") + " It is used for your web account and first game login.";
 			} else if (launchSignupModeActive && error.status === 400 && error.code === "invalid_game_password") {
-				founderMessage.textContent = "Password must be 8-20 letters and numbers for your first game login.";
+				founderMessage.textContent = gamePasswordRequirement(8, "First game password");
+			} else if (launchSignupModeActive && error.status === 503 && error.code === "email_verification_not_configured") {
+				founderMessage.textContent = "Email verification is unavailable right now. Try again shortly.";
 			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved")) {
 				founderMessage.textContent = "That username is already reserved by someone else.";
-			} else if (error.status === 429) {
-				founderMessage.textContent = "Too many signups from your network today. Try again tomorrow.";
+				} else if (error.status === 429) {
+					founderMessage.textContent = "Too many recent attempts from this network. Wait a little and try again.";
 			} else if (launchSignupModeActive && error.status === 409 && error.code === "account_exists") {
 				try {
 					var signedIn = await apiRequest("/api/accounts/login", {
@@ -1361,47 +1860,54 @@
 	}
 
 	async function hydrateFromApi() {
+		var returnedState = consumeDiscordReturnState();
+		if (returnedState) {
+			applyAccountState(returnedState);
+			setAuthStatus("authenticated");
+			cleanPortalDashboardUrl();
+			activateView("dashboard");
+			if (founderMessage) founderMessage.textContent = "Discord connected. Your reward code is ready.";
+		} else if (sessionToken) {
+			try {
+				var state = await apiRequest("/api/account", { preserveSessionOn401: true });
+				applyAccountState(state);
+				setAuthStatus("authenticated");
+				openRequestedAuthenticatedView();
+			} catch (error) {
+				clearSession(error && error.status === 401
+					? "Your session expired. Sign in again."
+					: "We could not verify that session. Sign in again.");
+			}
+		} else {
+			setAuthStatus("signed-out");
+			activateView("account");
+		}
+
 		try {
-			var returnedState = consumeDiscordReturnState();
-			if (returnedState) {
-				applyAccountState(returnedState);
-				if (founderMessage) founderMessage.textContent = "Discord connected. Your reward code is ready.";
-			}
-			await apiRequest("/api/health");
-			var publicState = await apiRequest("/api/public");
+			await apiRequest("/api/health", { noAuth: true, preserveSessionOn401: true });
+			var publicState = await apiRequest("/api/public", { noAuth: true, preserveSessionOn401: true });
 			applyPublicState(publicState);
-			if (!sessionToken) {
-				founderMessage.textContent = launchSignupModeActive
-					? "Reserve your account name, create your first character, and keep your free starter card waiting."
-					: "Reserve your launch username and keep your subscription card code.";
-				return;
-			}
-			var state = await apiRequest("/api/account");
-			applyAccountState(state);
-			if (launchSignupModeActive) {
-				showPrelaunchClaimSuccess(state);
-			}
-			founderMessage.textContent = "Signed in. Manage your account or reserve another character from the dashboard.";
 		} catch (error) {
-			if (error && error.status === 401) {
-				clearSession();
-				updateLaunchSignupCopy();
-			}
-			// Opening index.html directly or serving it statically keeps using localStorage.
+			// Account access remains usable when optional public status data is unavailable.
 		}
 	}
 
 	function applyPublicState(state) {
-		if (!state) return;
-		launchSignupModeActive = Boolean(state.launchSignupMode);
-		document.body.classList.toggle("launch-signup-mode", launchSignupModeActive);
+			if (!state) return;
+			launchSignupModeActive = Boolean(state.launchSignupMode);
+			launchStarterCardOpen = starterCardWindowOpen(state.launch || (state.beta && state.beta.schedule) || null);
+			document.body.classList.toggle("launch-signup-mode", launchSignupModeActive);
 		googleClientId = state.oauth && state.oauth.google && state.oauth.google.enabled ? String(state.oauth.google.clientId || "") : "";
 		updateLaunchSignupCopy();
 		updateGoogleSignupButton();
 		if (state.publicMode && !publicModeActive) {
 			publicModeActive = true;
 			document.body.classList.add("public-mode");
-			activateView((window.location.hash || "#account").replace("#", "") || "account");
+			if (legacyAccountClaimToken && authStatus === "authenticated") {
+				activateView("dashboard", { preserveHash: true });
+			} else {
+				activateView((window.location.hash || "#account").replace("#", "") || "account");
+			}
 		}
 		applyLaunchState(state.launch || (state.beta && state.beta.schedule) || null, state.founderStats || null);
 		if (state.status) {
@@ -1473,8 +1979,9 @@
 			betaSignupCounter.hidden = reservations <= 0;
 			betaSignupCount.textContent = formatCompactNumber(reservations);
 		}
-		launchCountdownState = schedule && schedule.openAt ? schedule : null;
-		if (!launchCountdownState) {
+			launchCountdownState = schedule && schedule.openAt ? schedule : null;
+			launchStarterCardOpen = starterCardWindowOpen(launchCountdownState);
+			if (!launchCountdownState) {
 			setLaunchOpenState(false);
 			setCountdownValue("--", "--", "--", "--");
 			if (betaCountdownNote) {
@@ -1502,13 +2009,15 @@
 				? (launchOpenActive ? "Create your account and character" : "Reserve your account name")
 				: launchOpenActive ? "Create your launch username" : "Reserve your username";
 		}
-		if (founderSubmit) {
-			founderSubmit.textContent = signInMode
-				? "Sign in"
-				: launchSignupModeActive
-				? (launchOpenActive ? "Create account + character" : "Reserve name + free card")
-				: launchOpenActive ? "Create launch code" : "Reserve & get my code";
-		}
+			if (founderSubmit) {
+				founderSubmit.textContent = signInMode
+					? "Sign in"
+					: launchSignupModeActive
+					? (launchOpenActive
+						? "Create account + character"
+						: (launchStarterCardOpen ? "Reserve name + free card" : "Create account + character"))
+					: launchOpenActive ? "Create launch code" : "Reserve & get my code";
+			}
 		if (founderPassword) {
 			if (launchSignupModeActive) {
 				founderPassword.setAttribute("type", "password");
@@ -1525,8 +2034,12 @@
 				? "Use your email and password to manage characters, recovery, and launch rewards."
 				: launchSignupModeActive
 				? (launchOpenActive
-					? "Create your account, first character, and starter card, then choose a play option below."
-					: "Reserve your account name, create your first character, and get one free 1-week subscription card.")
+					? (launchStarterCardOpen
+						? "Create your account, first character, and starter card, then choose a play option below."
+						: "Create your account and first character, then choose a play option below.")
+					: (launchStarterCardOpen
+						? "Reserve your account name, create your first character, and get one free 1-week subscription card."
+						: "Create your account and first character."))
 				: launchOpenActive
 				? "Create your launch username and keep your subscription card code."
 				: "Reserve your launch username and keep your subscription card code.";
@@ -1575,7 +2088,7 @@
 			});
 			googleButtonRendered = true;
 			if (googleSignupMessage) {
-				googleSignupMessage.textContent = "Google creates the web login; the password above becomes the first character login.";
+				googleSignupMessage.textContent = "Google creates the web login; use 8-20 letters and numbers only for the first character password. Symbols and spaces are not allowed.";
 			}
 		} catch (error) {
 			googleButtonRendered = false;
@@ -1616,7 +2129,7 @@
 			return;
 		}
 		if (!isGamePassword(gamePassword, 8)) {
-			founderMessage.textContent = "Password must be 8-20 letters and numbers for your first game login.";
+			founderMessage.textContent = gamePasswordRequirement(8, "First game password");
 			if (founderPassword) founderPassword.focus();
 			return;
 		}
@@ -1642,7 +2155,9 @@
 			if (founderPassword) founderPassword.value = "";
 			if (characterName) characterName.value = name;
 			showPrelaunchClaimSuccess(state);
-			founderMessage.textContent = "Account and first character ready. Your starter card is waiting for launch.";
+			founderMessage.textContent = starterCardWaiting(state)
+				? "Account and first character ready. Your starter card is waiting for launch."
+				: "Account and first character ready.";
 			googleButtonRendered = false;
 			googleNonce = "";
 		} catch (error) {
@@ -1650,6 +2165,8 @@
 				founderMessage.textContent = "Google sign-in timed out. Try the Google button again.";
 				googleButtonRendered = false;
 				renderGoogleSignupButton();
+			} else if (error.status === 400 && error.code === "invalid_game_password") {
+				founderMessage.textContent = gamePasswordRequirement(8, "First game password");
 			} else if (error.status === 401) {
 				founderMessage.textContent = "Google sign-in could not be verified. Try again or use email.";
 			} else if (error.status === 409 && (error.code === "username_taken" || error.code === "username_reserved" || error.code === "character_name_taken")) {
@@ -1671,8 +2188,10 @@
 			setLaunchOpenState(false);
 			return;
 		}
-		var remaining = Math.max(0, openAtMs - Date.now());
-		setLaunchOpenState(remaining <= 0);
+			var remaining = Math.max(0, openAtMs - Date.now());
+			var previousStarterCardOpen = launchStarterCardOpen;
+			launchStarterCardOpen = starterCardWindowOpen(launchCountdownState);
+			setLaunchOpenState(remaining <= 0);
 		var totalSeconds = Math.floor(remaining / 1000);
 		var days = Math.floor(totalSeconds / 86400);
 		var hours = Math.floor((totalSeconds % 86400) / 3600);
@@ -1680,13 +2199,16 @@
 		var seconds = totalSeconds % 60;
 		setCountdownValue(days, pad2(hours), pad2(minutes), pad2(seconds));
 		if (betaCountdownNote) {
-			betaCountdownNote.textContent = remaining > 0
-				? (launchSignupModeActive
-						? "Reserve your account name now. Your starter card is reserved for the Lumbridge vendor on launch day."
+				betaCountdownNote.textContent = remaining > 0
+					? (launchSignupModeActive
+							? (launchStarterCardOpen
+								? "Reserve your account name now. Your starter card is reserved for the Lumbridge vendor on launch day."
+								: "Create your account and first character now.")
 					: "Reserve your username now. Your code is shown on screen and can be synced to the game database for launch day.")
 				: "Launch is open. Create or manage your account, then download the launcher or use the mobile web client.";
+			}
+			if (previousStarterCardOpen !== launchStarterCardOpen) updateLaunchSignupCopy();
 		}
-	}
 
 	function setLaunchOpenState(isOpen) {
 		var changed = launchOpenActive !== Boolean(isOpen);
@@ -1698,16 +2220,18 @@
 				? "<span>Voidscape</span> is open."
 				: "<span>Voidscape</span> launches soon.";
 		}
-		if (landingHeroProof) {
-			landingHeroProof.innerHTML = launchOpenActive
-				? "<span>Create or manage your account.</span><span>Download the desktop launcher.</span><span>Mobile web is ready for iOS and Android.</span>"
-				: "<span>Reserve your account name.</span><span>Get a free 1-week subscription card.</span><span>Web, Desktop, iOS, and Android at launch.</span>";
-		}
-		if (betaCountdownLabel) betaCountdownLabel.textContent = launchOpenActive ? "Launch status" : "Launch opens in";
-		setText(landingNavPrimaryCta, launchOpenActive ? "Create Account" : "Reserve Name");
-		setText(landingHeroPrimaryCta, launchOpenActive ? "Create Account + Play" : "Reserve Name + Free Card");
-		setText(landingPlatformPrimaryCta, launchOpenActive ? "Create or Manage Account" : "Reserve Name + Free Card");
-		setText(landingFinalPrimaryCta, launchOpenActive ? "Create Account + Play" : "Reserve Name + Free Card");
+			if (landingHeroProof) {
+				landingHeroProof.innerHTML = launchOpenActive
+					? "<span>Create or manage your account.</span><span>Download the desktop launcher.</span><span>Mobile web is ready for iOS and Android.</span>"
+					: launchStarterCardOpen
+						? "<span>Reserve your account name.</span><span>Get a free 1-week subscription card.</span><span>Web, Desktop, iOS, and Android at launch.</span>"
+						: "<span>Create your account.</span><span>Choose your first character.</span><span>Web, Desktop, iOS, and Android.</span>";
+			}
+			if (betaCountdownLabel) betaCountdownLabel.textContent = launchOpenActive ? "Launch status" : "Launch opens in";
+			setText(landingNavPrimaryCta, launchOpenActive ? "Create Account" : "Reserve Name");
+			setText(landingHeroPrimaryCta, launchOpenActive ? "Create Account + Play" : (launchStarterCardOpen ? "Reserve Name + Free Card" : "Create Account"));
+			setText(landingPlatformPrimaryCta, launchOpenActive ? "Create or Manage Account" : (launchStarterCardOpen ? "Reserve Name + Free Card" : "Create Account"));
+			setText(landingFinalPrimaryCta, launchOpenActive ? "Create Account + Play" : (launchStarterCardOpen ? "Reserve Name + Free Card" : "Create Account"));
 		if (landingPlatformLabel) landingPlatformLabel.textContent = launchOpenActive ? "Play now" : "Launch platform support";
 		if (landingPlatformTitle) landingPlatformTitle.textContent = launchOpenActive ? "Choose your client." : "One account. Every platform.";
 		if (landingPlatformCopy) {
@@ -1730,11 +2254,26 @@
 		}
 	}
 
-	function setText(element, value) {
-		if (element) element.textContent = value;
-	}
+		function setText(element, value) {
+			if (element) element.textContent = value;
+		}
 
-	function setCountdownValue(days, hours, minutes, seconds) {
+		function starterCardWaiting(state) {
+			var rewards = state && state.rewards;
+			return Boolean(rewards && (rewards.starterSubscriptionCards > 0 || rewards.starterCardStatus === "waiting"));
+		}
+
+		function starterCardWindowOpen(schedule) {
+			var card = schedule && schedule.starterCard;
+			if (!card) return true;
+			if (card.endsAt) {
+				var endsAt = Date.parse(card.endsAt);
+				if (Number.isFinite(endsAt)) return endsAt > Date.now();
+			}
+			return card.open !== false;
+		}
+
+		function setCountdownValue(days, hours, minutes, seconds) {
 		if (betaCountdownDays) betaCountdownDays.textContent = String(days);
 		if (betaCountdownHours) betaCountdownHours.textContent = String(hours);
 		if (betaCountdownMinutes) betaCountdownMinutes.textContent = String(minutes);
@@ -1754,7 +2293,7 @@
 			method: options.method || "GET",
 			headers: {
 				"content-type": "application/json",
-				...(sessionToken ? { "authorization": "Bearer " + sessionToken } : {}),
+				...(sessionToken && !options.noAuth ? { "authorization": "Bearer " + sessionToken } : {}),
 				...(options.headers || {})
 			},
 			body: options.body ? JSON.stringify(options.body) : undefined
@@ -1766,7 +2305,12 @@
 			throw apiError(response.status, "api_unavailable");
 		}
 		if (!response.ok) {
-			throw apiError(response.status, payload.error || "api_error");
+			var error = apiError(response.status, payload.error || "api_error");
+			if (response.status === 401 && sessionToken && !options.noAuth && !options.preserveSessionOn401
+				&& !["invalid_current_password", "reauthentication_required"].includes(error.code)) {
+				clearSession("Your session expired. Sign in again.");
+			}
+			throw error;
 		}
 		return payload;
 	}
@@ -1858,6 +2402,119 @@
 		if (adminMessage) adminMessage.textContent = message;
 	}
 
+	function updateAdminPresencePolling() {
+		if (!adminPresenceTable) return;
+		var adminView = document.getElementById("admin");
+		var shouldPoll = Boolean(adminView && adminView.classList.contains("is-active") && adminTokenInput && adminTokenInput.value.trim());
+		window.clearInterval(adminPresenceTimer);
+		adminPresenceTimer = 0;
+		if (!shouldPoll) {
+			if (adminView && adminView.classList.contains("is-active")) {
+				renderAdminPresence(null, "Enter staff token");
+			}
+			return;
+		}
+		refreshAdminPresence();
+		adminPresenceTimer = window.setInterval(function () {
+			var currentAdminView = document.getElementById("admin");
+			if (!currentAdminView || !currentAdminView.classList.contains("is-active")) {
+				updateAdminPresencePolling();
+				return;
+			}
+			refreshAdminPresence();
+		}, 15000);
+	}
+
+	async function refreshAdminPresence() {
+		if (!adminPresenceTable || adminPresenceInFlight) return;
+		if (!adminTokenInput || !adminTokenInput.value.trim()) {
+			renderAdminPresence(null, "Enter staff token");
+			return;
+		}
+		adminPresenceInFlight = true;
+		if (adminPresenceStatus) adminPresenceStatus.textContent = "Refreshing";
+		try {
+			var state = await adminRequest("/api/admin/presence");
+			renderAdminPresence(state, "Polling every 15s");
+		} catch (error) {
+			renderAdminPresence(null, adminErrorMessage(error));
+		} finally {
+			adminPresenceInFlight = false;
+		}
+	}
+
+	function renderAdminPresence(state, status) {
+		var active = state && state.active ? state.active : {};
+		var recent = state && state.recent ? state.recent : {};
+		if (adminPresenceActive) adminPresenceActive.textContent = state ? String(active.total || 0) : "-";
+		if (adminPresenceRecent) adminPresenceRecent.textContent = state ? String(recent.total || 0) : "-";
+		if (adminPresenceVisible) adminPresenceVisible.textContent = state ? String(active.visible || 0) : "-";
+		if (adminPresenceUpdated) adminPresenceUpdated.textContent = state ? relativeTime(state.generatedAt) : "-";
+		if (adminPresenceStatus) adminPresenceStatus.textContent = status || (state ? "Polling every 15s" : "Enter staff token");
+		if (adminPresenceActiveNote && state && state.windows) {
+			adminPresenceActiveNote.textContent = "Last " + Math.round((state.windows.activeSeconds || 60)) + "s";
+		}
+		renderAdminPresenceTable(state);
+	}
+
+	function renderAdminPresenceTable(state) {
+		if (!adminPresenceTable) return;
+		var head = '<div class="table-row table-head"><span>Page</span><span>Active</span><span>Recent</span><span>Last seen</span></div>';
+		if (!state) {
+			adminPresenceTable.innerHTML = head + '<div class="table-row"><span>Enter staff token to load live visitors</span><span></span><span></span><span></span></div>';
+			return;
+		}
+		var pages = {};
+		(activePresencePages(state.active)).forEach(function (page) {
+			pages[page.key] = Object.assign({}, pages[page.key] || {}, {
+				key: page.key,
+				label: page.label,
+				active: page.count || 0,
+				activeVisible: page.visible || 0,
+				lastSeenAt: page.lastSeenAt || ""
+			});
+		});
+		(activePresencePages(state.recent)).forEach(function (page) {
+			var existing = pages[page.key] || {};
+			pages[page.key] = Object.assign({}, existing, {
+				key: page.key,
+				label: existing.label || page.label,
+				recent: page.count || 0,
+				recentVisible: page.visible || 0,
+				lastSeenAt: newestIso(existing.lastSeenAt, page.lastSeenAt)
+			});
+		});
+		var rows = Object.keys(pages).map(function (key) {
+			return pages[key];
+		}).sort(function (left, right) {
+			return (right.active || 0) - (left.active || 0)
+				|| (right.recent || 0) - (left.recent || 0)
+				|| String(left.label || "").localeCompare(String(right.label || ""));
+		});
+		adminPresenceTable.innerHTML = head + (rows.length ? rows.map(function (page) {
+			return [
+				'<div class="table-row">',
+				"<span>" + escapeHtml(page.label || "Other") + "</span>",
+				"<span>" + escapeHtml(String(page.active || 0)) + "</span>",
+				"<span>" + escapeHtml(String(page.recent || 0)) + "</span>",
+				"<span>" + escapeHtml(page.lastSeenAt ? relativeTime(page.lastSeenAt) : "-") + "</span>",
+				"</div>"
+			].join("");
+		}).join("") : '<div class="table-row"><span>No active visitors</span><span>0</span><span>0</span><span>-</span></div>');
+	}
+
+	function activePresencePages(summary) {
+		return summary && Array.isArray(summary.pages) ? summary.pages : [];
+	}
+
+	function newestIso(left, right) {
+		var leftTime = Date.parse(left || "");
+		var rightTime = Date.parse(right || "");
+		if (!Number.isFinite(leftTime)) return right || "";
+		if (!Number.isFinite(rightTime)) return left || "";
+		return rightTime > leftTime ? right : left;
+	}
+
 	function applyAccountState(state) {
 		if (state.token) {
 			sessionToken = state.token;
@@ -1865,6 +2522,7 @@
 		}
 		if (state.account) {
 			betaAccount = state;
+			if (sessionToken) setAuthStatus("authenticated");
 			accountName.textContent = state.account.displayName || "Voidscape";
 			accountEmail.textContent = state.account.email || "";
 			if (dashboardAccountName) dashboardAccountName.textContent = state.account.displayName || "Voidscape account";
@@ -2109,24 +2767,97 @@
 
 	function renderPortalAuthState(state) {
 		var account = state && state.account ? state.account : betaAccount && betaAccount.account ? betaAccount.account : null;
-		if (portalAuthForm) {
-			portalAuthForm.classList.toggle("is-authenticated", Boolean(account && sessionToken));
-		}
-		if (portalAuthMessage) {
-			if (account && sessionToken) {
-				portalAuthMessage.textContent = "Signed in as " + (account.email || account.displayName || "this account") + ". Character tools are ready.";
-			} else if (!sessionToken && (!portalAuthForm || !portalAuthForm.classList.contains("is-authenticated"))) {
-				portalAuthMessage.textContent = portalAuthMode === "login"
-					? "Sign in to manage your roster, subscription status, and security settings."
-					: "Create the web account first. Game logins still use their own 4-20 character password.";
-			}
-		}
 		if (queueCharacter) {
-			queueCharacter.disabled = !sessionToken || characters.length >= maxCharacters;
+			queueCharacter.disabled = authStatus !== "authenticated" || !sessionToken || characters.length >= maxCharacters;
 		}
 		if (accountLogout) {
-			accountLogout.hidden = !(account && sessionToken);
+			accountLogout.hidden = !(account && sessionToken && authStatus === "authenticated");
 		}
+	}
+
+	function initialPortalAuthMode() {
+		var requested = new URLSearchParams(window.location.search || "").get("auth") || "";
+		if (requested === "verify") return emailVerificationTokenFromLocation() ? "verify" : "login";
+		if (requested === "reset") return passwordResetTokenFromLocation() ? "reset" : "request";
+		if (requested === "claim-confirm") return legacyAccountClaimTokenFromLocation() ? "claim-confirm" : "claim";
+		if (requested === "claim") return "claim";
+		if (requested === "resend-verification" || requested === "resend") return "resend";
+		if (requested === "recovery" || requested === "request") return "request";
+		if (requested === "recovery-code" || requested === "code") return "code";
+		return "login";
+	}
+
+	function emailVerificationTokenFromLocation() {
+		var hash = String(window.location.hash || "").replace(/^#/, "");
+		if (!hash.startsWith("verify=")) return "";
+		var token = new URLSearchParams(hash).get("verify") || "";
+		return /^[A-Za-z0-9_-]{32,120}$/.test(token) ? token : "";
+	}
+
+	function passwordResetTokenFromLocation() {
+		var hash = String(window.location.hash || "").replace(/^#/, "");
+		if (!hash.startsWith("reset=")) return "";
+		var token = new URLSearchParams(hash).get("reset") || "";
+		return /^[A-Za-z0-9_-]{32,120}$/.test(token) ? token : "";
+	}
+
+	function legacyAccountClaimTokenFromLocation() {
+		var hash = String(window.location.hash || "").replace(/^#/, "");
+		if (!hash.startsWith("claim=")) return "";
+		var token = new URLSearchParams(hash).get("claim") || "";
+		return /^[A-Za-z0-9_-]{32,120}$/.test(token) ? token : "";
+	}
+
+	function setAuthStatus(status) {
+		authStatus = ["checking", "signed-out", "authenticated"].includes(status) ? status : "signed-out";
+		document.body.classList.toggle("auth-pending", authStatus === "checking");
+		document.body.classList.toggle("auth-signed-out", authStatus === "signed-out");
+		document.body.classList.toggle("auth-authenticated", authStatus === "authenticated");
+		if (portalAuthLoading) portalAuthLoading.hidden = authStatus !== "checking";
+		if (accountClaimNotice) {
+			accountClaimNotice.hidden = !(authStatus === "authenticated" && sessionToken && legacyAccountClaimToken);
+		}
+		if (authStatus === "signed-out") {
+			setPortalAuthMode(portalAuthMode);
+		} else {
+			portalAuthPanels.forEach(function (panel) { panel.hidden = true; });
+		}
+	}
+
+	function updatePortalAuthUrl(mode) {
+		if (window.location.protocol === "file:") return;
+		var url = new URL(window.location.href);
+		url.search = "";
+		if (mode === "request") url.searchParams.set("auth", "recovery");
+		else if (mode === "resend") url.searchParams.set("auth", "resend-verification");
+		else if (mode === "code") url.searchParams.set("auth", "recovery-code");
+		else if (mode === "claim") url.searchParams.set("auth", "claim");
+		else if (mode === "claim-confirm" && legacyAccountClaimToken) url.searchParams.set("auth", "claim-confirm");
+		else if (mode === "verify" && emailVerificationToken) url.searchParams.set("auth", "verify");
+		else if (mode === "reset" && passwordResetToken) url.searchParams.set("auth", "reset");
+		else url.searchParams.set("auth", "login");
+		if (!(mode === "reset" && passwordResetToken)
+			&& !(mode === "verify" && emailVerificationToken)
+			&& !(mode === "claim-confirm" && legacyAccountClaimToken)) url.hash = "";
+		window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+	}
+
+	function cleanPortalDashboardUrl() {
+		if (window.location.protocol === "file:") return;
+		window.history.replaceState(null, "", window.location.pathname + "#dashboard");
+	}
+
+	function openRequestedAuthenticatedView() {
+		if (legacyAccountClaimToken) {
+			activateView("dashboard", { preserveHash: true });
+			return;
+		}
+		var requested = String(window.location.hash || "").replace(/^#/, "");
+		var next = protectedAccountViews[requested] ? requested : "dashboard";
+		if (window.location.protocol !== "file:") {
+			window.history.replaceState(null, "", window.location.pathname + "#" + next);
+		}
+		activateView(next);
 	}
 
 	function applyFounderState(apiFounder) {
@@ -2162,11 +2893,85 @@
 		if (dashboardSubscriptionState) dashboardSubscriptionState.textContent = "Unsubscribed";
 		if (dashboardCardState) dashboardCardState.textContent = "No card waiting";
 		if (dashboardSecurityState) dashboardSecurityState.textContent = "Not signed in";
+		setAuthStatus("signed-out");
 		renderPortalAuthState();
 		updatePrelaunchAuthCtas();
 		renderCharacters();
 		renderSelectedCharacter();
+		activateView("account");
 		if (portalAuthMessage && message) portalAuthMessage.textContent = message;
+	}
+
+	async function logoutToLanding() {
+		if (accountLogout) {
+			accountLogout.disabled = true;
+			accountLogout.textContent = "Logging out...";
+		}
+		try {
+			if (sessionToken && window.location.protocol !== "file:") {
+				await apiRequest("/api/accounts/logout", { method: "POST" });
+			}
+		} catch (error) {
+			// Local cleanup still removes the bearer token even if the server session is already gone.
+		} finally {
+			if (accountLogout) {
+				accountLogout.disabled = false;
+				accountLogout.textContent = "Log out";
+			}
+			clearSession();
+			returnToLandingPage();
+		}
+	}
+
+	async function logoutForLegacyClaim() {
+		if (!legacyAccountClaimToken) return;
+		if (accountClaimContinue) {
+			accountClaimContinue.disabled = true;
+			accountClaimContinue.textContent = "Signing out...";
+		}
+		try {
+			if (sessionToken && window.location.protocol !== "file:") {
+				await apiRequest("/api/accounts/logout", { method: "POST" });
+			}
+		} catch (error) {
+			// Local cleanup still lets the verified claim continue if the old session already expired.
+		} finally {
+			clearSession();
+			setPortalAuthMode("claim-confirm");
+			if (legacyClaimConfirmMessage) {
+				legacyClaimConfirmMessage.textContent = "Signed out. Confirm the older account to continue.";
+			}
+			if (accountClaimContinue) {
+				accountClaimContinue.disabled = false;
+				accountClaimContinue.textContent = "Sign out and continue";
+			}
+		}
+	}
+
+	function activeViewId() {
+		var active = views.find(function (view) {
+			return view.classList.contains("is-active");
+		});
+		return active ? active.id : "";
+	}
+
+	function isProtectedAccountView(id) {
+		return Boolean(id && protectedAccountViews[id]);
+	}
+
+	function returnToLandingPage() {
+		if (window.location.protocol === "file:") {
+			activateView("account");
+			return;
+		}
+		if (window.location.pathname === "/" || window.location.pathname === "/index.html") {
+			activateView("account");
+			if (window.location.hash) {
+				window.history.replaceState(null, "", window.location.pathname + window.location.search);
+			}
+			return;
+		}
+		window.location.replace("/");
 	}
 
 	function createLocalCharacter(name) {
@@ -2244,12 +3049,16 @@
 		renderSelectedCharacter();
 	}
 
-	function activateView(id) {
+	function activateView(id, options) {
+		options = options || {};
 		var landingTarget = landingAnchorFor(id);
 		if (landingTarget) id = "account";
+		if (authStatus !== "authenticated") id = "account";
+		if (authStatus === "authenticated" && id === "account") id = "dashboard";
 		var allowedPublicViews = launchSignupModeActive ? launchSignupModeViews : publicModeViews;
 		if (publicModeActive && !allowedPublicViews[id]) id = "account";
 		id = retiredViews[id] || id;
+		if (authStatus !== "authenticated") id = "account";
 		var next = views.find(function (view) {
 			return view.id === id;
 		}) || document.getElementById("account");
@@ -2262,7 +3071,7 @@
 			link.classList.toggle("is-active", link.getAttribute("data-view-link") === next.id);
 		});
 
-		var isLanding = next.id === "account";
+		var isLanding = next.id === "account" && next.classList.contains("prelaunch-view");
 		if (shell) shell.classList.toggle("landing-shell", isLanding);
 		document.body.classList.toggle("prelaunch-mode", isLanding);
 		title.textContent = next.getAttribute("data-title") || "Voidscape";
@@ -2273,9 +3082,10 @@
 			}, 40);
 		}
 		var hashId = landingTarget ? landingTarget.id : next.id;
-		if (window.location.hash !== "#" + hashId) {
+		if (authStatus === "authenticated" && !options.preserveHash && window.location.hash !== "#" + hashId) {
 			window.history.replaceState(null, "", "#" + hashId);
 		}
+		updateAdminPresencePolling();
 		if (next.id === "characters") {
 			refreshCharactersFromApi(false);
 		}
@@ -2322,7 +3132,7 @@
 			button.disabled = true;
 			button.setAttribute("aria-busy", "true");
 		}
-		window.location.assign("/api/oauth/discord/start?returnTo=" + encodeURIComponent("/#account"));
+		window.location.assign("/api/oauth/discord/start?returnTo=" + encodeURIComponent("/portal#dashboard"));
 	}
 
 	function consumeDiscordReturnState() {
@@ -2411,33 +3221,33 @@
 		}
 	}
 
-	function renderFounder() {
-		renderReferralNotice();
-		var founder = loadFounder();
-		if (!founder) {
-			founderProgressLabel.textContent = "0 invites credited";
-			founderRewardLabel.textContent = "Invite friends for codes";
-			founderProgressFill.style.width = "0%";
-			founderLink.value = "";
-			accountName.textContent = "Voidscape";
-			accountEmail.textContent = "Reserve before launch";
-			renderReferralRewardCodes([]);
-			return;
+		function renderFounder() {
+			renderReferralNotice();
+			var founder = loadFounder();
+			if (!founder) {
+				setText(founderProgressLabel, "0 invites credited");
+				setText(founderRewardLabel, "Invite friends for codes");
+				if (founderProgressFill) founderProgressFill.style.width = "0%";
+				if (founderLink) founderLink.value = "";
+				setText(accountName, "Voidscape");
+				setText(accountEmail, "Reserve before launch");
+				renderReferralRewardCodes([]);
+				return;
+			}
+			if (founderName) founderName.value = founder.username || "";
+			if (founderEmail) founderEmail.value = founder.email || "";
+			setText(accountName, founder.username || "Voidscape");
+			setText(accountEmail, founder.email || "Reserve before launch");
+			var invites = founder.invites || 0;
+			var rewardCodes = Array.isArray(founder.rewardCodes) ? founder.rewardCodes : [];
+			setText(founderProgressLabel, invites + " invite" + (invites === 1 ? "" : "s") + " credited");
+			setText(founderRewardLabel, rewardCodes.length > 0
+				? rewardCodes.length + " sub code" + (rewardCodes.length === 1 ? "" : "s") + " earned"
+				: "Invite friends for codes");
+			if (founderProgressFill) founderProgressFill.style.width = invites > 0 ? "100%" : "0%";
+			if (founderLink) founderLink.value = makeInviteLink(founder.code);
+			renderReferralRewardCodes(rewardCodes);
 		}
-		founderName.value = founder.username || "";
-		founderEmail.value = founder.email || "";
-		accountName.textContent = founder.username || "Voidscape";
-		accountEmail.textContent = founder.email || "Reserve before launch";
-		var invites = founder.invites || 0;
-		var rewardCodes = Array.isArray(founder.rewardCodes) ? founder.rewardCodes : [];
-		founderProgressLabel.textContent = invites + " invite" + (invites === 1 ? "" : "s") + " credited";
-		founderRewardLabel.textContent = rewardCodes.length > 0
-			? rewardCodes.length + " sub code" + (rewardCodes.length === 1 ? "" : "s") + " earned"
-			: "Invite friends for codes";
-		founderProgressFill.style.width = invites > 0 ? "100%" : "0%";
-		founderLink.value = makeInviteLink(founder.code);
-		renderReferralRewardCodes(rewardCodes);
-	}
 
 	function renderReferralRewardCodes(rewardCodes) {
 		if (!referralRewardCodes || !referralRewardCodeList) return;
@@ -2471,7 +3281,7 @@
 			} else if (characters.length >= maxCharacters) {
 				characterMessage.textContent = "Roster is full. Web accounts are capped at 10 characters.";
 			} else {
-				characterMessage.textContent = "Create another game login with its own 4-20 letter and number password.";
+				characterMessage.textContent = "Create another game login with its own 4-20 letter and number password. Symbols and spaces are not allowed.";
 			}
 		}
 		if (!characters.length) {
@@ -2501,6 +3311,7 @@
 			card.addEventListener("click", function () {
 				selectedCharacter = card.getAttribute("data-character");
 				localStorage.setItem(selectedKey, selectedCharacter);
+				closeGamePasswordReset();
 				renderCharacters();
 				renderSelectedCharacter();
 			});
@@ -2514,13 +3325,36 @@
 		}) || characters[0] || null;
 	}
 
+	function isPortalCreatedCharacter(character) {
+		return Boolean(character && character.source === "openrsc-sqlite-created");
+	}
+
 	function updateCharacterControls() {
 		if (queueCharacter) queueCharacter.disabled = characters.length >= maxCharacters || !sessionToken;
 		var character = selectedRosterCharacter();
+		if (showGamePasswordReset) {
+			showGamePasswordReset.disabled = !sessionToken || !canResetGamePassword(character);
+		}
 		if (deleteCharacter) {
 			deleteCharacter.disabled = !sessionToken || !character;
-			deleteCharacter.textContent = character ? "Delete " + character.name : "Delete selected";
+			deleteCharacter.textContent = character
+				? (isPortalCreatedCharacter(character) ? "Delete " : "Remove ") + character.name
+				: "Delete selected";
 		}
+	}
+
+	function canResetGamePassword(character) {
+		return Boolean(character
+			&& Number(character.playerId)
+			&& character.linkStatus === "linked"
+			&& character.source === "openrsc-sqlite-created");
+	}
+
+	function closeGamePasswordReset() {
+		if (gamePasswordForm) gamePasswordForm.hidden = true;
+		if (gamePasswordAccount) gamePasswordAccount.value = "";
+		if (gamePasswordNew) gamePasswordNew.value = "";
+		if (gamePasswordConfirm) gamePasswordConfirm.value = "";
 	}
 
 	function renderSelectedCharacter() {
@@ -2919,6 +3753,7 @@
 			? "Rotate codes"
 			: "New codes";
 		if (passwordForm) passwordForm.hidden = !passwordEnabled;
+		if (recoveryCurrentPasswordRow) recoveryCurrentPasswordRow.hidden = !passwordEnabled;
 		if (securityMessage) {
 			if (!passwordEnabled && auth.googleConnected) {
 				securityMessage.textContent = "Google sign-in is active. Password controls are hidden for this account.";
@@ -3576,6 +4411,10 @@
 		var text = String(value || "");
 		var min = minLength || 4;
 		return text.length >= min && text.length <= 20 && /^[a-zA-Z0-9]+$/.test(text);
+	}
+
+	function gamePasswordRequirement(minLength, label) {
+		return label + " must be " + minLength + "-20 letters and numbers only. Symbols and spaces are not allowed.";
 	}
 
 	function normalizeReferralCode(value) {

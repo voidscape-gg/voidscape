@@ -3,893 +3,171 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Voidscape Prelaunch</title>
-		<meta name="description" content="Reserve your Voidscape launch account name, get a free launch-week subscription card, and follow the public countdown.">
-		<link rel="icon" href="assets/favicon.png">
-		<link rel="preconnect" href="https://fonts.googleapis.com">
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-		<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:wght@500;600;700&family=Spectral:wght@400;500;600;700&display=swap" rel="stylesheet">
-		<link rel="preload" as="image" href="assets/generated/hero-rsc-skeleton-void.jpg">
-		<link rel="preload" as="image" href="assets/prelaunch/voidscape-launcher-logo.png">
-		<link rel="stylesheet" href="styles.css">
+	<title>Voidscape - Reserve your name</title>
+	<meta name="description" content="Voidscape launches July 18. Reserve your account name and start with a free week of subscription - web, desktop, iOS, and Android.">
+	<link rel="icon" href="assets/favicon.png">
+	<link rel="preload" as="font" type="font/woff2" href="assets/instrument-sans-latin-400-600.woff2" crossorigin>
+	<link rel="preload" as="font" type="font/ttf" href="assets/alagard.ttf" crossorigin>
+	<link rel="stylesheet" href="landing.css">
 </head>
-<body>
-	<div class="portal-shell">
-		<aside class="sidebar" aria-label="Portal navigation">
-			<a class="brand-lockup" href="#dashboard" data-view-link="dashboard" aria-label="Voidscape account portal home">
-				<img src="assets/voidscape-wordmark.png" alt="Voidscape">
-			</a>
+<body class="session-pending">
+	<div class="stars" aria-hidden="true"></div>
 
-			<div class="server-pill" hidden>
-				<span class="status-dot"></span>
-				<span id="server-world-label">World 1</span>
-				<strong id="server-online-count">247 online</strong>
-			</div>
+	<header class="nav">
+		<a class="nav-brand" href="/" aria-label="Voidscape">
+			<img src="assets/voidscape-wordmark.png" alt="Voidscape">
+		</a>
+		<div class="nav-side">
+			<span class="launch-chip" id="launch-chip">
+				<span class="chip-dot" aria-hidden="true"></span>
+				<span id="launch-chip-text">Launches July 18</span>
+			</span>
+			<a class="nav-signin" href="/portal?auth=login" data-signin>Sign in</a>
+		</div>
+	</header>
 
-			<nav class="nav-list">
-				<button class="nav-item is-active" type="button" data-view-link="dashboard">
-					<span class="nav-mark account"></span>
-					<span>Account</span>
-				</button>
-				<button class="nav-item" type="button" data-view-link="characters">
-					<span class="nav-mark characters"></span>
-					<span>Characters</span>
-				</button>
-				<button class="nav-item" type="button" data-view-link="subscription">
-					<span class="nav-mark subscription"></span>
-					<span>Subscription</span>
-				</button>
-				<button class="nav-item" type="button" data-view-link="security">
-					<span class="nav-mark security"></span>
-					<span>Security</span>
-				</button>
-				<button class="nav-item" type="button" data-view-link="admin">
-					<span class="nav-mark staff"></span>
-					<span>Staff</span>
-				</button>
-			</nav>
+	<main>
+		<section class="hero">
+			<p class="hero-eyebrow" id="hero-eyebrow">A Classic RSC world &middot; web, desktop &amp; mobile</p>
+			<h1 class="hero-title" id="hero-title">Who will you be?</h1>
+			<p class="hero-sub" id="hero-sub">Reserve your name now &mdash; founders start with a free week.</p>
 
-			<div class="sidebar-card">
-				<img src="assets/subscription-card.png" alt="" aria-hidden="true">
-				<p>Member status</p>
-				<strong id="sidebar-sub-time">Unsubscribed</strong>
-				<button class="mini-button" type="button" data-view-link="subscription">Manage</button>
-			</div>
-		</aside>
-
-		<header class="topbar">
-			<div class="topbar-cluster">
-				<button id="menu-toggle" class="icon-button mobile-only" type="button" aria-label="Toggle navigation"></button>
-				<div>
-					<p class="eyebrow">Account portal</p>
-					<h1 id="view-title">Account</h1>
+			<div class="count" id="count" aria-label="Countdown until Voidscape launches">
+				<p class="count-label">Launch opens in</p>
+				<div class="count-grid">
+					<div><strong id="count-days">-</strong><em>days</em></div>
+					<div><strong id="count-hours">--</strong><em>hours</em></div>
+					<div><strong id="count-minutes">--</strong><em>minutes</em></div>
+					<div><strong id="count-seconds">--</strong><em>seconds</em></div>
 				</div>
 			</div>
-			<div class="account-strip">
-				<span class="patch-chip" id="patch-chip" hidden>Patch 0.8.7</span>
-				<span class="rank-chip" hidden>Admin preview</span>
-				<button class="topbar-play-button" type="button" data-landing-scroll="founder-form">
-					<strong>Reserve Name</strong>
-					<span>Free sub card</span>
-				</button>
-				<div class="account-avatar" aria-hidden="true">V</div>
-				<div class="account-copy">
-					<strong id="account-name">Voidscape</strong>
-					<span id="account-email">Reserve before launch</span>
-				</div>
+
+			<!-- Real in-game renders, integer-scaled with nearest-neighbor to stay authentic -->
+			<div class="trio" role="img" aria-label="Three player characters rendered by the game: an armored warrior, a plumed knight, and a robed mage">
+				<figure class="champ champ-warrior">
+					<img src="assets/rsc-knight.png" alt="" draggable="false">
+					<figcaption class="champ-plate">The Warrior</figcaption>
+				</figure>
+				<figure class="champ champ-knight">
+					<img src="assets/rsc-ranger.png" alt="" draggable="false">
+					<figcaption class="champ-plate">The Knight</figcaption>
+				</figure>
+				<figure class="champ champ-mage">
+					<img src="assets/rsc-mage.png" alt="" draggable="false">
+					<figcaption class="champ-plate">The Mage</figcaption>
+				</figure>
+				<div class="floor" aria-hidden="true"></div>
 			</div>
-		</header>
 
-		<main class="workspace">
-				<section id="account" class="view is-active prelaunch-view" data-title="Prelaunch">
-					<div class="prelaunch-page landing-redesign" aria-label="Voidscape prelaunch signup">
-						<div class="prelaunch-bg-fallback" aria-hidden="true"></div>
-						<div class="prelaunch-vignette" aria-hidden="true"></div>
-
-						<div class="prelaunch-content landing-page-inner">
-							<header class="landing-nav" id="home">
-								<a class="landing-brand" href="#home" data-landing-scroll="home" aria-label="Voidscape home">
-									<img src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
-								</a>
-								<nav class="landing-nav-links" aria-label="Landing sections">
-									<button type="button" data-landing-scroll="beta-access">Reserve</button>
-									<button type="button" data-landing-scroll="gameplay">Features</button>
-									<a href="/transparency" data-funnel-event="transparency">Trust</a>
-									<button type="button" data-landing-scroll="rewards">Rewards</button>
-								</nav>
-								<div class="landing-nav-actions">
-									<button class="landing-nav-auth" type="button" data-prelaunch-auth-cta>Sign in</button>
-									<button class="landing-nav-cta" id="landing-nav-primary-cta" type="button" data-landing-scroll="founder-form">Reserve Name</button>
-								</div>
-							</header>
-
-							<section class="landing-hero" aria-labelledby="landing-hero-title">
-								<div class="landing-hero-copy">
-									<p class="landing-kicker" id="landing-hero-kicker">Prelaunch</p>
-									<h1 id="landing-hero-title"><span>Voidscape</span> launches soon.</h1>
-									<p class="landing-hero-proof" id="landing-hero-proof">
-										<span>Reserve your account name.</span>
-										<span>Get a free 1-week subscription card.</span>
-										<span>Web, Desktop, iOS, and Android at launch.</span>
-									</p>
-									<div class="landing-hero-actions">
-										<button class="landing-button landing-button-primary" id="landing-hero-primary-cta" type="button" data-landing-scroll="founder-form">Reserve Name + Free Card</button>
-										<button class="landing-button landing-button-secondary" type="button" data-prelaunch-auth-cta>Sign in</button>
-										<a class="landing-button landing-button-secondary" href="/features" data-funnel-event="features">Feature Guide</a>
-										<a class="landing-button landing-button-secondary" href="https://discord.gg/f6uQmrRv4" target="_blank" rel="noopener" data-funnel-event="discord_rewards">Discord</a>
-									</div>
-								</div>
-							</section>
-
-							<section class="landing-access-band" id="beta-access" aria-label="Reserve Voidscape">
-								<div class="beta-countdown" id="beta-countdown" aria-live="polite">
-									<span id="beta-countdown-label">Launch opens in</span>
-									<div class="beta-countdown-grid" aria-label="Countdown until Voidscape launch opens">
-										<div><strong id="beta-countdown-days">--</strong><em>Days</em></div>
-										<div><strong id="beta-countdown-hours">--</strong><em>Hours</em></div>
-										<div><strong id="beta-countdown-minutes">--</strong><em>Minutes</em></div>
-										<div><strong id="beta-countdown-seconds">--</strong><em>Seconds</em></div>
-									</div>
-									<p class="beta-signup-counter" id="beta-signup-counter" hidden>
-										<strong id="beta-signup-count">132</strong>
-										<span>names reserved for launch</span>
-									</p>
-									<p id="beta-countdown-note">Create your launch account now. Your starter card is reserved for the Lumbridge vendor on launch day.</p>
-								</div>
-
-								<form class="prelaunch-signup" id="founder-form" aria-labelledby="founder-title" novalidate>
-									<img class="prelaunch-signup-frame" src="assets/prelaunch/signup-panel-clean.png" alt="" aria-hidden="true">
-									<div class="prelaunch-signup-content">
-										<h2 id="founder-title">Reserve your account name</h2>
-										<div class="account-mode prelaunch-auth-tabs" role="tablist" aria-label="Portal account mode" hidden>
-											<button class="is-active" type="button" data-account-mode="reserve">Create</button>
-											<button type="button" data-account-mode="signin">Sign in</button>
-										</div>
-										<div class="prelaunch-fields">
-											<label class="prelaunch-field" id="founder-name-row">
-												<span>Username to reserve</span>
-												<input id="founder-name" maxlength="12" autocomplete="username" placeholder="Choose Username">
-											</label>
-											<label class="prelaunch-field" id="founder-email-row">
-												<span>Email</span>
-												<input id="founder-email" type="email" autocomplete="email" placeholder="you@example.com">
-											</label>
-										<label class="prelaunch-field" id="founder-password-row">
-											<span>Password</span>
-											<input id="founder-password" type="password" minlength="8" maxlength="20" autocomplete="new-password" placeholder="8-20 characters">
-										</label>
-										<button class="prelaunch-manage prelaunch-submit" type="submit" id="founder-submit">Reserve name + free card</button>
-									</div>
-									<div class="prelaunch-google" id="prelaunch-google" hidden>
-										<div class="prelaunch-divider"><span>or</span></div>
-										<div id="google-signup-button" class="google-signup-button"></div>
-										<p id="google-signup-message" class="prelaunch-state google-signup-message">Google creates the web login; the password above becomes the first character login.</p>
-									</div>
-									<p class="prelaunch-state" id="founder-message">Reserve your account name, create your first character, and get one free 1-week subscription card. No Discord required.</p>
-									<div class="prelaunch-success" id="prelaunch-success" hidden>
-										<h2>Your account is ready</h2>
-										<p>Your first character uses this username and your starter card is reserved for launch day.</p>
-											<div class="prelaunch-success-meta" aria-label="Reserved card details">
-												<span>Email <strong id="prelaunch-success-account">-</strong></span>
-												<span>Character <strong id="prelaunch-success-name">-</strong></span>
-												<span>Slots <strong id="prelaunch-success-status">1 / 10 used</strong></span>
-											</div>
-											<div class="signup-code-block" id="signup-code-block" hidden>
-												<span class="signup-code-label">Your subscription card code</span>
-												<div class="copy-row">
-													<strong class="signup-code" id="prelaunch-success-code">-</strong>
-													<button class="ghost-button" type="button" id="copy-signup-code">Copy</button>
-												</div>
-												<p class="signup-code-help" id="signup-code-help">Talk to the Void Subscription Vendor in Lumbridge and enter this code when he asks.</p>
-											</div>
-										<div class="prelaunch-game-onboarding" id="prelaunch-game-onboarding">
-											<label class="prelaunch-field">
-												<span>Game password</span>
-												<input id="prelaunch-game-password" type="password" maxlength="20" autocomplete="new-password" placeholder="4-20 characters">
-											</label>
-											<button class="prelaunch-manage" type="button" id="prelaunch-create-game-login">Create game login</button>
-											</div>
-											<div class="prelaunch-success-actions" id="prelaunch-success-actions">
-												<button class="prelaunch-manage prelaunch-primary-action" type="button" data-view-link="dashboard">Manage account</button>
-												<button class="prelaunch-manage" type="button" data-view-link="characters">Manage characters</button>
-												<button class="prelaunch-manage" type="button" data-landing-scroll="gameplay">View features</button>
-											</div>
-										</div>
-										<div class="referral-notice prelaunch-referral" id="referral-notice" hidden>
-											<span>Invite code active</span>
-											<strong id="referral-code"></strong>
-											<button class="ghost-button" type="button" id="clear-referral">Clear</button>
-										</div>
-										<div class="founder-progress prelaunch-progress" hidden>
-											<div>
-												<span id="founder-progress-label">0 / 2 invites</span>
-												<strong id="founder-reward-label">Reward locked</strong>
-											</div>
-											<div class="meter-track"><span id="founder-progress-fill"></span></div>
-										</div>
-										<label class="prelaunch-invite-link" hidden>
-											<span>Invite link</span>
-											<div class="copy-row">
-												<input id="founder-link" readonly>
-												<button class="ghost-button" type="button" id="copy-founder-link">Copy</button>
-											</div>
-										</label>
-										<button class="mini-button" type="button" id="simulate-referral" hidden>Simulate invite</button>
-										</div>
-									</form>
-
-								<div class="landing-card-promo">
-									<div>
-										<p class="landing-kicker">Founder</p>
-										<strong>1-week subscription card</strong>
-										<span>Prelaunch accounts get one card reserved for launch week.</span>
-									</div>
-								</div>
-
-								<div class="landing-public-downloads landing-platform-proof" aria-label="Voidscape launch platform support">
-									<span id="landing-platform-label">Launch platform support</span>
-									<strong id="landing-platform-title">One account. Every platform.</strong>
-									<p id="landing-platform-copy">Voidscape will be available on Web, Desktop, iOS, and Android at launch. It is the only RSC server built for every platform, with no download required if you prefer the web client.</p>
-									<div class="landing-install-help" aria-label="Launch platforms">
-										<div>
-											<span>Web</span>
-											<strong>No download</strong>
-											<em>Browser client at launch</em>
-										</div>
-										<div>
-											<span>Desktop</span>
-											<strong>Launcher</strong>
-											<em>Optional install</em>
-										</div>
-										<div>
-											<span>iOS</span>
-											<strong>Web app</strong>
-											<em>Phone-friendly browser play</em>
-										</div>
-										<div>
-											<span>Android</span>
-											<strong>Web or APK</strong>
-											<em>Use either path</em>
-										</div>
-									</div>
-									<div class="landing-launch-proof-grid" id="landing-launch-proof" hidden aria-label="Launch readiness">
-										<div>
-											<span>Status</span>
-											<strong id="landing-live-status">Prelaunch</strong>
-											<em id="landing-live-players">Reservations open</em>
-										</div>
-										<div>
-											<span>Build</span>
-											<strong id="landing-live-build">Launch build</strong>
-											<em id="landing-live-build-detail">Build waiting</em>
-										</div>
-										<div>
-											<span>Proof</span>
-											<strong id="landing-live-updated">Checking</strong>
-											<em id="landing-live-updated-detail">Status snapshot</em>
-										</div>
-									</div>
-									<div class="landing-public-download-grid" id="download-actions" hidden aria-label="Play and download Voidscape"></div>
-									<div class="landing-reward-prompt landing-reserve-prompt" id="landing-reserve-prompt">
-										<span>Prelaunch action</span>
-										<button class="ghost-button" id="landing-platform-primary-cta" type="button" data-landing-scroll="founder-form">Reserve Name + Free Card</button>
-									</div>
-								</div>
-								</section>
-
-							<section class="landing-gameplay whitepaper-remix" id="gameplay" aria-labelledby="landing-gameplay-title">
-								<p class="landing-kicker">Launch build</p>
-								<h2 id="landing-gameplay-title">See the world first.</h2>
-								<div class="landing-gameplay-grid">
-									<figure>
-										<img src="assets/whitepaper/feature-void-enclave-current.png" loading="lazy" decoding="async" alt="Void Enclave hub in the current Voidscape client.">
-										<figcaption><strong>Explore Void Island</strong><span>Start in the Void Enclave and branch into the world.</span></figcaption>
-									</figure>
-									<figure>
-										<img src="assets/whitepaper/feature-void-colossus-current.png" loading="lazy" decoding="async" alt="Void Colossus fight in the current Voidscape client.">
-										<figcaption><strong>Fight bosses</strong><span>PvM, drops, combat pacing, and group pressure are tuned for launch.</span></figcaption>
-									</figure>
-									<figure>
-										<img src="assets/whitepaper/feature-auction-house-current.png" loading="lazy" decoding="async" alt="Auction House in the current Voidscape client.">
-										<figcaption><strong>Build your account</strong><span>Train, trade, gear up, and move through the real map.</span></figcaption>
-									</figure>
-								</div>
-							</section>
-
-							<section class="landing-trust-teaser" id="trust" aria-labelledby="landing-trust-title">
-								<div>
-									<p class="landing-kicker">Community trust</p>
-									<h2 id="landing-trust-title">Transparency</h2>
-									<p>Build hashes, staff command summaries, item receipts, and account integrity scans live on a dedicated public page.</p>
-								</div>
-								<a class="landing-button landing-button-secondary" href="/transparency" data-funnel-event="transparency">View Transparency</a>
-							</section>
-
-							<section id="whitepaper" class="landing-whitepaper landing-whitepaper-compact whitepaper-remix whitepaper-view" aria-label="Voidscape whitepaper">
-								<div class="landing-section-head">
-									<p class="landing-kicker">Whitepaper</p>
-									<h2>Keep the Classic. Finish the loop.</h2>
-									<p>Voidscape is a focused Classic world for the systems that make the game feel social again: risk, supply, markets, status, and friction that earns its place.</p>
-								</div>
-								<nav class="whitepaper-remix-nav landing-paper-nav" aria-label="Whitepaper flow">
-									<button type="button" data-whitepaper-jump="whitepaper-unfinished">Classic</button>
-									<button type="button" data-whitepaper-jump="whitepaper-loop">Loop</button>
-									<button type="button" data-whitepaper-jump="whitepaper-blueprint">Beta</button>
-									<button type="button" data-whitepaper-jump="whitepaper-vision">Vision</button>
-									<button type="button" data-whitepaper-jump="whitepaper-proof">Proof</button>
-								</nav>
-								<div class="landing-paper-grid">
-									<article id="whitepaper-unfinished">
-										<span>01</span>
-										<strong>Classic stayed dangerous.</strong>
-										<p>We keep the old rhythm: distance, inventory pressure, social memory, and risk that changes how people act.</p>
-									</article>
-									<article id="whitepaper-loop">
-										<span>02</span>
-										<strong>The loop needed gravity.</strong>
-										<p>Skillers supply combat. Combat consumes supplies. PvM, PvP, and trade pull value back through the world.</p>
-									</article>
-									<article id="whitepaper-blueprint">
-										<span>03</span>
-										<strong>The launch is connected.</strong>
-									<p>Portal reservations, character management, starter-card rewards, and trust receipts stay in one place.</p>
-									</article>
-									<article id="whitepaper-vision">
-										<span>04</span>
-										<strong>The world grows by pressure.</strong>
-										<p>New content has to strengthen the cycle: prepare, risk, recover, trade, flex, repeat.</p>
-									</article>
-								</div>
-								<div class="landing-proof-row" id="whitepaper-proof">
-									<figure>
-										<img src="assets/whitepaper/feature-bank-loadouts-current.png" loading="lazy" decoding="async" alt="Bank loadouts screen in the current Voidscape client.">
-										<figcaption><strong>Bank loadouts</strong><span>Prepare faster without removing the old stakes.</span></figcaption>
-									</figure>
-									<figure>
-										<img src="assets/whitepaper/feature-player-titles-current.png" loading="lazy" decoding="async" alt="Player titles screen in the current Voidscape client.">
-										<figcaption><strong>Player titles</strong><span>Status and achievements that show in the world.</span></figcaption>
-									</figure>
-								</div>
-							</section>
-
-							<section class="landing-final" id="rewards" aria-label="Reserve Voidscape founder rewards">
-								<div>
-									<p class="landing-kicker">Founder pass</p>
-									<h2>Reserve now. Play on launch day.</h2>
-								</div>
-								<div class="landing-final-actions">
-									<button class="landing-button landing-button-primary" id="landing-final-primary-cta" type="button" data-landing-scroll="founder-form">Reserve Name + Free Card</button>
-									<button class="landing-button landing-button-secondary" type="button" data-landing-scroll="gameplay">Features</button>
-								</div>
-							</section>
-
-							<section class="beta-hub" id="beta-hub" hidden aria-label="Prelaunch tester hub">
-								<div class="beta-hub-head">
-									<div>
-										<p class="whitepaper-kicker">Prelaunch tester pass</p>
-										<h2 id="beta-discord-name">Discord connected</h2>
-									</div>
-									<div class="beta-code-card">
-										<span>Your release-valid code</span>
-										<div class="copy-row">
-											<strong class="signup-code" id="beta-code">-</strong>
-											<button class="ghost-button" type="button" id="copy-beta-code">Copy</button>
-										</div>
-										<p id="beta-code-help">Talk to the Void Subscription Vendor in Lumbridge and enter this code.</p>
-									</div>
-								</div>
-								<div class="beta-downloads" id="beta-downloads"></div>
-								<div class="beta-reference-tools">
-									<label>
-										<span>Search launch reference</span>
-										<input id="beta-reference-search" autocomplete="off" placeholder="command, item, coord, feature">
-									</label>
-									<small id="beta-reference-count">0 entries</small>
-								</div>
-								<div class="beta-resource-grid">
-									<div class="beta-resource-panel beta-command-panel">
-										<h3>Command Suite</h3>
-										<ul id="beta-command-list"></ul>
-									</div>
-									<div class="beta-resource-panel">
-										<h3>Flow Checklist</h3>
-										<ul id="beta-checklist"></ul>
-									</div>
-									<div class="beta-resource-panel">
-										<h3>Locations</h3>
-										<ul id="beta-coords"></ul>
-									</div>
-									<div class="beta-resource-panel">
-										<h3>Useful Item IDs</h3>
-										<ul id="beta-items"></ul>
-									</div>
-								</div>
-								<p class="beta-policy" id="beta-policy">Prelaunch test progress may wipe before launch. Your starter code stays valid for release.</p>
-							</section>
-
-							<footer class="landing-footer">
-								<img src="assets/prelaunch/voidscape-launcher-logo.png" alt="Voidscape">
-								<div>
-									<button type="button" data-landing-scroll="home">Home</button>
-									<a href="/transparency">Trust</a>
-									<button type="button" data-landing-scroll="gameplay">Features</button>
-									<a href="/features">Feature Guide</a>
-									<button type="button" data-discord-login>Discord</button>
-									<a href="/privacy">Privacy</a>
-									<a href="/data-deletion">Data Deletion</a>
-									<a href="https://github.com/voidscape-gg/voidscape" rel="noopener">AGPL Source</a>
-								</div>
-							</footer>
-
-							<div class="prelaunch-benefits" aria-label="Why join Voidscape" hidden>
-								<img src="assets/prelaunch/benefit-subscription.png" alt="Claim a free 1-week subscription card. Play early with a free 1-week subscription when you sign up.">
-								<img src="assets/prelaunch/benefit-reserve.png" alt="Reserve your account early. Secure your username and be ready for launch day.">
-								<img src="assets/prelaunch/benefit-invite.png" alt="Invite a friend, earn more. You and your friend get extra rewards when they join.">
-							</div>
-
-							<div class="prelaunch-hidden-state" hidden>
-								<strong id="landing-world-state">Online</strong>
-								<small id="landing-world-detail">247 players online</small>
-								<strong id="landing-xp-rates">10x / 1.5x</strong>
-								<small id="landing-sub-rates">11x / 2.5x subscribed</small>
-								<strong id="landing-prize-state">Founder code</strong>
-								<small id="landing-prize-detail">Prelaunch reservations</small>
-								<div id="landing-news-list"></div>
-							</div>
-						</div>
-
-						<div class="whitepaper-lightbox" id="whitepaper-lightbox" hidden aria-hidden="true">
-							<button class="whitepaper-lightbox-close" id="whitepaper-lightbox-close" type="button" aria-label="Close expanded image">Close</button>
-							<img id="whitepaper-lightbox-image" alt="">
-							<p id="whitepaper-lightbox-caption"></p>
-						</div>
+			<!-- Prelaunch: reserve flow -->
+			<div class="reserve" id="reserve-block">
+				<form class="reserve-form" id="reserve-form" novalidate>
+					<div class="reserve-row">
+						<input id="reserve-name" maxlength="12" autocomplete="username" spellcheck="false" placeholder="Choose your username" aria-label="Username to reserve">
+						<button class="btn-gold" type="submit" id="reserve-submit">Reserve name</button>
+						<a class="discord-cta" href="https://discord.gg/f6uQmrRv4" target="_blank" rel="noopener" aria-label="Join the Voidscape Discord" data-funnel-event="discord_rewards">
+							<svg viewBox="0 0 127.14 96.36" aria-hidden="true"><path fill="currentColor" d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69Z"/></svg>
+							<span>Discord</span>
+						</a>
 					</div>
-				</section>
-
-			<section id="dashboard" class="view" data-title="Account">
-				<div class="dashboard-home">
-					<section class="panel account-home-panel" aria-labelledby="dashboard-account-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Account</p>
-								<h2 id="dashboard-account-title">Dashboard</h2>
-							</div>
-						</div>
-						<div class="account-home-copy">
-							<strong id="dashboard-account-name">Voidscape account</strong>
-							<span id="dashboard-account-email">Sign in to manage game logins and launch rewards.</span>
-						</div>
-						<div class="account-home-grid">
-							<div>
-								<span>Subscription</span>
-								<strong id="dashboard-subscription-state">Unsubscribed</strong>
-							</div>
-							<div>
-								<span>Characters</span>
-								<strong id="dashboard-character-count">0</strong>
-							</div>
-							<div>
-								<span>Sub card</span>
-								<strong id="dashboard-card-state">No card waiting</strong>
-							</div>
-							<div>
-								<span>Security</span>
-								<strong id="dashboard-security-state">Not signed in</strong>
-							</div>
-						</div>
-					</section>
-
-					<section class="panel account-actions-panel" aria-labelledby="dashboard-actions-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Manage</p>
-								<h2 id="dashboard-actions-title">Account tools</h2>
-							</div>
-						</div>
-						<div class="quick-grid account-quick-grid">
-							<button class="quick-action quick-action-play" type="button" data-landing-scroll="gameplay">Features</button>
-							<button class="quick-action" type="button" data-view-link="characters">Characters</button>
-							<button class="quick-action" type="button" data-view-link="subscription">Subscription</button>
-							<button class="quick-action" type="button" data-view-link="security">Security</button>
-						</div>
-						<form class="portal-auth-form" id="portal-auth-form" aria-label="Portal account sign in" novalidate>
-							<div class="account-mode" role="tablist" aria-label="Portal account action">
-								<button class="is-active" type="button" data-portal-auth-mode="register">Register</button>
-								<button type="button" data-portal-auth-mode="login">Sign in</button>
-							</div>
-							<label id="portal-auth-username-row">
-								<span>Username</span>
-								<input id="portal-auth-username" maxlength="12" autocomplete="username" placeholder="Character name">
-							</label>
-							<label>
-								<span>Email</span>
-								<input id="portal-auth-email" type="email" autocomplete="email" placeholder="you@example.com">
-							</label>
-							<label>
-								<span>Password</span>
-								<input id="portal-auth-password" type="password" autocomplete="current-password" placeholder="8+ characters">
-							</label>
-							<button class="primary-button" type="submit" id="portal-auth-submit">Create portal account</button>
-							<p class="inline-state" id="portal-auth-message">Use a web password here. Each game login still has its own 4-20 character password.</p>
-						</form>
-					</section>
-				</div>
-			</section>
-
-			<section id="characters" class="view" data-title="Characters">
-				<div class="two-column">
-					<section class="panel roster-panel" aria-labelledby="roster-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Characters</p>
-								<h2 id="roster-title">3 characters</h2>
-							</div>
-						</div>
-						<div class="character-cards" id="character-cards"></div>
-					</section>
-
-					<section class="panel create-panel" aria-labelledby="create-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">New character</p>
-								<h2 id="create-title">Create game login</h2>
-							</div>
-						</div>
-						<div class="creation-controls">
-							<label>
-								<span>Username</span>
-								<input id="character-name" maxlength="12" autocomplete="username" placeholder="Character name">
-							</label>
-							<label>
-								<span>Game password</span>
-								<input id="character-password" type="password" maxlength="20" autocomplete="new-password" placeholder="4-20 characters">
-							</label>
-							<button class="primary-button" type="button" id="queue-character">Create character</button>
-						</div>
-						<p class="inline-state" id="character-message">Sign in on the Account page first. Then create game logins here with their own in-game passwords.</p>
-					</section>
-				</div>
-			</section>
-
-			<section id="subscription" class="view" data-title="Subscription">
-				<section class="panel subscription-status subscription-simple" aria-labelledby="sub-title">
-					<div class="panel-head">
-						<div>
-							<p class="eyebrow">Subscription</p>
-							<h2 id="sub-title">Unsubscribed</h2>
-						</div>
-						<img class="item-icon" src="assets/subscription-card.png" alt="">
-					</div>
-					<div class="sub-meter">
-						<div>
-							<strong id="sub-days">Unsubscribed</strong>
-							<span>account status</span>
-						</div>
-						<div class="meter-track"><span id="sub-meter-fill"></span></div>
-					</div>
-					<div class="reward-wallet" id="founder-reward-card" hidden>
-						<div>
-							<span>Sub card waiting</span>
-							<strong id="founder-reward-count">No reserved cards</strong>
-						</div>
-						<button class="ghost-button" type="button" id="use-founder-reward" disabled>Claim in Lumbridge</button>
-					</div>
-					<p class="inline-state" id="redeem-state">No subscription card is waiting right now.</p>
-					<div class="subscription-note">
-						<span>How it works</span>
-						<strong>Talk to the Subscription Vendor in Lumbridge to collect a reserved card.</strong>
-					</div>
-				</section>
-			</section>
-
-			<section id="security" class="view" data-title="Security">
-				<div class="security-grid">
-					<section class="panel score-panel" aria-labelledby="security-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Security center</p>
-								<h2 id="security-title">Account score</h2>
-							</div>
-							<strong class="score-badge" id="security-score">92</strong>
-						</div>
-						<div class="security-steps">
-							<label><input id="security-email-check" type="checkbox" checked disabled> Email or Google verified</label>
-							<label><input id="security-recovery-check" type="checkbox" checked disabled> Recovery codes set</label>
-							<label><input id="security-password-check" type="checkbox" disabled> Password or Google login set</label>
-							<label><input id="security-session-check" type="checkbox" checked disabled> Sessions reviewed</label>
-						</div>
-					</section>
-					<section class="panel security-actions" aria-labelledby="security-actions-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Recovery</p>
-								<h2 id="security-actions-title">Account controls</h2>
-							</div>
-							<button class="ghost-button" type="button" id="generate-recovery">New codes</button>
-						</div>
-						<form class="password-form" id="password-form" hidden>
-							<label>
-								<span>Current password</span>
-								<input id="current-password" type="password" autocomplete="current-password">
-							</label>
-							<label>
-								<span>New password</span>
-								<input id="new-password" type="password" autocomplete="new-password" placeholder="8+ characters">
-							</label>
-							<button class="primary-button" type="submit">Update password</button>
-						</form>
-						<div class="recovery-code-list" id="recovery-codes" hidden></div>
-						<p class="inline-state recovery-support-note" id="recovery-support-note">Lost your recovery codes? Email <a href="mailto:support@voidscape.gg">support@voidscape.gg</a> from your account email with your character names for staff review.</p>
-						<p class="inline-state" id="security-message">Local API security state appears after sign in.</p>
-					</section>
-				</div>
-				<section class="panel">
-					<div class="panel-head">
-						<div>
-							<p class="eyebrow">Access log</p>
-							<h2>Recent sessions</h2>
-						</div>
-						<button class="danger-button" type="button" id="end-other-sessions">End other sessions</button>
-					</div>
-					<div class="data-table session-table" id="session-table">
-						<div class="table-row table-head"><span>Date</span><span>IP</span><span>Client</span><span>Result</span></div>
-						<div class="table-row"><span>Jun 3, 2026 4:31 PM</span><span>127.0.0.1</span><span>Workbench</span><span class="good">Active</span></div>
-						<div class="table-row"><span>Jun 2, 2026 9:18 PM</span><span>Local dev</span><span>PC client</span><span>Signed out</span></div>
-						<div class="table-row"><span>Jun 1, 2026 7:04 PM</span><span>Local dev</span><span>Web portal</span><span>Signed out</span></div>
-					</div>
-				</section>
-			</section>
-
-			<section id="highscores" class="view retired-view" data-title="Highscores" hidden>
-				<div class="two-column">
-					<section class="panel" aria-labelledby="highscores-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Rankings</p>
-								<h2 id="highscores-title">Combat highscores</h2>
-							</div>
-							<div class="segmented">
-								<button class="is-active" type="button">Combat</button>
-								<button type="button">Skills</button>
-								<button type="button">Boss</button>
-							</div>
-						</div>
-						<div class="data-table rank-table" id="rank-table"></div>
-					</section>
-					<section class="panel title-panel" aria-labelledby="titles-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Titles</p>
-								<h2 id="titles-title">Collection</h2>
-							</div>
-							<span class="limit-badge">18 / 100</span>
-						</div>
-						<div class="title-list">
-							<button type="button"><strong>The Conqueror</strong><span>Equipped</span></button>
-							<button type="button"><strong>Voidbane</strong><span>Reusable</span></button>
-							<button type="button"><strong>Red Revenant</strong><span>Rare</span></button>
-							<button type="button"><strong>Gatebreaker</strong><span>Unique held by Maeve</span></button>
-						</div>
-						<img class="panel-art-strip" src="assets/generated/highscores-titles.png" alt="">
-					</section>
-				</div>
-			</section>
-
-			<section id="market" class="view retired-view" data-title="Market Intel" hidden>
-				<div class="market-layout">
-					<section class="panel market-table" aria-labelledby="market-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Auction House</p>
-								<h2 id="market-title">Market intel</h2>
-							</div>
-							<input class="search-input" value="Rune">
-						</div>
-						<div class="data-table" id="market-table"></div>
-					</section>
-					<section class="panel market-watch" aria-labelledby="watch-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Watch item</p>
-								<h2 id="watch-title">Rune 2h sword</h2>
-							</div>
-							<button class="ghost-button" type="button">Pin</button>
-						</div>
-						<div class="trend-chart" aria-hidden="true">
-							<span style="height: 32%"></span>
-							<span style="height: 48%"></span>
-							<span style="height: 42%"></span>
-							<span style="height: 60%"></span>
-							<span style="height: 76%"></span>
-							<span style="height: 68%"></span>
-							<span style="height: 84%"></span>
-						</div>
-						<img class="panel-art-strip" src="assets/generated/auction-market.png" alt="">
-					</section>
-				</div>
-			</section>
-
-			<section id="activity" class="view retired-view" data-title="Activity Feed" hidden>
-				<div class="activity-layout">
-					<section class="panel" aria-labelledby="activity-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">World events</p>
-								<h2 id="activity-title">Live feed</h2>
-							</div>
-							<div class="segmented">
-								<button class="is-active" type="button">All</button>
-								<button type="button">Drops</button>
-								<button type="button">PKs</button>
-							</div>
-						</div>
-						<div class="event-list large" id="world-feed"></div>
-					</section>
-					<section class="panel art-card" aria-label="Wilderness art">
-						<img src="assets/generated/wilderness-activity.png" alt="">
-					</section>
-				</div>
-			</section>
-
-			<section id="admin" class="view" data-title="Staff">
-				<section class="panel staff-console" aria-labelledby="staff-title">
-					<div class="panel-head">
-						<div>
-							<p class="eyebrow">Staff</p>
-							<h2 id="staff-title">Account lookup</h2>
-						</div>
-					</div>
-					<form class="staff-search" id="admin-search-form">
+					<p class="name-hint" id="name-hint" aria-live="polite"></p>
+					<div class="reserve-more" id="reserve-more" hidden>
 						<label>
-							<span>Admin token</span>
-							<input id="admin-token" type="password" autocomplete="off" placeholder="Local staff token">
+							<span>Email</span>
+							<input id="reserve-email" type="email" autocomplete="email" placeholder="you@example.com">
 						</label>
-						<label>
-							<span>Account email</span>
-							<input id="admin-search-email" type="email" autocomplete="off" placeholder="player@example.com">
-						</label>
-						<button class="primary-button" type="submit" id="admin-search-button">Search</button>
-					</form>
-					<p class="inline-state" id="admin-message">Enter the local staff token and account email.</p>
-				</section>
+					<label>
+						<span>Web + first game password</span>
+						<input id="reserve-password" type="password" minlength="8" maxlength="20" autocomplete="new-password" placeholder="8&ndash;20 letters and numbers only" title="Symbols and spaces are not allowed.">
+					</label>
+					<div class="google-signup" id="google-signup" hidden>
+						<div id="google-signup-button"></div>
+						<p id="google-signup-message">Google creates the web login; use 8&ndash;20 letters and numbers only for the first character password. Symbols and spaces are not allowed.</p>
+						</div>
+						<div class="captcha-widget" id="captcha-widget" hidden></div>
+						<button class="btn-gold btn-wide" type="submit" id="reserve-confirm">Reserve + claim free week</button>
+					</div>
+				</form>
+				<p class="reserve-proof" id="reserve-proof" hidden><span id="reserve-count">0</span> names reserved &middot; free 1-week sub card for founders</p>
+			</div>
 
-				<div class="summary-grid staff-summary">
-					<article class="stat-tile"><p>Status</p><strong id="admin-status-tile">-</strong><small id="admin-status-note">No account loaded</small></article>
-					<article class="stat-tile"><p>Subscription</p><strong id="admin-subscription-tile">-</strong><small id="admin-subscription-note">Account-wide</small></article>
-					<article class="stat-tile"><p>Characters</p><strong id="admin-character-tile">0</strong><small>Linked roster</small></article>
-					<article class="stat-tile warn"><p>Starter card</p><strong id="admin-starter-tile">-</strong><small id="admin-starter-note">Review state</small></article>
+			<!-- Post-reserve success -->
+			<div class="success" id="success-block" hidden>
+				<h2 class="success-title">The name <strong id="success-name">-</strong> is yours.</h2>
+				<p class="success-sub">Your first character uses this name. Your free week is reserved for the Lumbridge vendor on launch day.</p>
+				<div class="verification-actions" id="verification-actions" hidden>
+					<p id="verification-help">Check spam or promotions if the message does not arrive.</p>
+					<button type="button" id="resend-verification">Resend verification email</button>
+					<p class="verification-status" id="verification-status" role="status" aria-live="polite"></p>
 				</div>
-
-				<div class="admin-layout">
-					<section class="panel" aria-labelledby="admin-account-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Account</p>
-								<h2 id="admin-account-title">No account loaded</h2>
-							</div>
-							<span class="limit-badge" id="admin-account-id">ID -</span>
-						</div>
-						<div class="data-table admin-account-table" id="admin-account-table">
-							<div class="table-row table-head"><span>Field</span><span>Value</span></div>
-							<div class="table-row"><span>Email</span><span>-</span></div>
-							<div class="table-row"><span>Google</span><span>-</span></div>
-							<div class="table-row"><span>Recovery</span><span>-</span></div>
-						</div>
-					</section>
-
-					<section class="panel" aria-labelledby="admin-actions-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Actions</p>
-								<h2 id="admin-actions-title">Account controls</h2>
-							</div>
-						</div>
-						<div class="admin-actions">
-							<div class="admin-action-row">
-								<label>
-									<span>Status</span>
-									<select id="admin-status-select">
-										<option value="active">Active</option>
-										<option value="review">Review</option>
-										<option value="locked">Locked</option>
-									</select>
-								</label>
-								<label>
-									<span>Note</span>
-									<input id="admin-status-note-input" maxlength="240" placeholder="Optional">
-								</label>
-								<button class="ghost-button" type="button" id="admin-apply-status">Apply</button>
-							</div>
-							<div class="admin-action-row compact">
-								<label>
-									<span>Sub days</span>
-									<input id="admin-sub-days" type="number" min="1" max="366" value="7">
-								</label>
-								<button class="ghost-button" type="button" id="admin-grant-sub">Grant</button>
-								<button class="danger-button" type="button" id="admin-clear-sub">Clear</button>
-							</div>
-							<div class="action-stack staff-action-stack">
-								<button class="ghost-button" type="button" id="admin-grant-starter">Grant starter card</button>
-								<button class="danger-button" type="button" id="admin-revoke-starter">Revoke starter card</button>
-								<button class="danger-button" type="button" id="admin-revoke-sessions">Revoke sessions</button>
-							</div>
-						</div>
-					</section>
+				<div class="code-card" id="success-code-card" hidden>
+					<span>Subscription card code</span>
+					<div>
+						<code id="success-code">-</code>
+						<button class="copy-code" type="button" id="copy-code">Copy</button>
+					</div>
+					<p id="success-code-help">Talk to the Subscription Vendor in Lumbridge and enter this code.</p>
 				</div>
-
-				<div class="admin-layout">
-					<section class="panel" aria-labelledby="admin-characters-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Roster</p>
-								<h2 id="admin-characters-title">Characters</h2>
-							</div>
+				<div class="ready">
+					<p class="ready-label">Get ready for launch day</p>
+					<div class="ready-grid">
+						<div class="ready-tile">
+							<strong>Web</strong>
+							<span>Nothing to install. Play in your browser the moment we're live.</span>
+							<a href="#" class="ready-link" id="ready-web" hidden data-funnel-event="play_web">Play in browser</a>
 						</div>
-						<div class="data-table admin-character-table" id="admin-character-table">
-							<div class="table-row table-head"><span>Name</span><span>State</span><span>Sub</span></div>
-							<div class="table-row"><span>No account loaded</span><span></span><span></span></div>
+						<div class="ready-tile">
+							<strong>Desktop launcher</strong>
+							<span>Install now - it updates itself before launch.</span>
+							<a href="#" class="ready-link" id="ready-launcher" hidden data-funnel-event="download_launcher">Download</a>
 						</div>
-					</section>
-
-					<section class="panel" aria-labelledby="admin-signals-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Risk</p>
-								<h2 id="admin-signals-title">Abuse signals</h2>
-							</div>
-						</div>
-						<div class="data-table admin-signal-table" id="admin-signal-table">
-							<div class="table-row table-head"><span>Type</span><span>Bucket</span><span>When</span></div>
-							<div class="table-row"><span>No account loaded</span><span></span><span></span></div>
-						</div>
-					</section>
-				</div>
-
-				<section class="panel" aria-labelledby="admin-audit-title">
-					<div class="panel-head">
-						<div>
-							<p class="eyebrow">Audit</p>
-							<h2 id="admin-audit-title">Recent account events</h2>
+						<div class="ready-tile">
+							<strong>Android</strong>
+							<span>Sideload the APK ahead of time and skip the launch-day fiddling.</span>
+							<a href="#" class="ready-link" id="ready-android" hidden data-funnel-event="download_android">Get APK</a>
 						</div>
 					</div>
-					<div class="data-table admin-audit-table" id="admin-audit-table">
-						<div class="table-row table-head"><span>Event</span><span>Metadata</span><span>When</span></div>
-						<div class="table-row"><span>No account loaded</span><span></span><span></span></div>
-					</div>
-				</section>
-			</section>
-
-			<section id="public" class="view retired-view" data-title="News" hidden>
-				<div class="public-layout">
-					<section class="panel public-hero" aria-labelledby="public-title">
-						<div>
-							<p class="eyebrow">Voidscape</p>
-							<h2 id="public-title">Classic RSC, modern account tools</h2>
-							<p>Patch notes, downloads, character access, and account status live in one place.</p>
-							<div class="button-row">
-								<button class="primary-button" type="button">Register</button>
-								<button class="ghost-button" type="button">Download client</button>
-							</div>
-						</div>
-					</section>
-					<section class="panel news-panel" aria-labelledby="news-title">
-						<div class="panel-head">
-							<div>
-								<p class="eyebrow">Updates</p>
-								<h2 id="news-title">Latest news</h2>
-							</div>
-						</div>
-						<div class="event-list" id="public-news-list">
-							<div class="event-row rare"><span></span><p>Void Enclave boss tuning is live.</p><time>Today</time></div>
-							<div class="event-row market"><span></span><p>Subscription cards added near Lumbridge.</p><time>Today</time></div>
-							<div class="event-row title"><span></span><p>Player titles now display overhead.</p><time>Jun 3</time></div>
-						</div>
-					</section>
+					<a class="discord-cta" href="https://discord.gg/f6uQmrRv4" target="_blank" rel="noopener" aria-label="Join the Voidscape Discord" data-funnel-event="discord_rewards">
+						<svg viewBox="0 0 127.14 96.36" aria-hidden="true"><path fill="currentColor" d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69Z"/></svg>
+						<span>Join the Discord while you wait</span>
+					</a>
 				</div>
-			</section>
-		</main>
-	</div>
+			</div>
 
-	<script src="script.js"></script>
+			<!-- Launch day: play flow -->
+			<div class="play" id="play-block" hidden>
+				<div class="play-row">
+					<a class="btn-gold btn-big" href="#" id="play-launcher" data-funnel-event="download_launcher" aria-disabled="true">Download launcher</a>
+					<a class="btn-quiet" href="#" id="play-web" data-funnel-event="play_web" aria-disabled="true">Play in browser</a>
+					<a class="btn-quiet" href="#" id="play-android" data-funnel-event="download_android" aria-disabled="true">Android APK</a>
+					<a class="discord-cta" href="https://discord.gg/f6uQmrRv4" target="_blank" rel="noopener" aria-label="Join the Voidscape Discord" data-funnel-event="discord_rewards">
+						<svg viewBox="0 0 127.14 96.36" aria-hidden="true"><path fill="currentColor" d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69Z"/></svg>
+						<span>Discord</span>
+					</a>
+				</div>
+				<p class="reserve-proof">One account, every platform &middot; reserved names are waiting</p>
+			</div>
+		</section>
+
+		<section class="quiet-band">
+				<nav class="quiet-links" aria-label="More">
+					<a href="/features">Feature guide</a>
+					<a href="/npcs">NPC drops</a>
+					<a href="/transparency">Transparency</a>
+				</nav>
+		</section>
+	</main>
+
+	<footer class="footer">
+		<img src="assets/voidscape-wordmark.png" alt="Voidscape">
+		<nav aria-label="Legal">
+			<a href="/privacy">Privacy</a>
+			<a href="/data-deletion">Data deletion</a>
+			<a href="https://github.com/voidscape-gg/voidscape" rel="noopener">AGPL source</a>
+		</nav>
+	</footer>
+
+	<script src="presence.js" defer></script>
+	<script src="landing.js"></script>
 </body>
 </html>

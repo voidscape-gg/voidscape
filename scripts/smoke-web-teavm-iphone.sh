@@ -2058,7 +2058,10 @@ async function waitForCameraStateChange(page, before, kind, label) {
   await page.waitForFunction(({ before, kind }) => {
     const after = window.__voidscapeClientState;
     if (!before || !after || !after.hasLocalPlayer) return false;
-    if (kind === 'rotation') return after.cameraRotation !== before.cameraRotation;
+    if (kind === 'rotation') {
+      return after.cameraRotation !== before.cameraRotation
+        || after.cameraAngle !== before.cameraAngle;
+    }
     return after.lastZoom !== before.lastZoom || after.cameraZoom !== before.cameraZoom;
   }, { before, kind }, { timeout: 6000 });
   const after = await waitForClientState(page);

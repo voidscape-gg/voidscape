@@ -9,11 +9,20 @@ CREATE TABLE IF NOT EXISTS web_accounts (
     email_display TEXT NOT NULL,
     password_hash TEXT,
     status TEXT NOT NULL DEFAULT 'active',
+    source TEXT NOT NULL DEFAULT 'portal',
+    synthetic_email INTEGER NOT NULL DEFAULT 0,
+    requires_email_upgrade INTEGER NOT NULL DEFAULT 0,
+    native_player_id INTEGER,
+    email_verified_at TEXT,
+    password_changed_at TEXT,
+    legacy_claimed_at TEXT,
     subscription_expires_at INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK (length(email_canonical) > 3),
-    CHECK (status IN ('active', 'locked', 'review', 'deleted'))
+    CHECK (status IN ('active', 'locked', 'review', 'deleted')),
+    CHECK (synthetic_email IN (0, 1)),
+    CHECK (requires_email_upgrade IN (0, 1))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_web_accounts_email
@@ -82,6 +91,67 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_web_recovery_codes_hash
 
 CREATE INDEX IF NOT EXISTS idx_web_recovery_codes_account
     ON web_recovery_codes (account_id, status);
+
+CREATE TABLE IF NOT EXISTS web_password_reset_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    token_hash TEXT NOT NULL,
+    request_ip_hash TEXT,
+    identifier_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    expires_at INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    used_at TEXT,
+    revoked_at TEXT,
+    FOREIGN KEY (account_id) REFERENCES web_accounts (id) ON DELETE CASCADE,
+    CHECK (identifier_type IN ('email', 'username')),
+    CHECK (status IN ('pending', 'used', 'revoked', 'expired'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_web_password_reset_tokens_hash
+    ON web_password_reset_tokens (token_hash);
+
+CREATE INDEX IF NOT EXISTS idx_web_password_reset_tokens_account
+    ON web_password_reset_tokens (account_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_web_password_reset_tokens_expiry
+    ON web_password_reset_tokens (status, expires_at);
+
+CREATE TABLE IF NOT EXISTS web_legacy_account_claims (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    character_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    normalized_username TEXT NOT NULL,
+    target_email_canonical TEXT NOT NULL,
+    target_email_display TEXT NOT NULL,
+    password_hash TEXT,
+    credential_fingerprint TEXT,
+    ownership_marker TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    request_ip_hash TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    expires_at INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    used_at TEXT,
+    revoked_at TEXT,
+    FOREIGN KEY (account_id) REFERENCES web_accounts (id) ON DELETE CASCADE,
+    CHECK (status IN ('pending', 'used', 'revoked', 'expired'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_web_legacy_account_claims_token
+    ON web_legacy_account_claims (token_hash);
+
+CREATE INDEX IF NOT EXISTS idx_web_legacy_account_claims_account
+    ON web_legacy_account_claims (account_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_web_legacy_account_claims_email
+    ON web_legacy_account_claims (target_email_canonical, status);
+
+CREATE INDEX IF NOT EXISTS idx_web_legacy_account_claims_expiry
+    ON web_legacy_account_claims (status, expires_at);
 
 CREATE TABLE IF NOT EXISTS web_account_characters (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

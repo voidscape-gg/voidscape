@@ -27,7 +27,7 @@ Options:
   --out DIR               Output directory. Default: tmp/portal-prelaunch-visual-smoke.
   --username NAME         Signup username. Default: generated Vis* name.
   --email EMAIL           Signup email. Default: visual+<name>@voidscape.gg.
-  --password PASSWORD     Signup/game password. Default: Visualpass1.
+  --password PASSWORD     Signup/game password. Default: Visualpass1; letters/numbers only (symbols/spaces rejected).
   --login-email EMAIL     Sign in to an existing portal account instead of signing up.
   --login-password PASS   Existing portal password. Prefer --login-password-file for live QA.
   --login-password-file FILE
@@ -119,14 +119,14 @@ if [[ -z "$PLAYWRIGHT_CORE_DIR" ]]; then
 		"/tmp/voidscape-playwright-smoke/node_modules/playwright" \
 		"/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright-core" \
 		"/Users/s/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright"; do
-		if [[ -d "$candidate" ]]; then
+		if [[ -f "$candidate/package.json" ]]; then
 			PLAYWRIGHT_CORE_DIR="$candidate"
 			break
 		fi
 	done
 fi
 
-if [[ -z "$PLAYWRIGHT_CORE_DIR" || ! -d "$PLAYWRIGHT_CORE_DIR" ]]; then
+if [[ -z "$PLAYWRIGHT_CORE_DIR" || ! -f "$PLAYWRIGHT_CORE_DIR/package.json" ]]; then
 	cat >&2 <<'EOF'
 ERROR: playwright/playwright-core was not found.
 
@@ -206,9 +206,10 @@ const secondaryCharacter = {
 };
 const skipSignup = process.env.SKIP_SIGNUP === "1";
 const loginOnly = Boolean(login.email);
-const accountFlowActive = !skipSignup || loginOnly;
 const expectLaunchOpen = process.env.EXPECT_LAUNCH_OPEN === "1";
 const ignoreHTTPSErrors = process.env.IGNORE_HTTPS_ERRORS === "1";
+let authenticated = false;
+let signupVerificationPending = false;
 
 const checks = [];
 const screenshots = [];
@@ -377,56 +378,125 @@ async function clickLandingTarget(page, selector, label, expectedHash) {
 }
 
 async function assertSignInCta(page) {
-	if (!(await clickFirstVisible(page, "[data-prelaunch-auth-cta]", "sign in CTA"))) return;
-	await page.waitForFunction(() => window.location.hash === "#founder-form", null, { timeout: 2500 }).catch(() => {});
+	if (!(await clickFirstVisible(page, "[data-signin]", "sign in CTA"))) return;
+	await page.waitForURL((url) => url.pathname === "/portal", { timeout: 5000 }).catch(() => {});
+	await page.locator('[data-auth-panel="login"]').waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
 	const state = await page.evaluate(() => ({
-		hash: window.location.hash,
-		title: document.querySelector("#founder-title")?.textContent?.trim() || "",
-		signInTabActive: Boolean(document.querySelector('[data-account-mode="signin"].is-active')),
-		authTabsHidden: Boolean(document.querySelector(".prelaunch-auth-tabs")?.hidden),
-		nameRowHidden: Boolean(document.querySelector("#founder-name-row")?.hidden),
-		emailFocused: document.activeElement && document.activeElement.id === "founder-email"
+		path: window.location.pathname,
+		title: document.querySelector("#portal-entry-title")?.textContent?.trim() || "",
+		loginVisible: Boolean(document.querySelector('[data-auth-panel="login"]')?.getBoundingClientRect().height),
+		sidebarVisible: Boolean(document.querySelector(".sidebar")?.getBoundingClientRect().width)
 	}));
-	assertCheck("sign in CTA reaches account form", state.hash === "#founder-form", JSON.stringify(state));
-	if (!state.authTabsHidden) {
-		assertCheck("sign in CTA switches auth mode", /sign in/i.test(state.title) && state.signInTabActive && state.nameRowHidden, JSON.stringify(state));
-	}
+	assertCheck("sign in CTA reaches dedicated account form", state.path === "/portal" && state.loginVisible && /sign in/i.test(state.title), JSON.stringify(state));
+	assertCheck("signed-out account form hides private navigation", state.sidebarVisible === false, JSON.stringify(state));
+	await page.route("**/api/accounts/verify-email/resend", async (route) => {
+		await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ accepted: true }) });
+	});
+	await page.locator('[data-auth-panel="login"] [data-auth-show="resend"]').click();
+	await page.locator('[data-auth-panel="resend"]').waitFor({ state: "visible", timeout: 3000 });
+	await page.locator("#verification-resend-email").fill("pending@example.com");
+	await page.locator("#verification-resend-submit").click();
+	await page.waitForFunction(() => /still pending|on its way/i.test(document.querySelector("#verification-resend-message")?.textContent || ""), null, { timeout: 3000 });
+	const resendState = await page.evaluate(() => ({
+		search: window.location.search,
+		message: document.querySelector("#verification-resend-message")?.textContent?.trim() || ""
+	}));
+	assertCheck("verification resend is reachable and enumeration-safe", resendState.search === "?auth=resend-verification" && /still pending|on its way/i.test(resendState.message), JSON.stringify(resendState));
+	await page.unroute("**/api/accounts/verify-email/resend");
+	await page.locator('[data-auth-panel="resend"] [data-auth-show="login"]').click();
+	await page.locator('[data-auth-panel="login"] [data-auth-show="request"]').click();
+	await page.locator('[data-auth-panel="request"]').waitFor({ state: "visible", timeout: 3000 });
+	assertCheck("email or username recovery is reachable", await page.locator("#password-reset-identifier").isVisible(), page.url());
+	await page.locator('[data-auth-panel="request"] [data-auth-show="claim"]').click();
+	await page.locator('[data-auth-panel="claim"]').waitFor({ state: "visible", timeout: 3000 });
+	const legacyClaimFields = await page.locator("#legacy-claim-username, #legacy-claim-game-password, #legacy-claim-email, #legacy-claim-password, #legacy-claim-password-confirm").count();
+	assertCheck("older-character claim collects both proofs and a website login", legacyClaimFields === 5 && await page.locator("#legacy-claim-submit").isVisible(), page.url());
+	await page.locator("#legacy-claim-submit").click();
+	const emptyClaimMessage = await page.locator("#legacy-claim-message").textContent();
+	assertCheck("older-character claim validates before sending", /2-12 character username/i.test(emptyClaimMessage || ""), emptyClaimMessage || "");
+	await screenshot(page, "02-desktop-legacy-claim");
+	await page.route("**/api/accounts/legacy-claim/request", async (route) => {
+		await route.fulfill({
+			status: 202,
+			contentType: "application/json",
+			body: JSON.stringify({ accepted: true, verificationRequired: true, expiresAt: new Date(Date.now() + 1800000).toISOString() })
+		});
+	});
+	await page.locator("#legacy-claim-username").fill("OlderHero");
+	await page.locator("#legacy-claim-game-password").fill("game_pass");
+	await page.locator("#legacy-claim-email").fill("older@example.com");
+	await page.locator("#legacy-claim-password").fill("WebsitePass1!");
+	await page.locator("#legacy-claim-password-confirm").fill("WebsitePass1!");
+	await page.locator("#legacy-claim-submit").click();
+	await page.waitForFunction(() => /queued/i.test(document.querySelector("#legacy-claim-message")?.textContent || ""), null, { timeout: 3000 });
+	const claimRequestState = await page.evaluate(() => ({
+		message: document.querySelector("#legacy-claim-message")?.textContent?.trim() || "",
+		gamePasswordCleared: document.querySelector("#legacy-claim-game-password")?.value === "",
+		websitePasswordCleared: document.querySelector("#legacy-claim-password")?.value === "" && document.querySelector("#legacy-claim-password-confirm")?.value === ""
+	}));
+	assertCheck("older-character claim submit queues verification and clears secrets", /queued/i.test(claimRequestState.message) && claimRequestState.gamePasswordCleared && claimRequestState.websitePasswordCleared, JSON.stringify(claimRequestState));
+	await page.unroute("**/api/accounts/legacy-claim/request");
+	await page.locator('[data-auth-panel="claim"] [data-auth-show="request"]').click();
+	await page.locator('[data-auth-panel="request"] [data-auth-show="code"]').click();
+	await page.locator('[data-auth-panel="code"]').waitFor({ state: "visible", timeout: 3000 });
+	assertCheck("recovery-code fallback is reachable", await page.locator("#recovery-code-value").isVisible(), page.url());
+	await page.goto(new URL("/portal?auth=verify#verify=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", portalUrl).href, { waitUntil: "domcontentloaded" });
+	await page.locator('[data-auth-panel="verify"]').waitFor({ state: "visible", timeout: 5000 });
+	assertCheck("email verification requires an explicit browser confirmation", await page.locator("#email-verification-submit").isVisible(), page.url());
+	await page.goto(new URL("/portal?auth=claim-confirm#claim=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", portalUrl).href, { waitUntil: "domcontentloaded" });
+	await page.locator('[data-auth-panel="claim-confirm"]').waitFor({ state: "visible", timeout: 5000 });
+	assertCheck("older-account claim requires an explicit browser confirmation", await page.locator("#legacy-claim-confirm-submit").isVisible(), page.url());
+	await page.route("**/api/accounts/legacy-claim/complete", async (route) => {
+		await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+	});
+	await page.locator("#legacy-claim-confirm-submit").click();
+	await page.locator('[data-auth-panel="login"]').waitFor({ state: "visible", timeout: 3000 });
+	const claimCompleteState = await page.evaluate(() => ({
+		search: window.location.search,
+		hash: window.location.hash,
+		message: document.querySelector("#portal-auth-message")?.textContent?.trim() || ""
+	}));
+	assertCheck("older-account browser completion returns to clean sign in", claimCompleteState.search === "?auth=login" && claimCompleteState.hash === "" && /account claimed/i.test(claimCompleteState.message), JSON.stringify(claimCompleteState));
+	await page.unroute("**/api/accounts/legacy-claim/complete");
 }
 
 async function runLandingClickMap(page, context) {
 	await assertPortalWiring(page, "desktop");
 	await assertPolicyPagesReachable(context, "desktop");
-	await clickLandingTarget(page, "#landing-hero-primary-cta", "hero primary CTA", "founder-form");
-	await clickLandingTarget(page, '.landing-nav-links [data-landing-scroll="gameplay"]', "top Features CTA", "gameplay");
-	await clickLandingTarget(page, '.landing-final [data-landing-scroll="gameplay"]', "final Features CTA", "gameplay");
-	await clickLandingTarget(page, '.landing-footer [data-landing-scroll="gameplay"]', "footer Features CTA", "gameplay");
-	await clickLandingTarget(page, '.landing-footer [data-landing-scroll="home"]', "footer Home CTA", "home");
+	const links = await page.evaluate(() => ({
+		features: Boolean(document.querySelector('a[href="/features"]')),
+		npcs: Boolean(document.querySelector('a[href="/npcs"]')),
+		reserve: Boolean(document.querySelector("#reserve-form")),
+		signIn: document.querySelector("[data-signin]")?.getAttribute("href") || ""
+	}));
+	assertCheck("landing exposes the reserve flow", links.reserve, JSON.stringify(links));
+	assertCheck("landing feature guide link is present", links.features, JSON.stringify(links));
+	assertCheck("landing NPC database link is present", links.npcs, JSON.stringify(links));
+	assertCheck("landing sign-in link targets the account portal", links.signIn.startsWith("/portal?auth=login"), JSON.stringify(links));
 	await assertSignInCta(page);
-	await screenshot(page, "02-desktop-click-map");
+	await screenshot(page, "02-desktop-signed-out-auth");
 }
 
 async function assertLaunchOpen(page, label) {
 	const state = await page.evaluate(() => ({
-		launchOpen: document.body.classList.contains("launch-open"),
-		hero: document.querySelector("#landing-hero-title")?.textContent?.trim() || "",
-		countdownLabel: document.querySelector("#beta-countdown-label")?.textContent?.trim() || "",
-		platformTitle: document.querySelector("#landing-platform-title")?.textContent?.trim() || "",
-		launchProofHidden: document.querySelector("#landing-launch-proof")?.hidden,
-		downloadsHidden: document.querySelector("#download-actions")?.hidden,
-		downloads: Array.from(document.querySelectorAll("#download-actions .download-action")).map((action) => ({
+		launchOpen: document.body.classList.contains("state-launch"),
+		hero: document.querySelector("#hero-title")?.textContent?.trim() || "",
+		chip: document.querySelector("#launch-chip-text")?.textContent?.trim() || "",
+		reserveHidden: document.querySelector("#reserve-block")?.hidden,
+		downloadsHidden: document.querySelector("#play-block")?.hidden,
+		downloads: Array.from(document.querySelectorAll("#play-block a")).map((action) => ({
 			tag: action.tagName.toLowerCase(),
 			text: String(action.textContent || "").replace(/\s+/g, " ").trim(),
 			href: action.getAttribute("href") || "",
-			disabled: Boolean(action.disabled)
+			disabled: action.getAttribute("aria-disabled") === "true"
 		}))
 	}));
 	assertCheck(`${label} launch-open class`, state.launchOpen === true, JSON.stringify(state));
 	assertCheck(`${label} hero says open`, /open/i.test(state.hero), JSON.stringify(state));
-	assertCheck(`${label} countdown status label`, /Launch status/i.test(state.countdownLabel), JSON.stringify(state));
-	assertCheck(`${label} client chooser copy`, /Choose your client/i.test(state.platformTitle), JSON.stringify(state));
-	assertCheck(`${label} launch proof visible`, state.launchProofHidden === false, JSON.stringify(state));
+	assertCheck(`${label} launch status chip`, /open|live|launch/i.test(state.chip), JSON.stringify(state));
+	assertCheck(`${label} signup form hidden`, state.reserveHidden === true, JSON.stringify(state));
 	assertCheck(`${label} download actions visible`, state.downloadsHidden === false && state.downloads.length > 0, JSON.stringify(state));
-	assertCheck(`${label} web client action links to /play`, state.downloads.some((row) => row.tag === "a" && /\/play\/?/.test(row.href)), JSON.stringify(state.downloads));
+	assertCheck(`${label} web client action is present`, state.downloads.some((row) => /browser|web/i.test(row.text)), JSON.stringify(state.downloads));
 	assertCheck(`${label} public Android action is not a debug APK`, state.downloads.every((row) => !/android/i.test(row.text) || !/debug/i.test(`${row.text} ${row.href}`)), JSON.stringify(state.downloads));
 }
 
@@ -469,7 +539,6 @@ async function assertDashboardQuickActions(page) {
 	await page.waitForTimeout(400);
 	await assertActiveView(page, "security", "dashboard Security quick action opens Security");
 	await activateView(page, "dashboard");
-	await clickLandingTarget(page, '.account-quick-grid [data-landing-scroll="gameplay"]', "dashboard Features quick action", "gameplay");
 }
 
 async function createAdditionalCharacter(page) {
@@ -480,7 +549,14 @@ async function createAdditionalCharacter(page) {
 	await page.locator("#queue-character").click();
 	const response = await responsePromise;
 	if (response) {
-		assertCheck("additional character API status", response.status() === 201, `HTTP ${response.status()}`);
+		assertCheck("additional character API status", response.status() === 201 || response.status() === 429, `HTTP ${response.status()}`);
+		if (response.status() === 429) {
+			const body = await response.json().catch(() => ({}));
+			assertCheck("immediate additional character obeys the configured rate limit", body.error === "rate_limited", JSON.stringify(body));
+			await page.waitForFunction(() => /too many|try again|rate/i.test(document.querySelector("#character-message")?.textContent || ""), null, { timeout: 5000 }).catch(() => {});
+			await screenshot(page, "05b-desktop-character-rate-limited");
+			return false;
+		}
 	}
 	await page.waitForFunction((name) => {
 		const cards = Array.from(document.querySelectorAll("#character-cards .character-card")).map((card) => card.textContent || "").join("\n");
@@ -506,32 +582,67 @@ async function createAdditionalCharacter(page) {
 	}));
 	assertCheck("dashboard character count after additional creation", /2\s*\/\s*10/.test(dashboard.characters), JSON.stringify(dashboard));
 	assertCheck("starter card still waiting after additional creation", /card|waiting|reserved/i.test(dashboard.card), JSON.stringify(dashboard));
+	return true;
 }
 
 async function runSignupFlow(page) {
-	await page.locator("#founder-name").fill(signup.username);
-	await page.locator("#founder-email").fill(signup.email);
-	await page.locator("#founder-password").fill(signup.password);
-	await Promise.all([
-		page.waitForResponse((response) => response.url().includes("/api/accounts/register") && response.request().method() === "POST", { timeout: 15000 }).catch(() => null),
-		page.locator("#founder-submit").click()
-	]);
-	await page.locator("#prelaunch-success:not([hidden])").waitFor({ timeout: 15000 });
+	await page.locator("#reserve-name").fill(signup.username);
+	await page.locator("#reserve-submit").click();
+	await page.locator("#reserve-more").waitFor({ state: "visible", timeout: 5000 });
+	await page.locator("#reserve-email").fill(signup.email);
+	const passwordFieldCopy = await page.locator("#reserve-password").evaluate((element) => ({
+		placeholder: element.getAttribute("placeholder") || "",
+		title: element.getAttribute("title") || ""
+	}));
+	assertCheck(
+		"signup password field says letters and numbers only",
+		/letters and numbers only/i.test(passwordFieldCopy.placeholder) && /symbols and spaces are not allowed/i.test(passwordFieldCopy.title),
+		JSON.stringify(passwordFieldCopy)
+	);
+	await page.locator("#reserve-password").fill("Bad!Pass1");
+	await page.locator("#reserve-confirm").click();
+	await page.waitForFunction(() => /letters and numbers only/i.test(document.querySelector("#name-hint")?.textContent || ""), null, { timeout: 3000 });
+	const invalidPasswordHint = await page.locator("#name-hint").textContent();
+	assertCheck(
+		"signup symbol rejection explains the password policy",
+		/letters and numbers only/i.test(invalidPasswordHint || "") && /symbols and spaces are not allowed/i.test(invalidPasswordHint || ""),
+		invalidPasswordHint || ""
+	);
+	await page.locator("#reserve-password").fill(signup.password);
+	const responsePromise = page.waitForResponse((response) => response.url().includes("/api/accounts/register") && response.request().method() === "POST", { timeout: 20000 });
+	await page.locator("#reserve-confirm").click();
+	const response = await responsePromise;
+	const responseBody = await response.json().catch(() => ({}));
+	assertCheck("signup API accepts or queues the account", [201, 202].includes(response.status()), `HTTP ${response.status()} ${JSON.stringify(responseBody)}`);
+	await page.locator("#success-block").waitFor({ state: "visible", timeout: 15000 });
 	await screenshot(page, "03-desktop-signup-success");
 	const state = await page.evaluate(() => ({
-		account: document.querySelector("#prelaunch-success-account")?.textContent?.trim() || "",
-		name: document.querySelector("#prelaunch-success-name")?.textContent?.trim() || "",
-		status: document.querySelector("#prelaunch-success-status")?.textContent?.trim() || "",
-		code: document.querySelector("#prelaunch-success-code")?.textContent?.trim() || "",
-		message: document.querySelector("#founder-message")?.textContent?.trim() || ""
+		name: document.querySelector("#success-name")?.textContent?.trim() || "",
+		message: document.querySelector("#success-block .success-sub")?.textContent?.trim() || "",
+		codeHidden: document.querySelector("#success-code-card")?.hidden,
+		tokenPresent: Boolean(localStorage.getItem("voidscape.portal.sessionToken")),
+		resendVisible: Boolean(document.querySelector("#verification-actions")?.getBoundingClientRect().height),
+		resendHelp: document.querySelector("#verification-help")?.textContent?.trim() || ""
 	}));
-	assertCheck("signup success email shown", state.account === signup.email, JSON.stringify(state));
 	assertCheck("signup success character shown", state.name === signup.username, JSON.stringify(state));
-	assertCheck("signup success uses one slot", /1\s*\/\s*10/.test(state.status), JSON.stringify(state));
-	assertCheck("launch-signup hides bearer code", state.code === "-" || state.code === "", JSON.stringify(state));
+	assertCheck("signup does not expose a subscription bearer code", state.codeHidden === true, JSON.stringify(state));
 
-	await activateView(page, "dashboard");
-	await page.waitForFunction((email) => document.querySelector("#dashboard-account-email")?.textContent?.includes(email), signup.email, { timeout: 12000 });
+	if (responseBody.verificationRequired) {
+		signupVerificationPending = true;
+		assertCheck("verification-required signup stays signed out", state.tokenPresent === false && /check your email/i.test(state.message), JSON.stringify(state));
+		assertCheck("verification-required signup offers a 48-hour resend path", state.resendVisible && /48 hours/i.test(state.resendHelp), JSON.stringify(state));
+		await page.route("**/api/accounts/verify-email/resend", async (route) => {
+			await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ accepted: true }) });
+		});
+		await page.locator("#resend-verification").click();
+		await page.waitForFunction(() => /still pending|on its way/i.test(document.querySelector("#verification-status")?.textContent || ""), null, { timeout: 3000 });
+		assertCheck("landing resend returns generic status copy", /still pending|on its way/i.test(await page.locator("#verification-status").textContent() || ""), await page.locator("#verification-status").textContent() || "");
+		await page.unroute("**/api/accounts/verify-email/resend");
+		return;
+	}
+
+	authenticated = true;
+	await openAuthenticatedPortal(page, signup.email);
 	await screenshot(page, "04-desktop-dashboard");
 	const dashboard = await page.evaluate(() => ({
 		email: document.querySelector("#dashboard-account-email")?.textContent?.trim() || "",
@@ -581,14 +692,31 @@ async function runSignupFlow(page) {
 	}));
 	assertCheck("security score visible", /^\d+/.test(security.score), JSON.stringify(security));
 	assertCheck("security password state visible", security.passwordChecked === true, JSON.stringify(security));
-	assertCheck("security recovery fallback visible", /lost your recovery codes/i.test(security.recoverySupport) && /character names/i.test(security.recoverySupport), JSON.stringify(security));
-	assertCheck("security recovery fallback mailto", security.recoverySupportHref === "mailto:support@voidscape.gg", JSON.stringify(security));
+	assertCheck("security recovery fallback is self-service", /signed-out account page/i.test(security.recoverySupport) && /username/i.test(security.recoverySupport), JSON.stringify(security));
+	assertCheck("security recovery fallback does not expose support email", security.recoverySupportHref === "", JSON.stringify(security));
+}
+
+async function openAuthenticatedPortal(page, email) {
+	await page.goto(new URL("/portal#dashboard", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
+	await page.waitForFunction((value) => document.querySelector("#dashboard-account-email")?.textContent?.includes(value), email, { timeout: 15000 });
+	await page.locator("#dashboard.is-active").waitFor({ state: "visible", timeout: 5000 });
+	const state = await page.evaluate(() => ({
+		path: window.location.pathname,
+		hash: window.location.hash,
+		authVisible: Boolean(document.querySelector('[data-auth-panel="login"]')?.getBoundingClientRect().height),
+		dashboardVisible: Boolean(document.querySelector("#dashboard.is-active")?.getBoundingClientRect().height)
+	}));
+	assertCheck("authenticated portal opens the real dashboard", state.path === "/portal" && state.hash === "#dashboard" && state.dashboardVisible && !state.authVisible, JSON.stringify(state));
 }
 
 async function runLoginAccountFlow(page) {
-	await activateView(page, "dashboard");
-	await page.waitForTimeout(400);
-	await page.locator('[data-portal-auth-mode="login"]').click();
+	await page.goto(new URL("/portal?auth=login", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
+	await page.locator('[data-auth-panel="login"]').waitFor({ state: "visible", timeout: 10000 });
+	const signedOutState = await page.evaluate(() => ({
+		sidebarVisible: Boolean(document.querySelector(".sidebar")?.getBoundingClientRect().width),
+		dashboardVisible: Boolean(document.querySelector("#dashboard")?.getBoundingClientRect().height)
+	}));
+	assertCheck("signed-out portal does not render a synthetic dashboard", !signedOutState.sidebarVisible && !signedOutState.dashboardVisible, JSON.stringify(signedOutState));
 	await page.locator("#portal-auth-email").fill(login.email);
 	await page.locator("#portal-auth-password").fill(login.password);
 	const responsePromise = page.waitForResponse((response) => response.url().includes("/api/accounts/login") && response.request().method() === "POST", { timeout: 15000 }).catch(() => null);
@@ -598,6 +726,7 @@ async function runLoginAccountFlow(page) {
 		assertCheck("existing account login API status", response.status() === 200, `HTTP ${response.status()}`);
 	}
 	await page.waitForFunction((email) => document.querySelector("#dashboard-account-email")?.textContent?.includes(email), login.email, { timeout: 15000 });
+	authenticated = true;
 	await screenshot(page, "03-desktop-existing-login-dashboard");
 	const dashboard = await page.evaluate(() => ({
 		email: document.querySelector("#dashboard-account-email")?.textContent?.trim() || "",
@@ -643,23 +772,25 @@ async function runLoginAccountFlow(page) {
 	}));
 	assertCheck("existing account security score visible", /^\d+/.test(security.score), JSON.stringify(security));
 	assertCheck("existing account password state visible", security.passwordChecked === true, JSON.stringify(security));
-	assertCheck("existing account recovery fallback visible", /lost your recovery codes/i.test(security.recoverySupport) && /character names/i.test(security.recoverySupport), JSON.stringify(security));
-	assertCheck("existing account recovery fallback mailto", security.recoverySupportHref === "mailto:support@voidscape.gg", JSON.stringify(security));
+	assertCheck("existing account recovery fallback is self-service", /signed-out account page/i.test(security.recoverySupport) && /username/i.test(security.recoverySupport), JSON.stringify(security));
+	assertCheck("existing account recovery fallback does not expose support email", security.recoverySupportHref === "", JSON.stringify(security));
 }
 
 async function runMobilePass(page) {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await gotoPortal(page);
+	await page.waitForFunction(() => !document.body.classList.contains("session-pending"), null, { timeout: 10000 }).catch(() => {});
 	await assertPortalWiring(page, "mobile");
 	await assertNoHorizontalOverflow(page, "mobile landing");
 	await screenshot(page, "08-mobile-landing");
 	if (expectLaunchOpen) await assertLaunchOpen(page, "mobile");
-	if (accountFlowActive) {
-		const authText = await page.locator("[data-prelaunch-auth-cta]").first().textContent().catch(() => "");
+	const authText = await page.locator("[data-signin]").first().textContent().catch(() => "");
+	if (authenticated) {
 		assertCheck("mobile signed-in CTA switches to manage", /manage account/i.test(authText || ""), authText || "");
-		await activateView(page, "dashboard");
+		await openAuthenticatedPortal(page, loginOnly ? login.email : signup.email);
 		await page.waitForTimeout(300);
 		await screenshot(page, "09-mobile-dashboard");
+		await assertNoHorizontalOverflow(page, "mobile dashboard");
 		const toggleVisible = await page.locator("#menu-toggle").isVisible().catch(() => false);
 		assertCheck("mobile dashboard nav toggle visible", toggleVisible === true, String(toggleVisible));
 		if (!toggleVisible) return;
@@ -668,7 +799,85 @@ async function runMobilePass(page) {
 		await screenshot(page, "10-mobile-nav-open");
 		const navOpen = await page.evaluate(() => document.querySelector(".portal-shell")?.classList.contains("nav-open"));
 		assertCheck("mobile nav opens", navOpen === true, String(navOpen));
+	} else {
+		assertCheck("mobile signed-out CTA remains sign in", /sign in/i.test(authText || ""), `${authText}; verificationPending=${signupVerificationPending}`);
+		await page.goto(new URL("/portal?auth=resend-verification", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
+		await page.locator('[data-auth-panel="resend"]').waitFor({ state: "visible", timeout: 8000 });
+		await assertNoHorizontalOverflow(page, "mobile verification resend");
+		assertCheck("mobile verification resend keeps the email field reachable", await page.locator("#verification-resend-email").isVisible(), page.url());
+		await page.goto(new URL("/portal?auth=claim", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
+		await page.locator('[data-auth-panel="claim"]').waitFor({ state: "visible", timeout: 8000 });
+		await assertNoHorizontalOverflow(page, "mobile legacy claim");
+		await page.locator("#legacy-claim-submit").evaluate((element) => element.scrollIntoView({ block: "center" }));
+		const mobileClaimReachability = await page.evaluate(() => {
+			const submit = document.querySelector("#legacy-claim-submit");
+			const rect = submit && submit.getBoundingClientRect();
+			return {
+				inViewport: Boolean(rect && rect.top >= 0 && rect.bottom <= window.innerHeight),
+				scrollHeight: document.scrollingElement?.scrollHeight || 0,
+				viewportHeight: window.innerHeight
+			};
+		});
+		assertCheck("mobile older-character claim keeps all fields reachable", mobileClaimReachability.inViewport && mobileClaimReachability.scrollHeight >= mobileClaimReachability.viewportHeight, JSON.stringify(mobileClaimReachability));
+		await screenshot(page, "09-mobile-legacy-claim");
 	}
+}
+
+async function runLogoutFlow(page) {
+	if (!authenticated) return;
+	await page.setViewportSize({ width: 1440, height: 1000 });
+	await openAuthenticatedPortal(page, loginOnly ? login.email : signup.email);
+	await page.goto(new URL("/portal?auth=claim-confirm#claim=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
+	await page.locator("#account-claim-notice").waitFor({ state: "visible", timeout: 10000 });
+	const signedInClaimState = await page.evaluate(() => ({
+		noticeVisible: Boolean(document.querySelector("#account-claim-notice")?.getBoundingClientRect().height),
+		hash: window.location.hash,
+		dashboardVisible: Boolean(document.querySelector("#dashboard")?.getBoundingClientRect().height)
+	}));
+	assertCheck("signed-in claim links are preserved behind an explicit sign-out handoff", signedInClaimState.noticeVisible && signedInClaimState.dashboardVisible && signedInClaimState.hash.startsWith("#claim="), JSON.stringify(signedInClaimState));
+	await screenshot(page, "11-desktop-claim-handoff");
+	await page.locator("#account-claim-continue").click();
+	await page.locator('[data-auth-panel="claim-confirm"]').waitFor({ state: "visible", timeout: 10000 });
+	const signedOutClaimState = await page.evaluate(() => ({
+		hash: window.location.hash,
+		tokenPresent: Boolean(localStorage.getItem("voidscape.portal.sessionToken")),
+		confirmVisible: Boolean(document.querySelector('[data-auth-panel="claim-confirm"]')?.getBoundingClientRect().height)
+	}));
+	assertCheck("claim handoff signs out locally and keeps the confirmation token", !signedOutClaimState.tokenPresent && signedOutClaimState.confirmVisible && signedOutClaimState.hash.startsWith("#claim="), JSON.stringify(signedOutClaimState));
+	await page.waitForTimeout(250);
+	await screenshot(page, "12-desktop-claim-confirm-after-signout");
+	await page.locator('[data-auth-panel="claim-confirm"] [data-auth-show="login"]').click();
+	await page.locator('[data-auth-panel="login"]').waitFor({ state: "visible", timeout: 5000 });
+	const relogin = loginOnly ? login : signup;
+	await page.locator("#portal-auth-email").fill(relogin.email);
+	await page.locator("#portal-auth-password").fill(relogin.password);
+	await page.locator("#portal-auth-submit").click();
+	await page.locator("#dashboard").waitFor({ state: "visible", timeout: 15000 });
+	const logout = page.locator("#account-logout");
+	await logout.waitFor({ state: "visible", timeout: 5000 });
+	await logout.click();
+	await page.waitForURL((url) => url.pathname === "/", { timeout: 10000 });
+	await page.waitForFunction(() => !document.body.classList.contains("session-pending"), null, { timeout: 10000 }).catch(() => {});
+	const landing = await page.evaluate(() => ({
+		path: window.location.pathname,
+		signIn: document.querySelector("[data-signin]")?.textContent?.trim() || "",
+		tokenPresent: Boolean(localStorage.getItem("voidscape.portal.sessionToken")),
+		reserveVisible: Boolean(document.querySelector("#reserve-block")?.getBoundingClientRect().height)
+	}));
+	assertCheck("logout returns to the default landing page", landing.path === "/" && /sign in/i.test(landing.signIn), JSON.stringify(landing));
+	assertCheck("logout removes the browser session", landing.tokenPresent === false, JSON.stringify(landing));
+	if (!expectLaunchOpen) assertCheck("logout restores account signup", landing.reserveVisible === true, JSON.stringify(landing));
+
+	await page.goto(new URL("/portal#dashboard", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
+	await page.locator('[data-auth-panel="login"]').waitFor({ state: "visible", timeout: 10000 });
+	const protectedRoute = await page.evaluate(() => ({
+		authVisible: Boolean(document.querySelector('[data-auth-panel="login"]')?.getBoundingClientRect().height),
+		dashboardVisible: Boolean(document.querySelector("#dashboard")?.getBoundingClientRect().height),
+		sidebarVisible: Boolean(document.querySelector(".sidebar")?.getBoundingClientRect().width)
+	}));
+	assertCheck("signed-out dashboard deep link resolves to auth only", protectedRoute.authVisible && !protectedRoute.dashboardVisible && !protectedRoute.sidebarVisible, JSON.stringify(protectedRoute));
+	await screenshot(page, "11-desktop-logout-auth");
+	authenticated = false;
 }
 
 async function main() {
@@ -695,6 +904,7 @@ async function main() {
 			await runSignupFlow(page);
 		}
 		await runMobilePass(page);
+		await runLogoutFlow(page);
 		await context.close();
 	} finally {
 		await browser.close();

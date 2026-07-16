@@ -1,8 +1,8 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
-import { execFile as execFileCallback } from "node:child_process";
-import { createHash, createPublicKey, randomBytes, scrypt as scryptCallback, timingSafeEqual, verify as verifySignature } from "node:crypto";
+import { execFile as execFileCallback, spawn } from "node:child_process";
+import { createCipheriv, createDecipheriv, createHash, createPublicKey, randomBytes, scrypt as scryptCallback, timingSafeEqual, verify as verifySignature } from "node:crypto";
 import { promisify } from "node:util";
 import { basename, dirname, extname, join, normalize, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -15,12 +15,13 @@ const repoRoot = resolve(rootDir, "../..");
 const port = Number(process.env.PORT || 8788);
 const bindHost = process.env.PORTAL_BIND_HOST || "127.0.0.1";
 const trustProxyHeader = process.env.PORTAL_TRUST_PROXY === "1";
-const defaultLaunchAtIso = "2026-07-11T18:00:00Z";
+const defaultLaunchAtIso = "2026-07-18T18:00:00Z";
 // Prelaunch lockdown: only the signup flow (plus token-gated admin) is reachable.
 const publicMode = process.env.PORTAL_PUBLIC_MODE === "1";
 const launchSignupMode = publicMode && process.env.PORTAL_LAUNCH_SIGNUP_MODE === "1";
 const betaMode = process.env.PORTAL_BETA_MODE === "1" || process.env.PORTAL_PUBLIC_BETA === "1";
 const launchOpenAtIso = configuredIsoTimestamp("PORTAL_LAUNCH_AT", process.env.PORTAL_LAUNCH_AT || process.env.PORTAL_BETA_OPEN_AT || defaultLaunchAtIso);
+const launchFreeCardHours = configuredNonNegativeInteger("PORTAL_LAUNCH_FREE_CARD_HOURS", process.env.PORTAL_LAUNCH_FREE_CARD_HOURS || "24");
 const betaOpenAtIso = configuredIsoTimestamp("PORTAL_BETA_OPEN_AT", process.env.PORTAL_BETA_OPEN_AT || process.env.PORTAL_LAUNCH_AT || "");
 const betaSignupCounterBase = configuredNonNegativeInteger("PORTAL_BETA_COUNTER_BASE", process.env.PORTAL_BETA_COUNTER_BASE || "132");
 const betaSignupCounterStartedAtIso = configuredBetaSignupCounterStartedAt();
@@ -31,6 +32,9 @@ const integritySnapshotPath = process.env.PORTAL_INTEGRITY_SNAPSHOT || join(data
 const buildMetadataPath = process.env.PORTAL_BUILD_META || join(rootDir, "build-meta.json");
 const sourceRepositoryUrl = process.env.PORTAL_SOURCE_URL || process.env.PORTAL_REPOSITORY_URL || "https://github.com/voidscape-gg/voidscape";
 const openRscDbPath = process.env.PORTAL_OPENRSC_DB || process.env.OPENRSC_SQLITE_DB || "";
+const gamePasswordHelperClasspath = process.env.PORTAL_GAME_PASSWORD_HELPER_CLASSPATH || join(repoRoot, "server/core.jar");
+const gamePasswordJavaBin = process.env.PORTAL_JAVA_BIN || "java";
+const legacyClaimDummyPasswordHash = "$2y$10$hwWyOlWjtLF2.3WvF64jl.RFQxNGz2k/iwGXJkhZJcbI187bacx46";
 const portalSessionStorageKey = "voidscape.portal.sessionToken";
 const maxCharacters = 10;
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
@@ -42,6 +46,7 @@ const starterCardCachePrefix = "starter_card:";
 const starterCardAvailable = 1;
 const starterCardClaimed = 2;
 const accountSubscriptionCachePrefix = "acct_sub:";
+const playerSubscriptionCachePrefix = "char_sub:";
 const signupCodeCachePrefix = "signup_code:";
 const signupCodeAvailable = 1;
 const signupCodeRedeemed = 2;
@@ -49,12 +54,52 @@ const starterFreeSubscriptionType = "starter_free_subscription";
 const baseCombatXpRate = 10;
 const baseSkillXpRate = 2;
 const sha256Cache = new Map();
+const presenceVisitors = new Map();
+const presenceHeartbeatSeconds = 15;
+const presenceActiveWindowMs = 60 * 1000;
+const presenceRecentWindowMs = 5 * 60 * 1000;
+const presenceRetentionMs = 30 * 60 * 1000;
+const presenceMaxVisitors = 5000;
 const subscriptionXpBonus = 1;
-const signupIpDailyLimit = Math.max(1, Number(process.env.PORTAL_SIGNUP_IP_DAILY_LIMIT || 10));
-const starterIpDailyLimit = Math.max(1, Number(process.env.PORTAL_STARTER_IP_DAILY_LIMIT || signupIpDailyLimit));
+const signupIpDailyLimit = configuredPositiveInteger("PORTAL_SIGNUP_IP_DAILY_LIMIT", process.env.PORTAL_SIGNUP_IP_DAILY_LIMIT || (launchSignupMode ? "5" : "10"));
+const signupIpHourlyLimit = configuredPositiveInteger("PORTAL_SIGNUP_IP_HOURLY_LIMIT", process.env.PORTAL_SIGNUP_IP_HOURLY_LIMIT || (launchSignupMode ? "3" : String(signupIpDailyLimit)));
+const signupSubnetDailyLimit = configuredNonNegativeInteger("PORTAL_SIGNUP_SUBNET_DAILY_LIMIT", process.env.PORTAL_SIGNUP_SUBNET_DAILY_LIMIT || (launchSignupMode ? "50" : "0"));
+const signupSubnetHourlyLimit = configuredNonNegativeInteger("PORTAL_SIGNUP_SUBNET_HOURLY_LIMIT", process.env.PORTAL_SIGNUP_SUBNET_HOURLY_LIMIT || (launchSignupMode ? "20" : "0"));
+const characterIpDailyLimit = configuredPositiveInteger("PORTAL_CHARACTER_IP_DAILY_LIMIT", process.env.PORTAL_CHARACTER_IP_DAILY_LIMIT || (launchSignupMode ? "20" : String(signupIpDailyLimit)));
+const characterIpHourlyLimit = configuredPositiveInteger("PORTAL_CHARACTER_IP_HOURLY_LIMIT", process.env.PORTAL_CHARACTER_IP_HOURLY_LIMIT || (launchSignupMode ? "10" : String(characterIpDailyLimit)));
+const characterAccountDailyLimit = configuredPositiveInteger("PORTAL_CHARACTER_ACCOUNT_DAILY_LIMIT", process.env.PORTAL_CHARACTER_ACCOUNT_DAILY_LIMIT || (launchSignupMode ? "10" : String(maxCharacters)));
+const characterAccountHourlyLimit = configuredPositiveInteger("PORTAL_CHARACTER_ACCOUNT_HOURLY_LIMIT", process.env.PORTAL_CHARACTER_ACCOUNT_HOURLY_LIMIT || (launchSignupMode ? "5" : String(characterAccountDailyLimit)));
+const characterSubnetDailyLimit = configuredNonNegativeInteger("PORTAL_CHARACTER_SUBNET_DAILY_LIMIT", process.env.PORTAL_CHARACTER_SUBNET_DAILY_LIMIT || (launchSignupMode ? "100" : "0"));
+const characterSubnetHourlyLimit = configuredNonNegativeInteger("PORTAL_CHARACTER_SUBNET_HOURLY_LIMIT", process.env.PORTAL_CHARACTER_SUBNET_HOURLY_LIMIT || (launchSignupMode ? "50" : "0"));
+const proxySignupIpDailyLimit = configuredPositiveInteger("PORTAL_PROXY_SIGNUP_IP_DAILY_LIMIT", process.env.PORTAL_PROXY_SIGNUP_IP_DAILY_LIMIT || "1");
+const proxyCharacterIpDailyLimit = configuredPositiveInteger("PORTAL_PROXY_CHARACTER_IP_DAILY_LIMIT", process.env.PORTAL_PROXY_CHARACTER_IP_DAILY_LIMIT || "1");
+const starterIpDailyLimit = configuredNonNegativeInteger("PORTAL_STARTER_IP_DAILY_LIMIT", process.env.PORTAL_STARTER_IP_DAILY_LIMIT || "0");
 const loginIpFailureLimit = Math.max(1, Number(process.env.PORTAL_LOGIN_IP_FAILURE_LIMIT || 10));
+const loginEmailFailureLimit = Math.max(1, Number(process.env.PORTAL_LOGIN_EMAIL_FAILURE_LIMIT || 20));
 const loginFailureWindowMs = Math.max(1, Number(process.env.PORTAL_LOGIN_FAILURE_WINDOW_MINUTES || 15)) * 60 * 1000;
+const recoveryFailureLimit = Math.max(1, Number(process.env.PORTAL_RECOVERY_FAILURE_LIMIT || 10));
+const recoveryFailureWindowMs = Math.max(1, Number(process.env.PORTAL_RECOVERY_FAILURE_WINDOW_MINUTES || 15)) * 60 * 1000;
+const passwordResetTtlMs = Math.max(5, configuredPositiveInteger("PORTAL_PASSWORD_RESET_TTL_MINUTES", process.env.PORTAL_PASSWORD_RESET_TTL_MINUTES || "30")) * 60 * 1000;
+const passwordResetRequestIpLimit = configuredPositiveInteger("PORTAL_PASSWORD_RESET_IP_LIMIT", process.env.PORTAL_PASSWORD_RESET_IP_LIMIT || "5");
+const passwordResetRequestAccountLimit = configuredPositiveInteger("PORTAL_PASSWORD_RESET_ACCOUNT_LIMIT", process.env.PORTAL_PASSWORD_RESET_ACCOUNT_LIMIT || "3");
+const passwordResetRequestWindowMs = configuredPositiveInteger("PORTAL_PASSWORD_RESET_WINDOW_MINUTES", process.env.PORTAL_PASSWORD_RESET_WINDOW_MINUTES || "60") * 60 * 1000;
+const legacyAccountClaimTtlMs = Math.max(5, configuredPositiveInteger("PORTAL_LEGACY_CLAIM_TTL_MINUTES", process.env.PORTAL_LEGACY_CLAIM_TTL_MINUTES || "30")) * 60 * 1000;
+const legacyAccountClaimIpLimit = configuredPositiveInteger("PORTAL_LEGACY_CLAIM_IP_LIMIT", process.env.PORTAL_LEGACY_CLAIM_IP_LIMIT || "10");
+const legacyAccountClaimCharacterLimit = configuredPositiveInteger("PORTAL_LEGACY_CLAIM_CHARACTER_LIMIT", process.env.PORTAL_LEGACY_CLAIM_CHARACTER_LIMIT || "5");
+const legacyAccountClaimWindowMs = configuredPositiveInteger("PORTAL_LEGACY_CLAIM_WINDOW_MINUTES", process.env.PORTAL_LEGACY_CLAIM_WINDOW_MINUTES || "60") * 60 * 1000;
+const sensitiveActionWindowMs = configuredPositiveInteger("PORTAL_SENSITIVE_ACTION_WINDOW_MINUTES", process.env.PORTAL_SENSITIVE_ACTION_WINDOW_MINUTES || "10") * 60 * 1000;
+const gamePasswordResetLimit = configuredPositiveInteger("PORTAL_GAME_PASSWORD_RESET_LIMIT", process.env.PORTAL_GAME_PASSWORD_RESET_LIMIT || "5");
+const gamePasswordResetWindowMs = configuredPositiveInteger("PORTAL_GAME_PASSWORD_RESET_WINDOW_MINUTES", process.env.PORTAL_GAME_PASSWORD_RESET_WINDOW_MINUTES || "60") * 60 * 1000;
 const abuseSignalTtlMs = 1000 * 60 * 60 * 24 * 90;
+const blockedIpCidrs = cidrList(process.env.PORTAL_BLOCKED_IP_CIDRS || "");
+const proxyIpCidrs = cidrList(process.env.PORTAL_PROXY_IP_CIDRS || process.env.PORTAL_REVIEW_IP_CIDRS || "");
+const captchaSignupRequired = process.env.PORTAL_CAPTCHA_REQUIRED === "1" || process.env.PORTAL_CAPTCHA_SIGNUP_REQUIRED === "1";
+const captchaCharacterRequired = process.env.PORTAL_CAPTCHA_CHARACTER_REQUIRED === "1";
+const captchaProvider = String(process.env.PORTAL_CAPTCHA_PROVIDER || "turnstile").trim().toLowerCase();
+const captchaSiteKey = String(process.env.PORTAL_CAPTCHA_SITE_KEY || process.env.PORTAL_TURNSTILE_SITE_KEY || "").trim();
+const captchaSecret = String(process.env.PORTAL_CAPTCHA_SECRET || process.env.PORTAL_TURNSTILE_SECRET || "").trim();
+const captchaBypassToken = String(process.env.PORTAL_CAPTCHA_BYPASS_TOKEN || "").trim();
+const captchaVerifyUrl = process.env.PORTAL_CAPTCHA_VERIFY_URL || "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const defaultAbuseHashSalt = "voidscape-portal-dev";
 const abuseHashSaltInput = process.env.PORTAL_ABUSE_HASH_SALT || "";
 const abuseHashSalt = abuseHashSaltInput || defaultAbuseHashSalt;
@@ -87,6 +132,17 @@ const resendApiKey = String(process.env.PORTAL_RESEND_API_KEY || "").trim();
 const emailFrom = String(process.env.PORTAL_EMAIL_FROM || "Voidscape <launch@voidscape.gg>").trim();
 const emailReplyTo = String(process.env.PORTAL_EMAIL_REPLY_TO || "support@voidscape.gg").trim();
 const signupConfirmationEmailType = "signup_confirmation";
+const emailVerificationEmailType = "email_verification";
+const passwordResetEmailType = "password_reset";
+const legacyAccountClaimEmailType = "legacy_account_claim";
+const interruptedEmailRecoveryMs = 15 * 60 * 1000;
+const emailVerificationRequired = process.env.PORTAL_EMAIL_VERIFICATION_REQUIRED === "1" || process.env.PORTAL_REQUIRE_EMAIL_VERIFICATION === "1";
+const emailVerificationTtlHours = configuredPositiveInteger("PORTAL_EMAIL_VERIFICATION_TTL_HOURS", process.env.PORTAL_EMAIL_VERIFICATION_TTL_HOURS || "48");
+const emailVerificationTtlMs = emailVerificationTtlHours * 60 * 60 * 1000;
+const emailVerificationRequestIpLimit = configuredPositiveInteger("PORTAL_EMAIL_VERIFICATION_IP_LIMIT", process.env.PORTAL_EMAIL_VERIFICATION_IP_LIMIT || "3");
+const emailVerificationRequestEmailLimit = configuredPositiveInteger("PORTAL_EMAIL_VERIFICATION_EMAIL_LIMIT", process.env.PORTAL_EMAIL_VERIFICATION_EMAIL_LIMIT || "3");
+const emailVerificationRequestWindowMs = configuredPositiveInteger("PORTAL_EMAIL_VERIFICATION_WINDOW_MINUTES", process.env.PORTAL_EMAIL_VERIFICATION_WINDOW_MINUTES || "60") * 60 * 1000;
+const launchReminderEmailType = "launch_48h";
 const launchLiveEmailType = "launch_live";
 const downloadArtifacts = [
 	{
@@ -118,6 +174,7 @@ const funnelEvents = new Set([
 	"download_launcher",
 	"download_android",
 	"download",
+	"reserve_submit",
 	"discord_rewards",
 	"transparency",
 	"click"
@@ -164,6 +221,14 @@ function configuredNonNegativeInteger(envName, value) {
 	return number;
 }
 
+function configuredPositiveInteger(envName, value) {
+	const number = configuredNonNegativeInteger(envName, value);
+	if (number < 1) {
+		throw new Error(`${envName} must be a positive integer`);
+	}
+	return number;
+}
+
 function configuredSecret(value, fallback) {
 	const text = String(value || "").trim();
 	if (!text || text === fallback) return false;
@@ -195,15 +260,35 @@ function portalConfigHealth() {
 	if (requireEmailDelivery && !emailConfigured()) {
 		issues.push("email_not_configured");
 	}
+	if (emailVerificationRequired && !emailConfigured()) {
+		issues.push("email_verification_not_configured");
+	}
+	if (publicMode && emailVerificationRequired && !publicSiteOrigin) {
+		issues.push("public_origin_not_configured");
+	}
+	if ((captchaSignupRequired || captchaCharacterRequired) && !captchaConfigured()) {
+		issues.push("captcha_not_configured");
+	}
 	return {
 		publicReady: issues.length === 0,
 		abuseHashSaltConfigured,
 		adminTokenConfigured,
+		publicOriginConfigured: Boolean(publicSiteOrigin),
+		captcha: {
+			provider: captchaProvider,
+			configured: captchaConfigured(),
+			signupRequired: captchaSignupRequired,
+			characterRequired: captchaCharacterRequired,
+			siteKeyConfigured: Boolean(captchaSiteKey),
+			secretConfigured: Boolean(captchaSecret),
+			bypassConfigured: Boolean(captchaBypassToken)
+		},
 		email: {
 			provider: emailProviderLabel(),
 			configured: emailConfigured(),
 			dryRun: emailDryRun,
 			requireConfigured: requireEmailDelivery,
+			verificationRequired: emailVerificationRequired,
 			fromConfigured: Boolean(emailFrom)
 		},
 		issues
@@ -490,15 +575,27 @@ async function handleApi(request, response, url) {
 			(method === "GET" && url.pathname === "/api/health")
 			|| (method === "GET" && url.pathname === "/api/public")
 			|| (method === "GET" && url.pathname === "/api/integrity")
+			|| (method === "GET" && url.pathname.startsWith("/api/openrsc/characters/") && url.searchParams.get("availability") === "1")
 			|| (method === "POST" && url.pathname === "/api/funnel/click")
+			|| (method === "POST" && url.pathname === "/api/presence/heartbeat")
 			|| (!betaMode && method === "POST" && url.pathname === "/api/founder/reservations")
 			|| (launchSignupMode && method === "GET" && url.pathname === "/api/account")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/register")
+			|| (launchSignupMode && method === "GET" && url.pathname === "/api/accounts/verify-email")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/verify-email")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/verify-email/resend")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/google")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/login")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/logout")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/recover-password")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/password-reset/request")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/password-reset/complete")
+			|| (launchSignupMode && method === "GET" && url.pathname === "/api/accounts/legacy-claim/verify")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/legacy-claim/request")
+			|| (launchSignupMode && method === "POST" && url.pathname === "/api/accounts/legacy-claim/complete")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/oauth/google/nonce")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/characters")
+			|| (launchSignupMode && method === "POST" && /^\/api\/characters\/\d+\/game-password$/.test(url.pathname))
 			|| (launchSignupMode && method === "DELETE" && /^\/api\/characters\/\d+$/.test(url.pathname))
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/security/password")
 			|| (launchSignupMode && method === "POST" && url.pathname === "/api/security/recovery-codes")
@@ -546,6 +643,13 @@ async function handleApi(request, response, url) {
 		const payload = await readJson(request);
 		const result = await recordFunnelClick(request, payload);
 		json(response, 202, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/presence/heartbeat") {
+		const payload = await readJson(request);
+		const result = recordPresenceHeartbeat(payload);
+		json(response, 200, result);
 		return;
 	}
 
@@ -600,6 +704,10 @@ async function handleApi(request, response, url) {
 
 	if (method === "GET" && url.pathname.startsWith("/api/openrsc/characters/")) {
 		const username = decodeURIComponent(url.pathname.slice("/api/openrsc/characters/".length));
+		if (url.searchParams.get("availability") === "1") {
+			json(response, 200, await openRscCharacterAvailability(username));
+			return;
+		}
 		const snapshot = await openRscCharacterSnapshot(username);
 		json(response, 200, { character: snapshot });
 		return;
@@ -610,14 +718,10 @@ async function handleApi(request, response, url) {
 			throw new HttpError(404, "discord_beta_required");
 		}
 		const payload = await readJson(request);
+		await requireCaptcha(request, payload, "signup");
 		const ip = clientIp(request);
 		const result = await updateStore(async (store) => {
-			if (!isLocalIp(ip)) {
-				const since = Date.now() - 1000 * 60 * 60 * 24;
-				if (countAbuseSignals(store, "founder_signup_ip", ip, since) >= signupIpDailyLimit) {
-					throw new HttpError(429, "rate_limited");
-				}
-			}
+			assertSignupAllowed(store, request);
 			const founder = await reserveFounder(store, payload);
 			// Codes are minted only on this public landing route: registered portal
 			// accounts get their starter card through the account-bound marker instead.
@@ -628,6 +732,15 @@ async function handleApi(request, response, url) {
 				bucket: dailyBucket(),
 				metadata: { local: isLocalIp(ip) }
 			});
+			const subnetKey = ipv4SubnetKey(ip);
+			if (subnetKey) {
+				recordAbuseSignal(store, {
+					signalType: "founder_signup_subnet",
+					signalValue: subnetKey,
+					bucket: dailyBucket(),
+					metadata: { local: isLocalIp(ip) }
+				});
+			}
 			try {
 				if (await syncSignupCodeToOpenRsc(founder) && !founder.signupCodeSyncedAt) {
 					founder.signupCodeSyncedAt = now();
@@ -672,16 +785,42 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/accounts/register") {
 		const payload = await readJson(request);
+		await requireCaptcha(request, payload, "signup");
 		const password = requirePassword(payload.password);
 		if (launchSignupMode) {
 			requireLaunchFirstGamePassword(password);
 		}
 		const passwordHash = await hashPassword(password);
 		const result = await updateStore(async (store) => {
+			if (optionalSession(request, store)) {
+				throw new HttpError(409, "already_signed_in");
+			}
+			assertAccountSignupIpAllowed(store, request);
 			const emailCanonical = canonicalEmail(payload.email || "");
 			if (!emailCanonical) throw new HttpError(400, "invalid_email");
 			if (store.accounts.some((account) => account.emailCanonical === emailCanonical)) {
 				throw new HttpError(409, "account_exists");
+			}
+			if (emailVerificationRequired) {
+				if (!emailConfigured()) throw new HttpError(503, "email_verification_not_configured");
+				assertEmailVerificationRequestAllowed(store, emailCanonical, request);
+				const pendingResult = await queuePendingEmailVerificationSignup(store, payload, passwordHash, password, request);
+				const pending = pendingResult.pending;
+				recordEmailVerificationRequestSignals(store, pending.emailCanonical, request, pending.id);
+				const queuedEmail = queueEmailVerification(store, pending, {
+					origin: requestPublicOrigin(request)
+				}, { force: true });
+				audit(store, "email_verification_requested", {
+					pendingSignupId: pending.id,
+					reused: !pendingResult.created
+				});
+				return {
+					verificationRequired: true,
+					email: pending.emailDisplay || pending.emailCanonical,
+					username: pending.username,
+					expiresAt: pending.expiresAt,
+					emailEventId: queuedEmail && queuedEmail.event.id
+				};
 			}
 
 			const founder = await reserveFounder(store, payload);
@@ -696,6 +835,10 @@ async function handleApi(request, response, url) {
 				updatedAt: now()
 			};
 			store.accounts.push(account);
+			recordSignupSignals(store, account, request, {
+				emailCanonical,
+				provider: "password"
+			});
 			if (launchSignupMode) {
 				await createLaunchFirstCharacter(store, account, {
 					username: founder.username,
@@ -708,7 +851,8 @@ async function handleApi(request, response, url) {
 			}
 			await grantStarterCardIfEligible(store, account, founder, "prelaunch_signup", request, {
 				emailCanonical,
-				provider: "password"
+				provider: "password",
+				signupSignalsRecorded: true
 			});
 			const token = createSession(store, account.id);
 			const queuedEmail = queueAccountEmail(store, account, signupConfirmationEmailType, {
@@ -724,21 +868,84 @@ async function handleApi(request, response, url) {
 		const emailEventId = result.emailEventId;
 		delete result.emailEventId;
 		scheduleEmailDelivery(emailEventId);
-		json(response, 201, result);
+		json(response, result.verificationRequired ? 202 : 201, result);
+		return;
+	}
+
+	if (method === "GET" && url.pathname === "/api/accounts/verify-email") {
+		const token = String(url.searchParams.get("token") || "").trim();
+		const location = `/portal?auth=verify#verify=${encodeURIComponent(token)}`;
+		response.writeHead(303, {
+			location,
+			"cache-control": "no-store",
+			...securityHeaders("text/plain")
+		});
+		response.end();
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/accounts/verify-email") {
+		const payload = await readJson(request);
+		const result = await verifyEmailSignupToken(payload.token || "", request);
+		json(response, 200, result.state);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/accounts/verify-email/resend") {
+		const payload = await readJson(request);
+		const emailCanonical = canonicalEmail(payload.email || "");
+		const result = await updateStore((store) => {
+			pruneEmailVerifications(store);
+			const profile = clientAbuseProfile(request);
+			assertClientIpNotBlocked(profile);
+			const decision = emailVerificationRequestDecision(store, emailCanonical, request);
+			const pending = emailCanonical
+				? store.emailVerifications.find((entry) =>
+					entry.emailCanonical === emailCanonical &&
+					entry.status === "pending" &&
+					Number(entry.expiresAtMs || 0) > Date.now()
+				)
+				: null;
+			recordEmailVerificationRequestSignals(store, emailCanonical, request, pending && pending.id);
+			if (!decision.allowed) {
+				return { rateLimited: true, rule: decision.rule };
+			}
+			const queuedEmail = emailVerificationRequired && emailConfigured() && pending
+				? queueEmailVerification(store, pending, {
+					origin: requestPublicOrigin(request),
+					source: "verification_resend"
+				}, { force: true })
+				: null;
+			audit(store, "email_verification_resend_requested", {
+				pendingSignupId: pending ? pending.id : null,
+				queued: Boolean(queuedEmail && queuedEmail.event)
+			});
+			return {
+				rateLimited: false,
+				emailEventId: queuedEmail && queuedEmail.event.id
+			};
+		});
+		if (result.rateLimited) {
+			rejectRateLimit(request, result.rule);
+		}
+		scheduleEmailDelivery(result.emailEventId);
+		json(response, 202, { accepted: true });
 		return;
 	}
 
 	if (method === "POST" && url.pathname === "/api/accounts/google") {
 		requireGoogleConfigured();
 		const payload = await readJson(request);
+		await requireCaptcha(request, payload, "signup");
 		const profile = await googleProfileFromCredential(payload);
 		const result = await updateStore(async (store) => {
-			consumeGoogleNonce(store, payload.nonce || "", request);
-			const wasNewAccount = !findGoogleAccount(store, profile);
-			const account = await upsertGoogleAccount(store, profile, payload, request);
-			if (launchSignupMode || payload.gamePassword || payload.characterPassword) {
-				await createLaunchFirstCharacter(store, account, {
-					username: payload.username || payload.reservedUsername || profile.username,
+				consumeGoogleNonce(store, payload.nonce || "", request);
+				const wasNewAccount = !findGoogleAccount(store, profile);
+				const account = await upsertGoogleAccount(store, profile, payload, request);
+				if (account.status !== "active") throw new HttpError(401, "invalid_account");
+				if (launchSignupMode || payload.gamePassword || payload.characterPassword) {
+					await createLaunchFirstCharacter(store, account, {
+						username: payload.username || payload.reservedUsername || profile.username,
 					gamePassword: payload.gamePassword || payload.characterPassword
 				}, request);
 			}
@@ -772,10 +979,11 @@ async function handleApi(request, response, url) {
 	if (method === "POST" && url.pathname === "/api/accounts/google/dev") {
 		const payload = await readJson(request);
 		const result = await updateStore(async (store) => {
-			const profile = googleDevProfile(payload);
-			const wasNewAccount = !findGoogleAccount(store, profile);
-			const account = await upsertGoogleAccount(store, profile, payload, request);
-			const token = createSession(store, account.id);
+				const profile = googleDevProfile(payload);
+				const wasNewAccount = !findGoogleAccount(store, profile);
+				const account = await upsertGoogleAccount(store, profile, payload, request);
+				if (account.status !== "active") throw new HttpError(401, "invalid_account");
+				const token = createSession(store, account.id);
 			const queuedEmail = wasNewAccount
 				? queueAccountEmail(store, account, signupConfirmationEmailType, {
 					origin: requestPublicOrigin(request)
@@ -803,17 +1011,369 @@ async function handleApi(request, response, url) {
 		return;
 	}
 
+	if (method === "POST" && url.pathname === "/api/accounts/logout") {
+		await updateStore(async (store) => {
+			revokeCurrentSession(request, store);
+		});
+		json(response, 200, { ok: true });
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/accounts/password-reset/request") {
+		if (!emailConfigured()) throw new HttpError(503, "password_reset_email_unavailable");
+		const payload = await readJson(request);
+		const identifier = String(payload.identifier || payload.email || payload.username || "").trim().slice(0, 254);
+		const ip = clientIp(request);
+		const origin = requestPublicOrigin(request);
+		const result = await updateStore(async (store) => {
+			prunePasswordResetTokens(store);
+			const resolution = resolvePasswordResetAccount(store, identifier);
+			const since = Date.now() - passwordResetRequestWindowMs;
+			if (!isLocalIp(ip) && countAbuseSignals(store, "password_reset_request_ip", ip, since) >= passwordResetRequestIpLimit) {
+				throw new HttpError(429, "rate_limited");
+			}
+			const accountSignal = resolution.account ? String(resolution.account.id) : resolution.signalValue;
+			if (accountSignal && countAbuseSignals(store, "password_reset_request_account", accountSignal, since) >= passwordResetRequestAccountLimit) {
+				throw new HttpError(429, "rate_limited");
+			}
+			recordAbuseSignal(store, {
+				accountId: resolution.account ? resolution.account.id : null,
+				signalType: "password_reset_request_ip",
+				signalValue: ip,
+				bucket: dailyBucket(),
+				metadata: { local: isLocalIp(ip), matched: Boolean(resolution.account) }
+			});
+			if (accountSignal) recordAbuseSignal(store, {
+				accountId: resolution.account ? resolution.account.id : null,
+				signalType: "password_reset_request_account",
+				signalValue: accountSignal,
+				bucket: dailyBucket(),
+				metadata: { matched: Boolean(resolution.account), identifierType: resolution.identifierType }
+			});
+
+			let emailEventId = null;
+			if (resolution.account && resolution.account.status === "active" && deliverableAccountEmail(resolution.account)) {
+				const queued = queuePasswordResetEmail(store, resolution.account, {
+					origin,
+					requestIp: ip,
+					identifierType: resolution.identifierType
+				});
+				emailEventId = queued && queued.event.id;
+			}
+			audit(store, "account_password_reset_requested", {
+				accountId: resolution.account ? resolution.account.id : null,
+				identifierType: resolution.identifierType,
+				queued: Boolean(emailEventId)
+			});
+			return {
+				accepted: true,
+				maskedEmail: resolution.identifierType === "username" && emailEventId
+					? maskEmailAddress(resolution.account.emailDisplay || resolution.account.emailCanonical)
+					: "",
+				emailEventId
+			};
+		});
+		const emailEventId = result.emailEventId;
+		delete result.emailEventId;
+		scheduleEmailDelivery(emailEventId);
+		json(response, 202, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/accounts/password-reset/complete") {
+		const payload = await readJson(request);
+		const token = requirePasswordResetToken(payload.token || "");
+		const ip = clientIp(request);
+		const result = await updateStore(async (store) => {
+			prunePasswordResetTokens(store);
+			const since = Date.now() - recoveryFailureWindowMs;
+			if (!isLocalIp(ip) && countAbuseSignals(store, "password_reset_failed_ip", ip, since) >= recoveryFailureLimit) {
+				throw new HttpError(429, "rate_limited");
+			}
+			const tokenHash = hashToken(token);
+			const reset = store.passwordResetTokens.find((entry) => entry.tokenHash === tokenHash);
+			const account = reset ? store.accounts.find((entry) => entry.id === reset.accountId) : null;
+			if (!reset || reset.status !== "pending" || Number(reset.expiresAtMs || 0) <= Date.now() || !account || account.status !== "active") {
+				recordAbuseSignal(store, {
+					accountId: account ? account.id : null,
+					signalType: "password_reset_failed_ip",
+					signalValue: ip,
+					bucket: dailyBucket(),
+					metadata: { local: isLocalIp(ip), matched: Boolean(reset) }
+				});
+				return { error: "invalid_password_reset_token" };
+			}
+
+			const passwordHash = await hashPassword(requirePassword(payload.newPassword));
+			const changedAt = now();
+			reset.status = "used";
+			reset.usedAt = changedAt;
+			reset.updatedAt = changedAt;
+			store.passwordResetTokens.forEach((entry) => {
+				if (entry.accountId === account.id && entry.id !== reset.id && entry.status === "pending") {
+					entry.status = "revoked";
+					entry.revokedAt = changedAt;
+					entry.updatedAt = changedAt;
+				}
+			});
+			revokeRecoveryCodes(store, account.id, changedAt);
+			account.passwordHash = passwordHash;
+			account.passwordChangedAt = changedAt;
+			account.emailVerifiedAt = account.emailVerifiedAt || changedAt;
+			account.updatedAt = changedAt;
+			const revoked = revokeAccountSessions(store, account.id);
+			audit(store, "account_password_reset_completed", { accountId: account.id, revoked });
+			return { ok: true };
+		});
+		if (result.error) throw new HttpError(401, result.error);
+		json(response, 200, result);
+		return;
+	}
+
+	if (method === "GET" && url.pathname === "/api/accounts/legacy-claim/verify") {
+		const token = String(url.searchParams.get("token") || "").trim();
+		const location = `/portal?auth=claim-confirm#claim=${encodeURIComponent(token)}`;
+		response.writeHead(303, {
+			location,
+			"cache-control": "no-store",
+			...securityHeaders("text/plain")
+		});
+		response.end();
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/accounts/legacy-claim/request") {
+		if (!openRscDbPath) throw new HttpError(503, "openrsc_db_not_configured");
+		if (!emailConfigured()) throw new HttpError(503, "legacy_claim_email_unavailable");
+		const payload = await readJson(request);
+		const username = cleanUsername(payload.username || payload.characterUsername || "");
+		const normalizedName = normalizeUsername(username);
+		if (!normalizedName) throw new HttpError(400, "invalid_username");
+		const currentGamePassword = requireLegacyGamePassword(payload.currentGamePassword || payload.gamePassword || "");
+		const targetEmailDisplay = String(payload.email || payload.newEmail || "").trim();
+		if (targetEmailDisplay.length > 254) throw new HttpError(400, "invalid_email");
+		const targetEmailCanonical = canonicalEmail(targetEmailDisplay);
+		if (!targetEmailCanonical || !deliverableEmailAddress(targetEmailCanonical)) {
+			throw new HttpError(400, "invalid_email");
+		}
+		const newWebsitePassword = requirePassword(payload.newPassword || payload.websitePassword || "");
+		const ip = clientIp(request);
+		const origin = requestPublicOrigin(request);
+		const result = await updateStore(async (store) => {
+			if (optionalSession(request, store)) throw new HttpError(409, "already_signed_in");
+			pruneLegacyAccountClaims(store);
+			const since = Date.now() - legacyAccountClaimWindowMs;
+			if (!isLocalIp(ip) && countAbuseSignals(store, "legacy_claim_request_ip", ip, since) >= legacyAccountClaimIpLimit) {
+				throw new HttpError(429, "rate_limited");
+			}
+			const characterIpSignal = `${normalizedName}:${ip}`;
+			if (countAbuseSignals(store, "legacy_claim_request_character_ip", characterIpSignal, since) >= legacyAccountClaimCharacterLimit) {
+				throw new HttpError(429, "rate_limited");
+			}
+			recordAbuseSignal(store, {
+				signalType: "legacy_claim_request_ip",
+				signalValue: ip,
+				bucket: dailyBucket(),
+				metadata: { local: isLocalIp(ip) }
+			});
+			recordAbuseSignal(store, {
+				signalType: "legacy_claim_request_character_ip",
+				signalValue: characterIpSignal,
+				bucket: dailyBucket(),
+				metadata: {}
+			});
+
+			let subject;
+			try {
+				subject = await legacyAccountClaimSubject(store, normalizedName);
+			} catch (error) {
+				if (error instanceof HttpError && error.status >= 500) {
+					return { systemError: { status: error.status, message: error.message } };
+				}
+				throw error;
+			}
+			let passwordMatches = false;
+			try {
+				passwordMatches = await verifyCanonicalGamePassword(
+					currentGamePassword,
+					subject ? subject.player.salt : "",
+					subject ? subject.player.pass : legacyClaimDummyPasswordHash
+				);
+				if (subject && !subject.player.pass.startsWith("$2y$10$")) {
+					await verifyCanonicalGamePassword(currentGamePassword, "", legacyClaimDummyPasswordHash);
+				}
+			} catch (error) {
+				if (error instanceof HttpError && error.status >= 500) {
+					return { systemError: { status: error.status, message: error.message } };
+				}
+				throw error;
+			}
+			if (!subject || !passwordMatches) return { claimError: "invalid_legacy_claim", status: 401 };
+			if (store.accounts.some((account) =>
+				account.emailCanonical === targetEmailCanonical && Number(account.id) !== Number(subject.account.id)
+			)) {
+				return { claimError: "legacy_claim_unavailable", status: 409 };
+			}
+
+			const passwordHash = await hashPassword(newWebsitePassword);
+			const queued = queueLegacyAccountClaim(store, subject, {
+				targetEmailCanonical,
+				targetEmailDisplay,
+				passwordHash,
+				requestIp: ip,
+				origin
+			});
+			audit(store, "legacy_account_claim_requested", {
+				accountId: subject.account.id,
+				characterId: subject.character.id,
+				playerId: subject.player.id,
+				claimId: queued.claim.id
+			});
+			return {
+				accepted: true,
+				verificationRequired: true,
+				expiresAt: queued.claim.expiresAt,
+				emailEventId: queued.event.id
+			};
+		});
+		if (result.systemError) throw new HttpError(result.systemError.status, result.systemError.message);
+		if (result.claimError) throw new HttpError(result.status || 401, result.claimError);
+		const emailEventId = result.emailEventId;
+		delete result.emailEventId;
+		scheduleEmailDelivery(emailEventId);
+		json(response, 202, result);
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/accounts/legacy-claim/complete") {
+		if (!openRscDbPath) throw new HttpError(503, "openrsc_db_not_configured");
+		const payload = await readJson(request);
+		const token = requireLegacyAccountClaimToken(payload.token || "");
+		const tokenHash = hashToken(token);
+		const ip = clientIp(request);
+		const previewStore = await loadStore();
+		const lockGameWrites = previewStore.legacyAccountClaims.some((entry) =>
+			entry.tokenHash === tokenHash
+			&& entry.status === "pending"
+			&& Number(entry.expiresAtMs || 0) > Date.now()
+		);
+		const result = await updateStore(async (store) => {
+			if (optionalSession(request, store)) throw new HttpError(409, "already_signed_in");
+			pruneLegacyAccountClaims(store);
+			const since = Date.now() - recoveryFailureWindowMs;
+			if (!isLocalIp(ip) && countAbuseSignals(store, "legacy_claim_complete_failed_ip", ip, since) >= recoveryFailureLimit) {
+				throw new HttpError(429, "rate_limited");
+			}
+			const claim = store.legacyAccountClaims.find((entry) => entry.tokenHash === tokenHash);
+			const account = claim ? store.accounts.find((entry) => Number(entry.id) === Number(claim.accountId)) : null;
+			if (!claim || claim.status !== "pending" || Number(claim.expiresAtMs || 0) <= Date.now() || !account) {
+				recordAbuseSignal(store, {
+					accountId: account ? account.id : null,
+					signalType: "legacy_claim_complete_failed_ip",
+					signalValue: ip,
+					bucket: dailyBucket(),
+					metadata: { local: isLocalIp(ip), matched: Boolean(claim) }
+				});
+				return { claimError: "invalid_legacy_claim_token", status: 401 };
+			}
+
+			let subject;
+			try {
+				subject = await legacyAccountClaimSubject(store, claim.normalizedName);
+			} catch (error) {
+				if (error instanceof HttpError && error.status >= 500) {
+					return { systemError: { status: error.status, message: error.message } };
+				}
+				throw error;
+			}
+			const subjectChanged = !subject
+				|| Number(subject.account.id) !== Number(claim.accountId)
+				|| Number(subject.character.id) !== Number(claim.characterId)
+				|| Number(subject.player.id) !== Number(claim.playerId)
+				|| !constantTimeMatches(subject.credentialFingerprint, claim.credentialFingerprint);
+			if (subjectChanged) {
+				revokeLegacyAccountClaim(claim, "revoked");
+				audit(store, "legacy_account_claim_rejected_changed", {
+					accountId: account.id,
+					claimId: claim.id
+				});
+				return { claimError: "legacy_claim_changed", status: 409 };
+			}
+			if (store.accounts.some((entry) =>
+				entry.emailCanonical === claim.targetEmailCanonical && Number(entry.id) !== Number(account.id)
+			)) {
+				revokeLegacyAccountClaim(claim, "revoked");
+				return { claimError: "legacy_claim_unavailable", status: 409 };
+			}
+
+			const changedAt = now();
+			const oldEmailCanonical = account.emailCanonical;
+			const pendingPasswordHash = claim.passwordHash;
+			claim.status = "used";
+			claim.usedAt = changedAt;
+			claim.updatedAt = changedAt;
+			claim.passwordHash = null;
+			claim.credentialFingerprint = "";
+			account.emailCanonical = claim.targetEmailCanonical;
+			account.emailDisplay = claim.targetEmailDisplay || claim.targetEmailCanonical;
+			account.passwordHash = pendingPasswordHash;
+			account.emailVerifiedAt = changedAt;
+			account.passwordChangedAt = changedAt;
+			account.syntheticEmail = false;
+			account.requiresEmailUpgrade = false;
+			account.legacyClaimedAt = changedAt;
+			account.updatedAt = changedAt;
+			for (const founder of store.founders) {
+				if (Number(founder.accountId || 0) !== Number(account.id)) continue;
+				founder.emailCanonical = account.emailCanonical;
+				founder.emailDisplay = account.emailDisplay;
+				founder.updatedAt = changedAt;
+			}
+			revokeLegacyAccountClaims(store, account.id, changedAt, claim.id);
+			revokePasswordResetTokens(store, account.id, changedAt);
+			revokeRecoveryCodes(store, account.id, changedAt);
+			const revokedSessions = revokeAccountSessions(store, account.id);
+			audit(store, "legacy_account_claim_completed", {
+				accountId: account.id,
+				characterId: claim.characterId,
+				playerId: claim.playerId,
+				claimId: claim.id,
+				revokedSessions,
+				replacedSyntheticEmail: Boolean(oldEmailCanonical && oldEmailCanonical.endsWith(".invalid"))
+			});
+			return { ok: true };
+		}, lockGameWrites ? { lockOpenRscWrites: true } : {});
+		if (result.systemError) throw new HttpError(result.systemError.status, result.systemError.message);
+		if (result.claimError) throw new HttpError(result.status || 401, result.claimError);
+		json(response, 200, result);
+		return;
+	}
+
 	if (method === "POST" && url.pathname === "/api/accounts/recover-password") {
 		const payload = await readJson(request);
-		const passwordHash = await hashPassword(requirePassword(payload.newPassword));
+		const ip = clientIp(request);
 		const result = await updateStore(async (store) => {
 			const emailCanonical = canonicalEmail(payload.email || "");
 			const code = normalizeCode(payload.code || payload.recoveryCode || "");
+			const since = Date.now() - recoveryFailureWindowMs;
+			if (!isLocalIp(ip) && countAbuseSignals(store, "recovery_code_failed_ip", ip, since) >= recoveryFailureLimit) {
+				throw new HttpError(429, "rate_limited");
+			}
+			if (emailCanonical && countAbuseSignals(store, "recovery_code_failed_email", emailCanonical, since) >= recoveryFailureLimit) {
+				throw new HttpError(429, "rate_limited");
+			}
 			if (!emailCanonical || !code) {
 				recordAbuseSignal(store, {
 					accountId: null,
-					signalType: "recovery_code_failed",
-					signalValue: emailCanonical || clientIp(request),
+					signalType: "recovery_code_failed_ip",
+					signalValue: ip,
+					bucket: dailyBucket(),
+					metadata: { hasAccount: false, local: isLocalIp(ip) }
+				});
+				if (emailCanonical) recordAbuseSignal(store, {
+					accountId: null,
+					signalType: "recovery_code_failed_email",
+					signalValue: emailCanonical,
 					bucket: dailyBucket(),
 					metadata: { hasAccount: false }
 				});
@@ -828,30 +1388,33 @@ async function handleApi(request, response, url) {
 			if (!account || account.status !== "active" || !recoveryCode) {
 				recordAbuseSignal(store, {
 					accountId: account ? account.id : null,
-					signalType: "recovery_code_failed",
-					signalValue: emailCanonical || clientIp(request),
+					signalType: "recovery_code_failed_ip",
+					signalValue: ip,
+					bucket: dailyBucket(),
+					metadata: { hasAccount: Boolean(account), local: isLocalIp(ip) }
+				});
+				recordAbuseSignal(store, {
+					accountId: account ? account.id : null,
+					signalType: "recovery_code_failed_email",
+					signalValue: emailCanonical,
 					bucket: dailyBucket(),
 					metadata: { hasAccount: Boolean(account) }
 				});
 				return { error: "invalid_recovery_code" };
 			}
+			const passwordHash = await hashPassword(requirePassword(payload.newPassword));
+			const changedAt = now();
 			recoveryCode.status = "used";
-			recoveryCode.usedAt = now();
+			recoveryCode.usedAt = changedAt;
 			recoveryCode.revokedAt = null;
+			revokeRecoveryCodes(store, account.id, changedAt, recoveryCode.id);
+			revokePasswordResetTokens(store, account.id, changedAt);
 			account.passwordHash = passwordHash;
-			account.passwordChangedAt = now();
-			account.updatedAt = now();
-			let revoked = 0;
-			store.sessions.forEach((entry) => {
-				if (entry.accountId === account.id && entry.expiresAt > Date.now() && !entry.revokedAt) {
-					entry.expiresAt = Date.now();
-					entry.revokedAt = now();
-					revoked += 1;
-				}
-			});
-			const token = createSession(store, account.id);
+			account.passwordChangedAt = changedAt;
+			account.updatedAt = changedAt;
+			const revoked = revokeAccountSessions(store, account.id);
 			audit(store, "account_recovered_with_code", { accountId: account.id, revoked });
-			return { token, ...(await accountState(store, account)) };
+			return { ok: true };
 		});
 		if (result.error) throw new HttpError(401, result.error);
 		json(response, 200, result);
@@ -861,16 +1424,20 @@ async function handleApi(request, response, url) {
 	if (method === "POST" && url.pathname === "/api/accounts/login") {
 		const payload = await readJson(request);
 		const ip = clientIp(request);
+		const emailCanonical = canonicalEmail(payload.email || "");
 		const result = await updateStore(async (store) => {
+			if (optionalSession(request, store)) throw new HttpError(409, "already_signed_in");
+			const since = Date.now() - loginFailureWindowMs;
 			if (!isLocalIp(ip)) {
-				const since = Date.now() - loginFailureWindowMs;
 				if (countAbuseSignals(store, "login_failure_ip", ip, since) >= loginIpFailureLimit) {
 					throw new HttpError(429, "rate_limited");
 				}
 			}
-			const emailCanonical = canonicalEmail(payload.email || "");
+			if (emailCanonical && countAbuseSignals(store, "login_failure_email", emailCanonical, since) >= loginEmailFailureLimit) {
+				throw new HttpError(429, "rate_limited");
+			}
 			const account = store.accounts.find((entry) => entry.emailCanonical === emailCanonical);
-			if (!account || !(await verifyPassword(String(payload.password || ""), account.passwordHash))) {
+			if (!account || !(await verifyPassword(String(payload.password || ""), account.passwordHash)) || account.status !== "active") {
 				// updateStore only persists when the mutator resolves, so the failure
 				// signal must ride a returned marker; the 401 is thrown outside.
 				recordAbuseSignal(store, {
@@ -878,6 +1445,13 @@ async function handleApi(request, response, url) {
 					signalValue: ip,
 					bucket: dailyBucket(),
 					metadata: { local: isLocalIp(ip) }
+				});
+				if (emailCanonical) recordAbuseSignal(store, {
+					accountId: account ? account.id : null,
+					signalType: "login_failure_email",
+					signalValue: emailCanonical,
+					bucket: dailyBucket(),
+					metadata: { hasAccount: Boolean(account), accountStatus: account ? account.status || "" : "" }
 				});
 				return { loginFailed: true };
 			}
@@ -892,6 +1466,7 @@ async function handleApi(request, response, url) {
 
 	if (method === "POST" && url.pathname === "/api/characters") {
 		const payload = await readJson(request);
+		await requireCaptcha(request, payload, "character");
 		const result = await updateStore(async (store) => {
 			const account = requireAccount(request, store);
 			await createAccountCharacter(store, account, payload, request);
@@ -918,6 +1493,83 @@ async function handleApi(request, response, url) {
 				openRscDeleted: Boolean(deleted.openRscDeleted)
 			});
 			return accountState(store, account);
+		});
+		json(response, 200, result);
+		return;
+	}
+
+	const gamePasswordMatch = /^\/api\/characters\/(\d+)\/game-password$/.exec(url.pathname);
+	if (method === "POST" && gamePasswordMatch) {
+		const characterId = Number(gamePasswordMatch[1]);
+		const payload = await readJson(request);
+		const newGamePassword = requireGamePassword(payload.newPassword || payload.gamePassword || "");
+		const ip = clientIp(request);
+		const authorization = await updateStore(async (store) => {
+			const { account, session } = requireSession(request, store);
+			const since = Date.now() - gamePasswordResetWindowMs;
+			if (!isLocalIp(ip) && countAbuseSignals(store, "game_password_reset_ip", ip, since) >= gamePasswordResetLimit) {
+				throw new HttpError(429, "rate_limited");
+			}
+			if (countAbuseSignals(store, "game_password_reset_account", String(account.id), since) >= gamePasswordResetLimit) {
+				throw new HttpError(429, "rate_limited");
+			}
+			recordAbuseSignal(store, {
+				accountId: account.id,
+				signalType: "game_password_reset_ip",
+				signalValue: ip,
+				bucket: dailyBucket(),
+				metadata: { local: isLocalIp(ip), characterId }
+			});
+			recordAbuseSignal(store, {
+				accountId: account.id,
+				signalType: "game_password_reset_account",
+				signalValue: String(account.id),
+				bucket: dailyBucket(),
+				metadata: { characterId }
+			});
+			try {
+				await requireSensitiveAccountAuth(store, account, session, payload.currentPassword || "");
+			} catch (error) {
+				if (error instanceof HttpError) return { error: error.message, status: error.status };
+				throw error;
+			}
+			const character = store.characters.find((entry) =>
+				Number(entry.id) === characterId && Number(entry.accountId) === Number(account.id)
+			);
+			if (!character) return { error: "character_not_found", status: 404 };
+			if (character.source !== "openrsc-sqlite-created" || character.linkStatus !== "linked") {
+				return { error: "character_game_password_reset_unsupported", status: 409 };
+			}
+			if (!Number(character.playerId)) return { error: "character_game_login_unavailable", status: 409 };
+			return {
+				accountId: account.id,
+				character: {
+					id: character.id,
+					name: character.name,
+					playerId: character.playerId,
+					source: character.source,
+					linkStatus: character.linkStatus
+				}
+			};
+		});
+		if (authorization.error) throw new HttpError(authorization.status || 400, authorization.error);
+		const changedAt = await updateOpenRscPlayerPassword(authorization.character, authorization.accountId, newGamePassword, ip);
+		const result = await updateStore((store) => {
+			const account = store.accounts.find((entry) => entry.id === authorization.accountId);
+			const character = store.characters.find((entry) =>
+				Number(entry.id) === characterId && Number(entry.accountId) === Number(authorization.accountId)
+			);
+			if (character) {
+				character.gamePasswordChangedAt = changedAt;
+				character.updatedAt = changedAt;
+			}
+			if (account) account.updatedAt = changedAt;
+			audit(store, "character_game_password_changed", {
+				accountId: authorization.accountId,
+				characterId,
+				playerId: authorization.character.playerId
+			});
+			return { ok: true, characterId, changedAt };
 		});
 		json(response, 200, result);
 		return;
@@ -1009,7 +1661,9 @@ async function handleApi(request, response, url) {
 			account.passwordHash = passwordHash;
 			account.passwordChangedAt = now();
 			account.updatedAt = now();
-			audit(store, "account_password_changed", { accountId: account.id });
+			const revoked = revokeOtherAccountSessions(store, account.id, session.id);
+			revokePasswordResetTokens(store, account.id);
+			audit(store, "account_password_changed", { accountId: account.id, revoked });
 			return accountState(store, account, session);
 		});
 		json(response, 200, result);
@@ -1017,8 +1671,10 @@ async function handleApi(request, response, url) {
 	}
 
 	if (method === "POST" && url.pathname === "/api/security/recovery-codes") {
+		const payload = await readJson(request);
 		const result = await updateStore(async (store) => {
 			const { account, session } = requireSession(request, store);
+			await requireSensitiveAccountAuth(store, account, session, payload.currentPassword || "");
 			store.recoveryCodes
 				.filter((entry) => entry.accountId === account.id && entry.status === "active")
 				.forEach((entry) => {
@@ -1072,6 +1728,12 @@ async function handleApi(request, response, url) {
 		return;
 	}
 
+	if (method === "GET" && url.pathname === "/api/admin/presence") {
+		requireAdmin(request);
+		json(response, 200, presenceSummary());
+		return;
+	}
+
 	if (method === "GET" && url.pathname === "/api/admin/signups") {
 		requireAdmin(request);
 		const store = await loadStore();
@@ -1113,7 +1775,8 @@ async function handleApi(request, response, url) {
 			response.writeHead(200, {
 				"content-type": "text/csv; charset=utf-8",
 				"content-disposition": "attachment; filename=\"voidscape-signups.csv\"",
-				"cache-control": "no-store"
+				"cache-control": "no-store",
+				...securityHeaders("text/csv")
 			});
 			response.end([header, ...lines].join("\n") + "\n");
 			return;
@@ -1208,6 +1871,19 @@ async function handleApi(request, response, url) {
 		return;
 	}
 
+	if (method === "POST" && url.pathname === "/api/admin/emails/launch-48h") {
+		requireAdmin(request);
+		const payload = await readJson(request);
+		const result = await queueAdminBulkEmail(request, launchReminderEmailType, payload, {
+			requireFounder: false,
+			auditType: "admin_launch_48h_email_requested"
+		});
+		const delivery = result.dryRun ? { sent: 0, failed: 0, skipped: 0 } : await deliverEmailEvents(result.eventIds);
+		delete result.eventIds;
+		json(response, 200, { ...result, ...delivery });
+		return;
+	}
+
 	if (method === "POST" && url.pathname === "/api/admin/emails/launch-live") {
 		requireAdmin(request);
 		const payload = await readJson(request);
@@ -1235,6 +1911,47 @@ async function handleApi(request, response, url) {
 		json(response, 200, {
 			accounts: await Promise.all(accounts.map((account) => adminAccountState(store, account)))
 		});
+		return;
+	}
+
+	if (method === "POST" && url.pathname === "/api/admin/accounts/backfill-native") {
+		requireAdmin(request);
+		const payload = await readJson(request);
+		const dryRun = payload.dryRun === true || payload.apply === false;
+		const grantMissingStarterCard = payload.grantMissingStarterCard !== false;
+		if (dryRun) {
+			const store = await loadStore();
+			const result = await backfillNativePortalAccounts(cloneJson(store), {
+				dryRun: true,
+				grantMissingStarterCard
+			});
+			json(response, 200, result);
+			return;
+		}
+		const result = await updateStore(async (store) => {
+			const backfill = await backfillNativePortalAccounts(store, {
+				dryRun: false,
+				grantMissingStarterCard,
+				deferGameWrites: true
+			});
+			if (backfill.createdAccounts || backfill.createdCharacters || backfill.updatedCharacters
+				|| backfill.linkedPlayers || backfill.starterCardsGranted || backfill.subscriptionsMigrated || backfill.conflicts.length) {
+				audit(store, "admin_native_accounts_backfilled", {
+					createdAccounts: backfill.createdAccounts,
+					createdCharacters: backfill.createdCharacters,
+					updatedCharacters: backfill.updatedCharacters,
+					linkedPlayers: backfill.linkedPlayers,
+					starterCardsGranted: backfill.starterCardsGranted,
+					subscriptionsMigrated: backfill.subscriptionsMigrated,
+					conflicts: backfill.conflicts.length
+				});
+			}
+			return backfill;
+		});
+		const pendingGameWrites = result.pendingGameWrites || {};
+		delete result.pendingGameWrites;
+		await applyNativeBackfillGameWrites(pendingGameWrites);
+		json(response, 200, result);
 		return;
 	}
 
@@ -1359,7 +2076,149 @@ async function recordFunnelClick(request, payload) {
 	return { ok: true, event };
 }
 
+function recordPresenceHeartbeat(payload) {
+	const visitorId = sanitizePresenceVisitorId(payload && payload.visitorId);
+	const observedAtMs = Date.now();
+	const observedAt = now();
+	prunePresence(observedAtMs);
+
+	const page = sanitizePresencePath(payload && payload.page);
+	const pageInfo = presencePageInfo(page);
+	const visitorHash = hashToken(`${abuseHashSalt}:presence:${visitorId}`);
+	const entry = presenceVisitors.get(visitorHash) || {
+		visitorHash,
+		firstSeenAt: observedAt,
+		firstSeenAtMs: observedAtMs
+	};
+	entry.page = page;
+	entry.pageKey = pageInfo.key;
+	entry.pageLabel = pageInfo.label;
+	entry.title = sanitizeFunnelText(payload && payload.title, 80);
+	entry.visible = payload && payload.visible !== false;
+	entry.lastSeenAt = observedAt;
+	entry.lastSeenAtMs = observedAtMs;
+	presenceVisitors.set(visitorHash, entry);
+	return {
+		ok: true,
+		heartbeatSeconds: presenceHeartbeatSeconds,
+		activeWindowSeconds: Math.round(presenceActiveWindowMs / 1000),
+		recentWindowSeconds: Math.round(presenceRecentWindowMs / 1000)
+	};
+}
+
+function presenceSummary() {
+	const observedAtMs = Date.now();
+	prunePresence(observedAtMs);
+	const rows = Array.from(presenceVisitors.values());
+	const activeRows = rows.filter((entry) => entry.lastSeenAtMs >= observedAtMs - presenceActiveWindowMs);
+	const recentRows = rows.filter((entry) => entry.lastSeenAtMs >= observedAtMs - presenceRecentWindowMs);
+	return {
+		generatedAt: now(),
+		heartbeatSeconds: presenceHeartbeatSeconds,
+		windows: {
+			activeSeconds: Math.round(presenceActiveWindowMs / 1000),
+			recentSeconds: Math.round(presenceRecentWindowMs / 1000)
+		},
+		active: summarizePresenceRows(activeRows),
+		recent: summarizePresenceRows(recentRows),
+		visitors: activeRows
+			.slice()
+			.sort((left, right) => right.lastSeenAtMs - left.lastSeenAtMs)
+			.slice(0, 20)
+			.map((entry) => ({
+				page: entry.page,
+				pageLabel: entry.pageLabel,
+				visible: Boolean(entry.visible),
+				firstSeenAt: entry.firstSeenAt,
+				lastSeenAt: entry.lastSeenAt,
+				ageSeconds: Math.max(0, Math.round((observedAtMs - entry.lastSeenAtMs) / 1000))
+			}))
+	};
+}
+
+function summarizePresenceRows(rows) {
+	const pages = new Map();
+	for (const entry of rows) {
+		const key = entry.pageKey || "other";
+		const current = pages.get(key) || {
+			key,
+			label: entry.pageLabel || "Other",
+			count: 0,
+			visible: 0,
+			lastSeenAt: ""
+		};
+		current.count += 1;
+		if (entry.visible) current.visible += 1;
+		if (!current.lastSeenAt || Date.parse(entry.lastSeenAt || "") > Date.parse(current.lastSeenAt || "")) {
+			current.lastSeenAt = entry.lastSeenAt;
+		}
+		pages.set(key, current);
+	}
+	return {
+		total: rows.length,
+		visible: rows.filter((entry) => entry.visible).length,
+		pages: Array.from(pages.values())
+			.sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
+	};
+}
+
+function prunePresence(observedAtMs) {
+	for (const [visitorHash, entry] of presenceVisitors.entries()) {
+		if (!entry || entry.lastSeenAtMs < observedAtMs - presenceRetentionMs) {
+			presenceVisitors.delete(visitorHash);
+		}
+	}
+	if (presenceVisitors.size <= presenceMaxVisitors) return;
+	const stale = Array.from(presenceVisitors.values())
+		.sort((left, right) => left.lastSeenAtMs - right.lastSeenAtMs)
+		.slice(0, presenceVisitors.size - presenceMaxVisitors);
+	for (const entry of stale) {
+		presenceVisitors.delete(entry.visitorHash);
+	}
+}
+
+function sanitizePresenceVisitorId(value) {
+	const text = String(value || "").trim();
+	if (!/^[A-Za-z0-9_-]{16,96}$/.test(text)) {
+		throw new HttpError(400, "invalid_visitor_id");
+	}
+	return text;
+}
+
+function sanitizePresencePath(value) {
+	const text = sanitizeFunnelText(value, 220);
+	if (!text) return "/";
+	try {
+		const parsed = new URL(text, "https://voidscape.gg");
+		return normalizePresencePath(parsed.pathname || "/");
+	} catch (error) {
+		return normalizePresencePath(text.split(/[?#]/)[0] || "/");
+	}
+}
+
+function normalizePresencePath(value) {
+	let path = String(value || "/").trim();
+	if (!path.startsWith("/")) path = "/";
+	path = path.replace(/\/+$/g, "");
+	return path || "/";
+}
+
+function presencePageInfo(path) {
+	if (path === "/" || path === "/index.html") return { key: "landing", label: "Landing" };
+	if (path === "/portal" || path === "/portal.html") return { key: "portal", label: "Account manager" };
+	if (path === "/features" || path === "/features.html") return { key: "features", label: "Features" };
+	if (path === "/npcs" || path === "/npcs.html" || path === "/drops" || path === "/drops.html") return { key: "npcs", label: "NPC drops" };
+	if (path === "/transparency" || path === "/transparency.html") return { key: "transparency", label: "Transparency" };
+	if (path === "/privacy" || path === "/privacy.html") return { key: "privacy", label: "Privacy" };
+	if (path === "/data-deletion" || path === "/data-deletion.html") return { key: "data_deletion", label: "Data deletion" };
+	if (path === "/discord" || path === "/discord.html") return { key: "discord", label: "Discord" };
+	return { key: "other", label: "Other" };
+}
+
 function requestPublicOrigin(request) {
+	if (publicMode && emailVerificationRequired && !publicSiteOrigin) {
+		throw new HttpError(503, "public_origin_not_configured");
+	}
 	return publicSiteOrigin || normalizedOrigin(publicOrigin(request)) || "https://voidscape.gg";
 }
 
@@ -1405,6 +2264,267 @@ function publicDownloadUrl(path) {
 	return publicSiteOrigin ? joinUrl(publicSiteOrigin, path) : path;
 }
 
+async function queuePendingEmailVerificationSignup(store, payload, passwordHash, password, request) {
+	pruneEmailVerifications(store);
+	const emailCanonical = canonicalEmail(payload.email || "");
+	const emailDisplay = String(payload.email || "").trim();
+	if (!emailCanonical) throw new HttpError(400, "invalid_email");
+	if (store.accounts.some((account) => account.emailCanonical === emailCanonical)) {
+		throw new HttpError(409, "account_exists");
+	}
+	const existingPending = store.emailVerifications.find((entry) =>
+		entry.emailCanonical === emailCanonical &&
+		entry.status === "pending" &&
+		Number(entry.expiresAtMs || 0) > Date.now()
+	);
+	if (existingPending) {
+		return { pending: existingPending, created: false };
+	}
+
+	const username = cleanUsername(payload.username || payload.name || "");
+	const normalizedName = normalizeUsername(username);
+	if (!normalizedName) throw new HttpError(400, "invalid_username");
+	await assertFounderUsernameAvailable(store, normalizedName, emailCanonical);
+
+	const token = randomBytes(32).toString("base64url");
+	const pending = {
+		id: nextId(store, "emailVerification"),
+		emailCanonical,
+		createdAt: now()
+	};
+	store.emailVerifications.push(pending);
+	const expiresAtMs = Date.now() + emailVerificationTtlMs;
+	Object.assign(pending, {
+		emailDisplay,
+		username,
+		normalizedName,
+		passwordHash,
+		gamePasswordSealed: launchSignupMode ? sealText(password) : "",
+		referrerCode: String(payload.referrerCode || payload.referralCode || payload.ref || "").trim().slice(0, 40),
+		status: "pending",
+		tokenHash: hashToken(token),
+		expiresAtMs,
+		expiresAt: new Date(expiresAtMs).toISOString(),
+		requestIpHash: abuseHash(clientIp(request)),
+		verificationTokenSealed: sealText(token),
+		updatedAt: now()
+	});
+	return { pending, created: true };
+}
+
+function queueEmailVerification(store, pending, metadata = {}, options = {}) {
+	if (!pending || !deliverableEmailAddress(pending.emailCanonical)) return null;
+	if (!store.emailEvents) store.emailEvents = [];
+	const duplicate = !options.force && store.emailEvents.find((event) =>
+		event.pendingSignupId === pending.id &&
+		event.type === emailVerificationEmailType &&
+		["pending", "sending", "sent"].includes(event.status)
+	);
+	if (duplicate) {
+		return { event: duplicate, created: false };
+	}
+	const event = {
+		id: nextId(store, "emailEvent"),
+		accountId: null,
+		pendingSignupId: pending.id,
+		emailCanonical: pending.emailCanonical,
+		emailDisplay: pending.emailDisplay || pending.emailCanonical,
+		type: emailVerificationEmailType,
+		status: "pending",
+		provider: emailProviderLabel(),
+		attempts: 0,
+		providerMessageId: "",
+		lastError: "",
+		metadata: {
+			origin: normalizedOrigin(metadata.origin || publicSiteOrigin),
+			source: String(metadata.source || "password_signup").trim().slice(0, 80),
+			requestedBy: String(metadata.requestedBy || "").trim().slice(0, 80),
+			verificationTokenSealed: pending.verificationTokenSealed || ""
+		},
+		createdAt: now(),
+		updatedAt: now(),
+		sentAt: null
+	};
+	store.emailEvents.push(event);
+	audit(store, "email_event_queued", {
+		emailEventId: event.id,
+		pendingSignupId: pending.id,
+		type: event.type
+	});
+	return { event, created: true };
+}
+
+async function verifyEmailSignupToken(token, request) {
+	const normalizedToken = String(token || "").trim();
+	if (!/^[A-Za-z0-9_-]{32,120}$/.test(normalizedToken)) {
+		throw new HttpError(400, "invalid_email_verification_token");
+	}
+	const result = await updateStore(async (store) => {
+		pruneEmailVerifications(store);
+		const tokenHash = hashToken(normalizedToken);
+		const pending = store.emailVerifications.find((entry) =>
+			entry.status === "pending" &&
+			entry.tokenHash === tokenHash
+		);
+		if (!pending) throw new HttpError(400, "invalid_email_verification_token");
+		if (Number(pending.expiresAtMs || 0) <= Date.now()) {
+			pending.status = "expired";
+			pending.updatedAt = now();
+			throw new HttpError(410, "email_verification_expired");
+		}
+		if (store.accounts.some((account) => account.emailCanonical === pending.emailCanonical)) {
+			pending.status = "used";
+			pending.updatedAt = now();
+			throw new HttpError(409, "account_exists");
+		}
+
+		const founder = await reserveFounder(store, {
+			username: pending.username,
+			email: pending.emailDisplay || pending.emailCanonical,
+			referrerCode: pending.referrerCode || ""
+		});
+		const account = {
+			id: nextId(store, "account"),
+			emailCanonical: pending.emailCanonical,
+			emailDisplay: pending.emailDisplay || pending.emailCanonical,
+			passwordHash: pending.passwordHash,
+			status: "active",
+			emailVerifiedAt: now(),
+			subscriptionExpiresAt: 0,
+			createdAt: now(),
+			updatedAt: now()
+		};
+		store.accounts.push(account);
+		recordSignupSignals(store, account, request, {
+			emailCanonical: pending.emailCanonical,
+			provider: "password_email_verified"
+		});
+		if (launchSignupMode) {
+			await createLaunchFirstCharacter(store, account, {
+				username: founder.username,
+				gamePassword: unsealText(pending.gamePasswordSealed || "")
+			}, request);
+		} else {
+			const reservedCharacter = createCharacter(store, account.id, founder.username, "warrior");
+			reservedCharacter.source = "founder-reserved";
+			reservedCharacter.status = "Reserved username";
+		}
+		await grantStarterCardIfEligible(store, account, founder, "email_verified_signup", request, {
+			emailCanonical: pending.emailCanonical,
+			provider: "password_email_verified",
+			signupSignalsRecorded: true
+		});
+		const confirmation = queueAccountEmail(store, account, signupConfirmationEmailType, {
+			origin: requestPublicOrigin(request)
+		});
+		const sessionToken = createSession(store, account.id);
+		pending.status = "verified";
+		pending.accountId = account.id;
+		pending.verifiedAt = now();
+		pending.updatedAt = now();
+		clearEmailVerificationSecrets(store, pending, "email_verification_completed");
+		audit(store, "account_email_verified", { accountId: account.id, pendingSignupId: pending.id });
+		audit(store, "account_registered", { accountId: account.id, emailVerified: true });
+		return {
+			token: sessionToken,
+			account,
+			confirmationEmailEventId: confirmation && confirmation.event.id,
+			state: {
+				token: sessionToken,
+				...(await accountState(store, account))
+			}
+		};
+	});
+	scheduleEmailDelivery(result.confirmationEmailEventId);
+	return result;
+}
+
+function pruneEmailVerifications(store) {
+	if (!Array.isArray(store.emailVerifications)) store.emailVerifications = [];
+	const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+	store.emailVerifications = store.emailVerifications.filter((entry) => {
+		if (!entry) return false;
+		if (entry.status === "pending" && Number(entry.expiresAtMs || 0) <= Date.now()) {
+			entry.status = "expired";
+			entry.updatedAt = now();
+			entry.expiredAt = entry.updatedAt;
+			clearEmailVerificationSecrets(store, entry, "email_verification_expired");
+			return true;
+		}
+		return entry.status === "pending" || Number(entry.expiresAtMs || 0) >= cutoff;
+	});
+}
+
+function clearEmailVerificationSecrets(store, pending, skippedReason) {
+	if (!pending) return;
+	pending.passwordHash = null;
+	pending.gamePasswordSealed = "";
+	pending.tokenHash = "";
+	pending.verificationTokenSealed = "";
+	for (const event of store.emailEvents || []) {
+		if (event.pendingSignupId !== pending.id || event.type !== emailVerificationEmailType) continue;
+		if (event.metadata) event.metadata.verificationTokenSealed = "";
+		if (["pending", "failed"].includes(event.status)) {
+			event.status = "skipped";
+			event.lastError = skippedReason;
+			event.updatedAt = now();
+		}
+	}
+}
+
+function emailVerificationRequestDecision(store, emailCanonical, request) {
+	const profile = clientAbuseProfile(request);
+	if (profile.local) return { allowed: true, rule: "" };
+	const since = Date.now() - emailVerificationRequestWindowMs;
+	if (countAbuseSignals(store, "email_verification_ip", profile.ip, since) >= emailVerificationRequestIpLimit) {
+		return { allowed: false, rule: "email_verification_ip_window" };
+	}
+	if (emailCanonical && countAbuseSignals(store, "email_verification_email", emailCanonical, since) >= emailVerificationRequestEmailLimit) {
+		return { allowed: false, rule: "email_verification_email_window" };
+	}
+	return { allowed: true, rule: "" };
+}
+
+function assertEmailVerificationRequestAllowed(store, emailCanonical, request) {
+	const decision = emailVerificationRequestDecision(store, emailCanonical, request);
+	if (!decision.allowed) rejectRateLimit(request, decision.rule);
+}
+
+function recordEmailVerificationRequestSignals(store, emailCanonical, request, pendingSignupId = null) {
+	const ip = clientIp(request);
+	const subnetKey = ipv4SubnetKey(ip);
+	recordAbuseSignal(store, {
+		signalType: "email_verification_ip",
+		signalValue: ip,
+		bucket: dailyBucket(),
+		metadata: { local: isLocalIp(ip), pendingSignupId }
+	});
+	recordAbuseSignal(store, {
+		signalType: "email_verification_email",
+		signalValue: emailCanonical,
+		bucket: emailDomainBucket(emailCanonical),
+		metadata: { pendingSignupId }
+	});
+	if (subnetKey) {
+		recordAbuseSignal(store, {
+			signalType: "email_verification_subnet",
+			signalValue: subnetKey,
+			bucket: dailyBucket(),
+			metadata: { local: isLocalIp(ip), pendingSignupId }
+		});
+	}
+}
+
+function deliverableEmailAddress(email) {
+	const canonical = canonicalEmail(email);
+	return Boolean(
+		canonical &&
+		!canonical.endsWith(".invalid") &&
+		!canonical.endsWith(".local") &&
+		!canonical.endsWith("@discord.voidscape.local")
+	);
+}
+
 function adminEmailLimit(value) {
 	const limit = Number(value || 500);
 	if (!Number.isInteger(limit) || limit <= 0) return 500;
@@ -1415,7 +2535,323 @@ function deliverableAccountEmail(account) {
 	const email = account && (account.emailDisplay || account.emailCanonical || "");
 	const canonical = account && account.emailCanonical || canonicalEmail(email);
 	if (!email || !canonical) return false;
-	return !canonical.endsWith(".local") && !canonical.endsWith("@discord.voidscape.local");
+	return deliverableEmailAddress(canonical);
+}
+
+function resolvePasswordResetAccount(store, identifier) {
+	const input = String(identifier || "").trim();
+	const emailCanonical = input.includes("@") ? canonicalEmail(input) : "";
+	if (emailCanonical) {
+		return {
+			identifierType: "email",
+			signalValue: emailCanonical,
+			account: store.accounts.find((entry) => entry.emailCanonical === emailCanonical) || null
+		};
+	}
+	const normalizedName = normalizeUsername(input);
+	if (normalizedName) {
+		const character = store.characters.find((entry) =>
+			(entry.normalizedName || normalizeUsername(entry.name || "")) === normalizedName
+		);
+		const founder = character ? null : store.founders.find((entry) => entry.normalizedName === normalizedName);
+		const account = character
+			? store.accounts.find((entry) => Number(entry.id) === Number(character.accountId)) || null
+			: founder
+				? store.accounts.find((entry) => entry.emailCanonical === founder.emailCanonical) || null
+				: null;
+		return {
+			identifierType: "username",
+			signalValue: normalizedName,
+			account
+		};
+	}
+	return {
+		identifierType: "unknown",
+		signalValue: input.toLowerCase().slice(0, 120),
+		account: null
+	};
+}
+
+function maskEmailAddress(value) {
+	const email = canonicalEmail(value);
+	if (!email) return "";
+	const [local, domain] = email.split("@");
+	const parts = domain.split(".");
+	const host = parts.shift() || "";
+	const suffix = parts.length ? `.${parts.join(".")}` : "";
+	return `${local.slice(0, 1)}***@${host.slice(0, 1)}***${suffix}`;
+}
+
+function queuePasswordResetEmail(store, account, metadata = {}) {
+	if (!account || !deliverableAccountEmail(account)) return null;
+	const createdAt = now();
+	revokePasswordResetTokens(store, account.id, createdAt);
+	store.emailEvents
+		.filter((event) => event.accountId === account.id && event.type === passwordResetEmailType && ["pending", "failed"].includes(event.status))
+		.forEach((event) => {
+			event.status = "skipped";
+			event.lastError = "password_reset_superseded";
+			event.updatedAt = createdAt;
+		});
+
+	const token = randomBytes(32).toString("base64url");
+	const expiresAtMs = Date.now() + passwordResetTtlMs;
+	const reset = {
+		id: nextId(store, "passwordResetToken"),
+		accountId: account.id,
+		tokenHash: hashToken(token),
+		status: "pending",
+		requestIpHash: abuseHash(metadata.requestIp || ""),
+		identifierType: String(metadata.identifierType || "").slice(0, 20),
+		expiresAtMs,
+		expiresAt: new Date(expiresAtMs).toISOString(),
+		createdAt,
+		updatedAt: createdAt,
+		usedAt: null,
+		revokedAt: null
+	};
+	store.passwordResetTokens.push(reset);
+	const event = {
+		id: nextId(store, "emailEvent"),
+		accountId: account.id,
+		passwordResetTokenId: reset.id,
+		emailCanonical: account.emailCanonical,
+		emailDisplay: account.emailDisplay || account.emailCanonical,
+		type: passwordResetEmailType,
+		status: "pending",
+		provider: emailProviderLabel(),
+		attempts: 0,
+		providerMessageId: "",
+		lastError: "",
+		metadata: {
+			origin: normalizedOrigin(metadata.origin || publicSiteOrigin),
+			source: "account_recovery",
+			requestedBy: "self_service",
+			resetTokenSealed: sealText(token)
+		},
+		createdAt,
+		updatedAt: createdAt,
+		sentAt: null
+	};
+	store.emailEvents.push(event);
+	audit(store, "email_event_queued", {
+		emailEventId: event.id,
+		accountId: account.id,
+		passwordResetTokenId: reset.id,
+		type: event.type
+	});
+	return { event, reset };
+}
+
+function requirePasswordResetToken(value) {
+	const token = String(value || "").trim();
+	if (!/^[A-Za-z0-9_-]{32,120}$/.test(token)) {
+		throw new HttpError(401, "invalid_password_reset_token");
+	}
+	return token;
+}
+
+function prunePasswordResetTokens(store) {
+	if (!Array.isArray(store.passwordResetTokens)) store.passwordResetTokens = [];
+	const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+	store.passwordResetTokens = store.passwordResetTokens.filter((entry) => {
+		if (!entry) return false;
+		if (entry.status === "pending" && Number(entry.expiresAtMs || 0) <= Date.now()) {
+			entry.status = "expired";
+			entry.updatedAt = now();
+		}
+		return entry.status === "pending" || Number(entry.expiresAtMs || 0) >= cutoff;
+	});
+}
+
+function revokePasswordResetTokens(store, accountId, revokedAt = now(), exceptId = null) {
+	for (const entry of store.passwordResetTokens || []) {
+		if (entry.accountId === accountId && entry.id !== exceptId && entry.status === "pending") {
+			entry.status = "revoked";
+			entry.revokedAt = revokedAt;
+			entry.updatedAt = revokedAt;
+		}
+	}
+}
+
+async function legacyAccountClaimSubject(store, normalizedName) {
+	const character = store.characters.find((entry) =>
+		(entry.normalizedName || normalizeUsername(entry.name || "")) === normalizedName
+		&& entry.linkStatus === "linked"
+		&& entry.source === "openrsc-sqlite-native"
+		&& Number(entry.playerId || 0) > 0
+	) || null;
+	if (!character) return null;
+	const account = store.accounts.find((entry) => Number(entry.id) === Number(character.accountId)) || null;
+	if (!account
+		|| account.status !== "active"
+		|| account.source !== "native-client-backfill"
+		|| account.syntheticEmail !== true
+		|| account.requiresEmailUpgrade !== true
+		|| account.passwordHash
+		|| store.identities.some((entry) => Number(entry.accountId) === Number(account.id))
+		|| deliverableAccountEmail(account)
+		|| (Number(account.nativePlayerId || 0) > 0 && Number(account.nativePlayerId) !== Number(character.playerId))) {
+		return null;
+	}
+	const rows = await sqliteJson(`
+		SELECT p.id, p.username, p.pass, COALESCE(p.salt, '') AS salt,
+		       (
+			SELECT pc.value
+			FROM player_cache pc
+			WHERE pc.playerID = p.id
+			  AND pc.key = ${sqlString(openRscAccountIdCacheKey)}
+			ORDER BY pc.dbid DESC
+			LIMIT 1
+		       ) AS webAccountId
+		FROM players p
+		WHERE p.id = ${Number(character.playerId)}
+		  AND lower(p.username) = ${sqlString(normalizedName)}
+		LIMIT 1
+	`);
+	const row = rows[0];
+	if (!row
+		|| !String(row.pass || "")
+		|| String(row.webAccountId || "") !== String(account.id)) {
+		return null;
+	}
+	const player = {
+		id: Number(row.id),
+		username: String(row.username || ""),
+		pass: String(row.pass || ""),
+		salt: String(row.salt || ""),
+		webAccountId: String(row.webAccountId || "")
+	};
+	return {
+		account,
+		character,
+		player,
+		credentialFingerprint: legacyCredentialFingerprint(player)
+	};
+}
+
+function legacyCredentialFingerprint(player) {
+	return hashToken([
+		String(player && player.id || ""),
+		String(player && player.pass || ""),
+		String(player && player.salt || ""),
+		String(player && player.webAccountId || "")
+	].join("\u0000"));
+}
+
+function queueLegacyAccountClaim(store, subject, details) {
+	const createdAt = now();
+	revokeLegacyAccountClaims(store, subject.account.id, createdAt);
+	const token = randomBytes(32).toString("base64url");
+	const expiresAtMs = Date.now() + legacyAccountClaimTtlMs;
+	const claim = {
+		id: nextId(store, "legacyAccountClaim"),
+		accountId: subject.account.id,
+		characterId: subject.character.id,
+		playerId: subject.player.id,
+		normalizedName: subject.character.normalizedName || normalizeUsername(subject.character.name || ""),
+		targetEmailCanonical: details.targetEmailCanonical,
+		targetEmailDisplay: details.targetEmailDisplay || details.targetEmailCanonical,
+		passwordHash: details.passwordHash,
+		credentialFingerprint: subject.credentialFingerprint,
+		ownershipMarker: String(subject.player.webAccountId || ""),
+		tokenHash: hashToken(token),
+		status: "pending",
+		requestIpHash: abuseHash(details.requestIp || ""),
+		expiresAtMs,
+		expiresAt: new Date(expiresAtMs).toISOString(),
+		createdAt,
+		updatedAt: createdAt,
+		usedAt: null,
+		revokedAt: null
+	};
+	store.legacyAccountClaims.push(claim);
+	const event = {
+		id: nextId(store, "emailEvent"),
+		accountId: subject.account.id,
+		legacyAccountClaimId: claim.id,
+		emailCanonical: claim.targetEmailCanonical,
+		emailDisplay: claim.targetEmailDisplay,
+		type: legacyAccountClaimEmailType,
+		status: "pending",
+		provider: emailProviderLabel(),
+		attempts: 0,
+		providerMessageId: "",
+		lastError: "",
+		metadata: {
+			origin: normalizedOrigin(details.origin || publicSiteOrigin),
+			source: "legacy_account_claim",
+			requestedBy: "self_service",
+			claimTokenSealed: sealText(token)
+		},
+		createdAt,
+		updatedAt: createdAt,
+		sentAt: null
+	};
+	store.emailEvents.push(event);
+	audit(store, "email_event_queued", {
+		emailEventId: event.id,
+		accountId: subject.account.id,
+		legacyAccountClaimId: claim.id,
+		type: event.type
+	});
+	return { claim, event };
+}
+
+function requireLegacyAccountClaimToken(value) {
+	const token = String(value || "").trim();
+	if (!/^[A-Za-z0-9_-]{32,120}$/.test(token)) {
+		throw new HttpError(401, "invalid_legacy_claim_token");
+	}
+	return token;
+}
+
+function pruneLegacyAccountClaims(store) {
+	if (!Array.isArray(store.legacyAccountClaims)) store.legacyAccountClaims = [];
+	const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+	store.legacyAccountClaims = store.legacyAccountClaims.filter((entry) => {
+		if (!entry) return false;
+		if (entry.status === "pending" && Number(entry.expiresAtMs || 0) <= Date.now()) {
+			revokeLegacyAccountClaim(entry, "expired");
+		}
+		return entry.status === "pending" || Number(entry.expiresAtMs || 0) >= cutoff;
+	});
+}
+
+function revokeLegacyAccountClaim(claim, status = "revoked", changedAt = now()) {
+	if (!claim || claim.status !== "pending") return false;
+	claim.status = status;
+	claim.updatedAt = changedAt;
+	claim.passwordHash = null;
+	claim.credentialFingerprint = "";
+	if (status === "expired") claim.expiredAt = changedAt;
+	else claim.revokedAt = changedAt;
+	return true;
+}
+
+function revokeLegacyAccountClaims(store, accountId, changedAt = now(), exceptId = null) {
+	const revokedIds = new Set();
+	for (const claim of store.legacyAccountClaims || []) {
+		if (Number(claim.accountId) === Number(accountId) && claim.id !== exceptId && revokeLegacyAccountClaim(claim, "revoked", changedAt)) {
+			revokedIds.add(claim.id);
+		}
+	}
+	if (!revokedIds.size) return;
+	for (const event of store.emailEvents || []) {
+		if (!revokedIds.has(event.legacyAccountClaimId) || !["pending", "failed"].includes(event.status)) continue;
+		event.status = "skipped";
+		event.lastError = "legacy_claim_superseded";
+		event.updatedAt = changedAt;
+	}
+}
+
+function revokeRecoveryCodes(store, accountId, revokedAt = now(), exceptId = null) {
+	for (const entry of store.recoveryCodes || []) {
+		if (entry.accountId === accountId && entry.id !== exceptId && entry.status === "active") {
+			entry.status = "revoked";
+			entry.revokedAt = revokedAt;
+		}
+	}
 }
 
 function findFounderForAccount(store, account) {
@@ -1564,6 +3000,7 @@ async function deliverQueuedEmail(emailEventId) {
 	let message = null;
 	let skippedReason = "";
 	await updateStore((store) => {
+		pruneLegacyAccountClaims(store);
 		const event = store.emailEvents.find((entry) => entry.id === emailEventId);
 		if (!event) {
 			skippedReason = "email_event_not_found";
@@ -1579,16 +3016,59 @@ async function deliverQueuedEmail(emailEventId) {
 			skippedReason = "email_not_configured";
 			return null;
 		}
-		const account = store.accounts.find((entry) => entry.id === event.accountId);
-		if (!account || account.status !== "active" || !deliverableAccountEmail(account)) {
-			event.status = "skipped";
-			event.lastError = "account_not_deliverable";
-			event.updatedAt = now();
-			skippedReason = "account_not_deliverable";
-			return null;
+		if (event.type === emailVerificationEmailType) {
+			const pending = store.emailVerifications.find((entry) => entry.id === event.pendingSignupId);
+			if (!pending || pending.status !== "pending" || Number(pending.expiresAtMs || 0) <= Date.now()) {
+				event.status = "skipped";
+				event.lastError = "pending_signup_not_deliverable";
+				event.updatedAt = now();
+				skippedReason = "pending_signup_not_deliverable";
+				return null;
+			}
+			message = buildEmailVerificationMessage(event, pending);
+		} else if (event.type === legacyAccountClaimEmailType) {
+			const claim = store.legacyAccountClaims.find((entry) => entry.id === event.legacyAccountClaimId);
+			const account = claim ? store.accounts.find((entry) => Number(entry.id) === Number(claim.accountId)) : null;
+			if (!claim
+				|| claim.status !== "pending"
+				|| Number(claim.expiresAtMs || 0) <= Date.now()
+				|| !account
+				|| account.status !== "active"
+				|| account.syntheticEmail !== true
+				|| account.requiresEmailUpgrade !== true
+				|| claim.targetEmailCanonical !== event.emailCanonical
+				|| !deliverableEmailAddress(event.emailCanonical)) {
+				event.status = "skipped";
+				event.lastError = "legacy_claim_not_deliverable";
+				event.updatedAt = now();
+				skippedReason = "legacy_claim_not_deliverable";
+				return null;
+			}
+			message = buildLegacyAccountClaimMessage(event, account, claim);
+		} else {
+			const account = store.accounts.find((entry) => entry.id === event.accountId);
+			if (!account || account.status !== "active" || !deliverableAccountEmail(account)) {
+				event.status = "skipped";
+				event.lastError = "account_not_deliverable";
+				event.updatedAt = now();
+				skippedReason = "account_not_deliverable";
+				return null;
+			}
+			if (event.type === passwordResetEmailType) {
+				const reset = store.passwordResetTokens.find((entry) => entry.id === event.passwordResetTokenId);
+				if (!reset || reset.status !== "pending" || Number(reset.expiresAtMs || 0) <= Date.now()) {
+					event.status = "skipped";
+					event.lastError = "password_reset_not_deliverable";
+					event.updatedAt = now();
+					skippedReason = "password_reset_not_deliverable";
+					return null;
+				}
+				message = buildPasswordResetMessage(event, account, reset);
+			} else {
+				const founder = findFounderForAccount(store, account);
+				message = buildEmailMessage(event, account, founder);
+			}
 		}
-		const founder = findFounderForAccount(store, account);
-		message = buildEmailMessage(event, account, founder);
 		event.status = "sending";
 		event.provider = emailProviderLabel();
 		event.attempts = Number(event.attempts || 0) + 1;
@@ -1609,6 +3089,9 @@ async function deliverQueuedEmail(emailEventId) {
 			event.lastError = "";
 			event.updatedAt = now();
 			event.sentAt = now();
+			if (event.type === emailVerificationEmailType && event.metadata) {
+				event.metadata.verificationTokenSealed = "";
+			}
 			audit(store, "email_event_sent", {
 				emailEventId: event.id,
 				accountId: event.accountId,
@@ -1642,8 +3125,34 @@ function buildEmailMessage(event, account, founder) {
 	const origin = normalizedOrigin(event.metadata && event.metadata.origin || publicSiteOrigin) || "https://voidscape.gg";
 	const manageUrl = joinUrl(origin, "/");
 	const playUrl = mobileWebClientUrl(joinUrl(origin, "/play/"));
+	const launcherUrl = joinUrl(origin, "/downloads/launcher");
+	const androidUrl = joinUrl(origin, "/downloads/android-apk");
 	const username = founder && founder.username || account.displayName || account.emailDisplay || "your character";
 	const reservedName = founder && founder.username ? founder.username : "your Voidscape character";
+	if (event.type === launchReminderEmailType) {
+		return emailMessage({
+			event,
+			account,
+			subject: "Voidscape opens in 48 hours",
+			heading: "Voidscape opens in 48 hours",
+			intro: "The world goes live Saturday, July 18, 2026 at 11:00 AM Pacific / 2:00 PM Eastern / 7:00 PM UK. If you reserved a name during prelaunch, your account and first character are waiting in the portal.",
+			bullets: [
+				`Reserved username: ${reservedName}`,
+				"Desktop players should use the Voidscape launcher.",
+				"Mobile players can use the web client; Android players can also use the APK.",
+				"Eligible prelaunch accounts have a free 1-week subscription card reserved.",
+				"Never share your password or signup code. Voidscape staff will never ask for it."
+			],
+			primaryUrl: manageUrl,
+			primaryLabel: "Check account",
+			secondaryUrl: launcherUrl,
+			secondaryLabel: "Download launcher",
+			extraLinks: [
+				{ url: playUrl, label: "Mobile web client" },
+				{ url: androidUrl, label: "Android APK" }
+			]
+		});
+	}
 	if (event.type === launchLiveEmailType) {
 		return emailMessage({
 			event,
@@ -1682,7 +3191,91 @@ function buildEmailMessage(event, account, founder) {
 	});
 }
 
+function buildEmailVerificationMessage(event, pending) {
+	const origin = normalizedOrigin(event.metadata && event.metadata.origin || publicSiteOrigin) || "https://voidscape.gg";
+	const token = unsealText(event.metadata && event.metadata.verificationTokenSealed || "");
+	const verifyUrl = `${joinUrl(origin, "/portal?auth=verify")}#verify=${encodeURIComponent(token)}`;
+	const username = pending.username || "your character";
+	return emailMessage({
+		event,
+		account: {
+			emailCanonical: pending.emailCanonical,
+			emailDisplay: pending.emailDisplay || pending.emailCanonical
+		},
+		subject: "Verify your Voidscape email",
+		heading: "Verify your Voidscape email",
+		intro: `Confirm this email address to create your Voidscape account and first character, ${username}.`,
+		bullets: [
+			`Requested username: ${username}`,
+			"Your account, first character, and starter subscription card are not created until you verify.",
+			`This link expires in ${emailVerificationTtlHours} hours.`,
+			"If you did not request this, ignore this email."
+		],
+		primaryUrl: verifyUrl,
+		primaryLabel: "Verify email",
+		secondaryUrl: joinUrl(origin, "/"),
+		secondaryLabel: "Open Voidscape"
+	});
+}
+
+function buildPasswordResetMessage(event, account, reset) {
+	const origin = normalizedOrigin(event.metadata && event.metadata.origin || publicSiteOrigin) || "https://voidscape.gg";
+	const token = unsealText(event.metadata && event.metadata.resetTokenSealed || "");
+	const resetUrl = `${joinUrl(origin, "/portal?auth=reset")}#reset=${encodeURIComponent(token)}`;
+	const minutes = Math.max(1, Math.ceil((Number(reset.expiresAtMs || 0) - Date.now()) / (60 * 1000)));
+	return emailMessage({
+		event,
+		account,
+		subject: "Reset your Voidscape password",
+		heading: "Reset your Voidscape password",
+		intro: "A password reset was requested for your Voidscape account.",
+		bullets: [
+			`This link expires in ${minutes} minutes and can be used once.`,
+			"Resetting your website password signs out every portal session.",
+			"Character game passwords are changed separately inside Character Manager.",
+			"If you did not request this, ignore this email and your password will stay unchanged."
+		],
+		primaryUrl: resetUrl,
+		primaryLabel: "Reset password",
+		secondaryUrl: joinUrl(origin, "/"),
+		secondaryLabel: "Open Voidscape",
+		footer: "This message was sent because someone requested account recovery for this email address."
+	});
+}
+
+function buildLegacyAccountClaimMessage(event, account, claim) {
+	const origin = normalizedOrigin(event.metadata && event.metadata.origin || publicSiteOrigin) || "https://voidscape.gg";
+	const token = unsealText(event.metadata && event.metadata.claimTokenSealed || "");
+	const claimUrl = `${joinUrl(origin, "/portal?auth=claim-confirm")}#claim=${encodeURIComponent(token)}`;
+	const minutes = Math.max(1, Math.ceil((Number(claim.expiresAtMs || 0) - Date.now()) / (60 * 1000)));
+	const character = account.displayName || claim.normalizedName || "your older character";
+	return emailMessage({
+		event,
+		account: {
+			emailCanonical: claim.targetEmailCanonical,
+			emailDisplay: claim.targetEmailDisplay || claim.targetEmailCanonical
+		},
+		subject: "Confirm your older Voidscape account",
+		heading: "Confirm your Voidscape account",
+		intro: `Confirm this email address to finish claiming ${character}.`,
+		bullets: [
+			`This link expires in ${minutes} minutes and can be used once.`,
+			"Your existing character and starter subscription card stay on the same account.",
+			"Your character game password will not be changed.",
+			"After confirmation, sign in with this email and the new website password you chose.",
+			"If you did not request this, ignore this email and nothing will change."
+		],
+		primaryUrl: claimUrl,
+		primaryLabel: "Confirm account",
+		secondaryUrl: joinUrl(origin, "/portal?auth=login"),
+		secondaryLabel: "Open sign in",
+		footer: "This message was sent because someone proved control of an older Voidscape character and requested an account claim."
+	});
+}
+
 function emailMessage(details) {
+	const extraLinkLines = (details.extraLinks || [])
+		.map((link) => `${link.label}: ${link.url}`);
 	const text = [
 		"Hi,",
 		"",
@@ -1692,6 +3285,9 @@ function emailMessage(details) {
 		"",
 		`${details.primaryLabel}: ${details.primaryUrl}`,
 		details.secondaryUrl ? `${details.secondaryLabel}: ${details.secondaryUrl}` : "",
+		...extraLinkLines,
+		"",
+		details.footer || "You are receiving this because this email was used for a Voidscape prelaunch signup.",
 		"",
 		"- Voidscape"
 	].filter((line) => line !== "").join("\n");
@@ -1701,6 +3297,9 @@ function emailMessage(details) {
 	const secondaryLink = details.secondaryUrl
 		? `<p><a href="${escapeHtml(details.secondaryUrl)}">${escapeHtml(details.secondaryLabel)}</a></p>`
 		: "";
+	const extraLinksHtml = (details.extraLinks || [])
+		.map((link) => `<p><a href="${escapeHtml(link.url)}">${escapeHtml(link.label)}</a></p>`)
+		.join("");
 	return {
 		eventId: details.event.id,
 		type: details.event.type,
@@ -1718,7 +3317,8 @@ function emailMessage(details) {
 			<a href="${escapeHtml(details.primaryUrl)}" style="background:#6f48d8;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:4px;display:inline-block;font-weight:bold;">${escapeHtml(details.primaryLabel)}</a>
 		</p>
 		${secondaryLink}
-		<p style="font-size:13px;color:#b8b0c8;">You are receiving this because this email was used for a Voidscape prelaunch signup.</p>
+		${extraLinksHtml}
+		<p style="font-size:13px;color:#b8b0c8;">${escapeHtml(details.footer || "You are receiving this because this email was used for a Voidscape prelaunch signup.")}</p>
 	</div>
 </body>
 </html>`
@@ -1802,7 +3402,7 @@ async function startDiscordOAuth(request, response, url) {
 	requireDiscordOAuthConfig();
 	requireDiscordBetaGuildConfig();
 	const state = randomBytes(24).toString("base64url");
-	const returnTo = safeReturnTo(url.searchParams.get("returnTo") || "/#account");
+	const returnTo = safeReturnTo(url.searchParams.get("returnTo") || "/portal#dashboard");
 	const authorizeUrl = new URL(`${discordApiBase}/oauth2/authorize`);
 	authorizeUrl.searchParams.set("client_id", discordClientId);
 	authorizeUrl.searchParams.set("redirect_uri", discordCallbackUri(request));
@@ -1836,7 +3436,8 @@ async function startDiscordOAuth(request, response, url) {
 
 	response.writeHead(302, {
 		location: browserAuthorizeUrl,
-		"cache-control": "no-store"
+		"cache-control": "no-store",
+		...securityHeaders()
 	});
 	response.end();
 }
@@ -1899,7 +3500,7 @@ async function completeDiscordOAuth(request, response, url) {
 		const code = error instanceof HttpError ? error.message : "discord_oauth_failed";
 		sendDiscordOAuthPage(response, {
 			error: code,
-			returnTo: "/#account"
+			returnTo: "/portal#dashboard"
 		});
 		if (!(error instanceof HttpError)) {
 			console.error(error);
@@ -2115,7 +3716,7 @@ async function upsertDiscordBetaAccount(store, profile, membership, request) {
 
 function sendDiscordOAuthPage(response, result) {
 	const token = result.token || "";
-	const returnTo = safeReturnTo(result.returnTo || "/#account");
+	const returnTo = safeReturnTo(result.returnTo || "/portal#dashboard");
 	const state = result.state || null;
 	const error = result.error || "";
 	const body = `<!doctype html>
@@ -2148,7 +3749,7 @@ function sendDiscordOAuthPage(response, result) {
 			}
 			var target = ${jsonScript(returnTo)};
 			if (error) {
-				target = "/?discord_error=" + encodeURIComponent(error) + "#account";
+				target = "/portal?auth=login&discord_error=" + encodeURIComponent(error);
 			}
 			window.location.replace(target);
 		})();
@@ -2158,7 +3759,8 @@ function sendDiscordOAuthPage(response, result) {
 	response.writeHead(error ? 400 : 200, {
 		"content-type": "text/html; charset=utf-8",
 		"content-length": Buffer.byteLength(body),
-		"cache-control": "no-store"
+		"cache-control": "no-store",
+		...securityHeaders("text/html")
 	});
 	response.end(body);
 }
@@ -2195,22 +3797,32 @@ function uniqueDiscordBetaUsername(store, discordUserId, emailCanonical) {
 
 function safeReturnTo(value) {
 	const text = String(value || "").trim();
-	if (!text || text.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(text)) return "/#account";
-	return text.startsWith("/") ? text : "/#account";
+	if (!text || text.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(text)) return "/portal#dashboard";
+	return text.startsWith("/") ? text : "/portal#dashboard";
 }
 
 async function serveStatic(request, response, pathname) {
 	const targetPath = pathname === "/"
 		? "/index.html"
-		: pathname === "/privacy"
-			? "/privacy.html"
-			: pathname === "/data-deletion"
-				? "/data-deletion.html"
-				: pathname === "/features"
-					? "/features.html"
-					: pathname === "/transparency"
-						? "/transparency.html"
-						: decodeURIComponent(pathname);
+		: pathname === "/portal" || pathname === "/portal/"
+			? "/portal.html"
+			: pathname === "/privacy"
+				? "/privacy.html"
+				: pathname === "/data-deletion"
+					? "/data-deletion.html"
+					: pathname === "/features"
+						? "/features.html"
+							: pathname === "/loot-editor" || pathname === "/loot-editor/"
+								? "/loot-editor.html"
+								: pathname === "/loot-editor-guide" || pathname === "/loot-editor-guide/"
+									? "/loot-editor-guide.html"
+									: pathname === "/npcs" || pathname === "/drops"
+										? "/npcs.html"
+										: pathname === "/discord"
+											? "/discord.html"
+											: pathname === "/transparency"
+												? "/transparency.html"
+												: decodeURIComponent(pathname);
 	const resolved = resolve(rootDir, `.${targetPath}`);
 	const isInsideRoot = relative(rootDir, resolved).split(/[\\/]/)[0] !== "..";
 	if (!isInsideRoot) throw new HttpError(403, "forbidden");
@@ -2234,7 +3846,8 @@ async function serveStatic(request, response, pathname) {
 		if (!match) {
 			response.writeHead(416, {
 				"content-range": `bytes */${fileStat.size}`,
-				"cache-control": "no-store"
+				"cache-control": "no-store",
+				...securityHeaders(type)
 			});
 			response.end();
 			return;
@@ -2249,7 +3862,8 @@ async function serveStatic(request, response, pathname) {
 		if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || start >= fileStat.size) {
 			response.writeHead(416, {
 				"content-range": `bytes */${fileStat.size}`,
-				"cache-control": "no-store"
+				"cache-control": "no-store",
+				...securityHeaders(type)
 			});
 			response.end();
 			return;
@@ -2260,7 +3874,8 @@ async function serveStatic(request, response, pathname) {
 			"content-length": end - start + 1,
 			"content-range": `bytes ${start}-${end}/${fileStat.size}`,
 			"accept-ranges": "bytes",
-			"cache-control": "no-store"
+			"cache-control": "no-store",
+			...securityHeaders(type)
 		});
 		createReadStream(filePath, { start, end }).pipe(response);
 		return;
@@ -2271,7 +3886,8 @@ async function serveStatic(request, response, pathname) {
 		"content-type": type,
 		"content-length": body.length,
 		"accept-ranges": "bytes",
-		"cache-control": "no-store"
+		"cache-control": "no-store",
+		...securityHeaders(type)
 	});
 	response.end(body);
 }
@@ -2318,7 +3934,8 @@ async function serveLauncherManifest(request, response) {
 	response.writeHead(200, {
 		"content-type": "text/plain; charset=utf-8",
 		"content-length": Buffer.byteLength(body),
-		"cache-control": "no-store"
+		"cache-control": "no-store",
+		...securityHeaders("text/plain")
 	});
 	if (request.method === "HEAD") {
 		response.end();
@@ -2467,7 +4084,8 @@ async function sendFile(request, response, filePath, options = {}) {
 		"content-type": options.contentType || contentType(filePath),
 		"content-length": String(fileStat.size),
 		"content-disposition": options.contentDisposition || `attachment; filename="${basename(filePath)}"`,
-		"cache-control": "no-store"
+		"cache-control": "no-store",
+		...securityHeaders(options.contentType || contentType(filePath))
 	});
 	if (request.method === "HEAD") {
 		response.end();
@@ -2537,7 +4155,8 @@ async function serveOpenRscAvatar(response, pathname) {
 	response.writeHead(200, {
 		"content-type": "image/png",
 		"content-length": fileStat.size,
-		"cache-control": "no-store"
+		"cache-control": "no-store",
+		...securityHeaders("image/png")
 	});
 	createReadStream(filePath).pipe(response);
 }
@@ -2721,10 +4340,10 @@ async function createLaunchFirstCharacter(store, account, payload, request) {
 	return await createAccountCharacter(store, account, {
 		name: username,
 		gamePassword
-	}, request);
+	}, request, { initialSignup: true });
 }
 
-async function createAccountCharacter(store, account, payload, request) {
+async function createAccountCharacter(store, account, payload, request, options = {}) {
 	const username = cleanUsername(payload.name || payload.username || "");
 	const normalizedName = normalizeUsername(username);
 	if (!normalizedName) throw new HttpError(400, "invalid_character_name");
@@ -2779,6 +4398,11 @@ async function createAccountCharacter(store, account, payload, request) {
 	if (await openRscPlayerExists(normalizedName)) {
 		throw new HttpError(409, "character_name_taken");
 	}
+	if (options.initialSignup) {
+		assertClientIpNotBlocked(clientAbuseProfile(request));
+	} else {
+		await assertCharacterCreationAllowed(store, account, request);
+	}
 
 	const playerId = await createOpenRscPlayer({
 		accountId: account.id,
@@ -2820,6 +4444,9 @@ async function createAccountCharacter(store, account, payload, request) {
 	} else {
 		store.characters.push(character);
 	}
+	recordCharacterCreationSignal(store, account, playerId, snapshot.name, request, {
+		initialSignup: Boolean(options.initialSignup)
+	});
 	return character;
 }
 
@@ -2843,9 +4470,12 @@ async function deleteAccountCharacter(store, account, characterId) {
 		openRscDeleted: false
 	};
 
-	if (Number(character.playerId) > 0 && openRscDbPath) {
+	if (Number(character.playerId) > 0) {
+		if (!openRscDbPath) {
+			throw new HttpError(503, "openrsc_db_not_configured");
+		}
 		if (character.source === "openrsc-sqlite-created") {
-			deleted.openRscDeleted = await deleteOpenRscPlayer(character);
+			deleted.openRscDeleted = await deleteOpenRscPlayer(character, account.id);
 		} else {
 			await unlinkOpenRscPlayerFromAccount(character.playerId, account.id);
 		}
@@ -2945,7 +4575,9 @@ async function refreshAccountCharactersFromOpenRsc(store, account) {
 				appearanceData: snapshot.appearanceData || null,
 				equipment: Array.isArray(snapshot.equipment) ? snapshot.equipment : [],
 				linkStatus: "linked",
-				source: character.source === "openrsc-sqlite-created" ? character.source : snapshot.source,
+				source: ["openrsc-sqlite-created", "openrsc-sqlite-native"].includes(character.source)
+					? character.source
+					: snapshot.source,
 				updatedAt: now()
 			});
 		} catch (error) {
@@ -3025,12 +4657,38 @@ function launchScheduleState() {
 	if (!launchOpenAtIso) return null;
 	const openAtMs = Date.parse(launchOpenAtIso);
 	const remainingMs = Math.max(0, openAtMs - Date.now());
+	const starterCard = launchFreeCardWindowState();
 	return {
 		openAt: launchOpenAtIso,
 		now: new Date().toISOString(),
 		remainingMs,
-		locked: remainingMs > 0
+		locked: remainingMs > 0,
+		starterCard
 	};
+}
+
+function launchFreeCardWindowState() {
+	if (!launchOpenAtIso || launchFreeCardHours <= 0) {
+		return {
+			open: !launchOpenAtIso,
+			endsAt: null,
+			remainingMs: null
+		};
+	}
+	const openAtMs = Date.parse(launchOpenAtIso);
+	const endsAtMs = openAtMs + launchFreeCardHours * 60 * 60 * 1000;
+	const nowMs = Date.now();
+	return {
+		openAt: launchOpenAtIso,
+		endsAt: new Date(endsAtMs).toISOString(),
+		open: nowMs < endsAtMs,
+		prelaunch: nowMs < openAtMs,
+		remainingMs: Math.max(0, endsAtMs - nowMs)
+	};
+}
+
+function launchFreeCardWindowOpen() {
+	return launchFreeCardWindowState().open;
 }
 
 async function rewardState(store, account) {
@@ -3166,6 +4824,7 @@ async function publicState(store) {
 			launch: launchSchedule,
 			worldRules: worldRules(),
 			oauth: oauthPublicState(),
+			captcha: captchaPublicState(),
 			status: {
 				world: betaSchedule && betaSchedule.locked ? "Launch Countdown" : "Public Beta",
 				online: !(betaSchedule && betaSchedule.locked),
@@ -3201,10 +4860,11 @@ async function publicState(store) {
 			launch: launchSchedule,
 			worldRules: worldRules(),
 			oauth: oauthPublicState(),
+			captcha: captchaPublicState(),
 			status: {
 				world: launchSchedule && launchSchedule.locked ? "Launch Countdown" : launchOpen ? "Launch Open" : "Voidscape",
-				online: false,
-				playersOnline: 0,
+				online: launchOpen,
+				playersOnline: launchOpen ? playersOnline : 0,
 				patch: launchOpen ? "launch" : "prelaunch",
 				lastSave: ""
 			},
@@ -3225,6 +4885,7 @@ async function publicState(store) {
 		launch: launchSchedule,
 		worldRules: worldRules(),
 		oauth: oauthPublicState(),
+		captcha: captchaPublicState(),
 		status: {
 			world: "World 1",
 			online: true,
@@ -3255,6 +4916,33 @@ async function openRscPlayersOnlineCount() {
 	} catch (error) {
 		console.warn(`Unable to read OpenRSC online count: ${error.message || error}`);
 		return 0;
+	}
+}
+
+async function openRscCharacterAvailability(username) {
+	const normalized = normalizeUsername(username);
+	if (!normalized) {
+		throw new HttpError(400, "invalid_username");
+	}
+	if (!openRscDbPath) {
+		return { available: null, reason: "openrsc_db_not_configured" };
+	}
+	try {
+		const snapshot = await openRscCharacterSnapshot(username);
+		return {
+			available: false,
+			character: {
+				name: snapshot.name
+			}
+		};
+	} catch (error) {
+		if (error.status === 404 && error.message === "character_not_found") {
+			return { available: true };
+		}
+		if (error.status === 503 && error.message === "openrsc_db_not_configured") {
+			return { available: null, reason: "openrsc_db_not_configured" };
+		}
+		throw error;
 	}
 }
 
@@ -4177,6 +5865,379 @@ async function openRscPlayerOwnerEmail(normalizedName) {
 	return email || "__unknown__";
 }
 
+async function backfillNativePortalAccounts(store, options = {}) {
+	if (!openRscDbPath) throw new HttpError(503, "openrsc_db_not_configured");
+	const dryRun = options.dryRun === true;
+	const grantMissingStarterCard = options.grantMissingStarterCard !== false;
+	const players = await sqliteJson(`
+		SELECT id, username, email, combat, skill_total, quest_points, kills, npc_kills, deaths,
+		       login_date, male, haircolour, topcolour, trousercolour, skincolour, headsprite, bodysprite
+		FROM players
+		ORDER BY id
+	`);
+	const cacheRows = await sqliteJson(`
+		SELECT playerID, key, value, dbid
+		FROM player_cache
+		WHERE key = ${sqlString(openRscAccountIdCacheKey)}
+		   OR key = 'launch_24h_card'
+		   OR (playerID = 0 AND (
+			key LIKE ${sqlString(`${starterCardCachePrefix}%`)}
+			OR key LIKE ${sqlString(`${playerSubscriptionCachePrefix}%`)}
+			OR key LIKE ${sqlString(`${accountSubscriptionCachePrefix}%`)}
+		   ))
+		ORDER BY dbid
+	`);
+	const webLinks = new Map();
+	const launchCardMarkers = new Map();
+	const starterCardMarkers = new Map();
+	const playerSubscriptionMarkers = new Map();
+	const accountSubscriptionMarkers = new Map();
+	for (const row of cacheRows) {
+		const playerId = Number(row.playerID);
+		const key = String(row.key || "");
+		if (key === openRscAccountIdCacheKey && playerId > 0) {
+			const accountId = Number(row.value);
+			if (Number.isInteger(accountId) && accountId > 0) {
+				webLinks.set(playerId, accountId);
+			}
+		} else if (key === "launch_24h_card" && playerId > 0) {
+			launchCardMarkers.set(playerId, Number(row.value));
+		} else if (playerId === 0 && key.startsWith(starterCardCachePrefix)) {
+			starterCardMarkers.set(key, Number(row.value));
+		} else if (playerId === 0 && key.startsWith(playerSubscriptionCachePrefix)) {
+			const nativePlayerId = Number(key.slice(playerSubscriptionCachePrefix.length));
+			if (nativePlayerId > 0) playerSubscriptionMarkers.set(nativePlayerId, Number(row.value || 0));
+		} else if (playerId === 0 && key.startsWith(accountSubscriptionCachePrefix)) {
+			const portalAccountId = Number(key.slice(accountSubscriptionCachePrefix.length));
+			if (portalAccountId > 0) accountSubscriptionMarkers.set(portalAccountId, Number(row.value || 0));
+		}
+	}
+
+	const accountsById = new Map(store.accounts.map((account) => [Number(account.id), account]));
+	const charactersByPlayerId = new Map();
+	for (const character of store.characters) {
+		const playerId = Number(character.playerId);
+		if (playerId > 0 && !charactersByPlayerId.has(playerId)) {
+			charactersByPlayerId.set(playerId, character);
+		}
+	}
+
+	const linkInserts = [];
+	const starterInserts = [];
+	const subscriptionUpserts = new Map();
+	const subscriptionMigrationAccounts = new Set();
+	const result = {
+		dryRun,
+		grantMissingStarterCard,
+		players: players.length,
+		alreadyLinked: 0,
+		createdAccounts: 0,
+		reusedSyntheticAccounts: 0,
+		createdCharacters: 0,
+		updatedCharacters: 0,
+		linkedPlayers: 0,
+		starterCardsGranted: 0,
+		subscriptionsMigrated: 0,
+		conflicts: [],
+		samples: []
+	};
+
+	for (const player of players) {
+		const playerId = Number(player.id);
+		const username = cleanUsername(player.username || "");
+		const normalizedName = normalizeUsername(username);
+		if (!playerId || !normalizedName) {
+			result.conflicts.push({ playerId, username, reason: "invalid_player_row" });
+			continue;
+		}
+
+		let accountId = Number(webLinks.get(playerId) || 0);
+		let account = accountId > 0 ? accountsById.get(accountId) : null;
+		if (accountId > 0 && !account) {
+			result.conflicts.push({ playerId, username, accountId, reason: "web_account_link_missing_account" });
+			continue;
+		}
+
+		const existingCharacter = charactersByPlayerId.get(playerId);
+		if (!account && existingCharacter) {
+			account = accountsById.get(Number(existingCharacter.accountId)) || null;
+			accountId = account ? Number(account.id) : 0;
+		}
+
+		if (!account) {
+			const syntheticEmail = syntheticNativeEmail(playerId);
+			account = store.accounts.find((entry) => entry.emailCanonical === syntheticEmail) || null;
+			if (account) {
+				result.reusedSyntheticAccounts += 1;
+			} else {
+				account = {
+					id: nextId(store, "account"),
+					emailCanonical: syntheticEmail,
+					emailDisplay: syntheticEmail,
+					displayName: username,
+					passwordHash: null,
+					status: "active",
+					subscriptionExpiresAt: 0,
+					source: "native-client-backfill",
+					syntheticEmail: true,
+					requiresEmailUpgrade: true,
+					nativePlayerId: playerId,
+					createdAt: now(),
+					updatedAt: now()
+				};
+				store.accounts.push(account);
+				accountsById.set(Number(account.id), account);
+				result.createdAccounts += 1;
+				if (!dryRun) {
+					audit(store, "native_portal_account_backfilled", {
+						accountId: account.id,
+						playerId,
+						username,
+						syntheticEmail
+					});
+				}
+			}
+			accountId = Number(account.id);
+		} else {
+			result.alreadyLinked += webLinks.has(playerId) ? 1 : 0;
+			if (!account.displayName) {
+				account.displayName = username;
+				account.updatedAt = now();
+			}
+		}
+
+		if (!webLinks.has(playerId)) {
+			linkInserts.push({ playerId, accountId });
+			webLinks.set(playerId, accountId);
+			result.linkedPlayers += 1;
+		}
+
+		const legacySubscriptionExpiresAt = Number(playerSubscriptionMarkers.get(playerId) || 0);
+		const accountSubscriptionExpiresAt = Math.max(
+			Number(account.subscriptionExpiresAt || 0),
+			Number(accountSubscriptionMarkers.get(accountId) || 0)
+		);
+		const migratedSubscriptionExpiresAt = Math.max(accountSubscriptionExpiresAt, legacySubscriptionExpiresAt);
+		if (migratedSubscriptionExpiresAt > Number(account.subscriptionExpiresAt || 0)) {
+			account.subscriptionExpiresAt = migratedSubscriptionExpiresAt;
+			account.updatedAt = now();
+			subscriptionMigrationAccounts.add(accountId);
+		}
+		if (migratedSubscriptionExpiresAt > Number(accountSubscriptionMarkers.get(accountId) || 0)) {
+			const existingUpsert = subscriptionUpserts.get(accountId);
+			if (!existingUpsert || migratedSubscriptionExpiresAt > existingUpsert.expiresAt) {
+				subscriptionUpserts.set(accountId, {
+					accountId,
+					key: accountSubscriptionCacheKey(accountId),
+					expiresAt: migratedSubscriptionExpiresAt
+				});
+			}
+			accountSubscriptionMarkers.set(accountId, migratedSubscriptionExpiresAt);
+			subscriptionMigrationAccounts.add(accountId);
+		}
+
+		const character = existingCharacter || findCharacterByAccountAndName(store, accountId, normalizedName);
+		if (character && Number(character.accountId) !== accountId) {
+			result.conflicts.push({
+				playerId,
+				username,
+				accountId,
+				characterAccountId: Number(character.accountId),
+				reason: "character_linked_to_different_account"
+			});
+			continue;
+		}
+		const nextCharacter = nativeCharacterState(store, player, accountId, character);
+		if (character) {
+			if (nativeCharacterNeedsUpdate(character, nextCharacter)) {
+				Object.assign(character, nextCharacter, {
+					id: character.id,
+					createdAt: character.createdAt || nextCharacter.createdAt,
+					linkedAt: character.linkedAt || nextCharacter.linkedAt
+				});
+				result.updatedCharacters += 1;
+			}
+		} else {
+			store.characters.push(nextCharacter);
+			charactersByPlayerId.set(playerId, nextCharacter);
+			result.createdCharacters += 1;
+		}
+
+		if (grantMissingStarterCard) {
+			const starterKey = starterCardCacheKey(accountId);
+			const hasLaunchCard = launchCardMarkers.has(playerId);
+			const hasStarterCard = starterKey && starterCardMarkers.has(starterKey);
+			if (starterKey && !hasLaunchCard && !hasStarterCard) {
+				starterCardMarkers.set(starterKey, starterCardAvailable);
+				starterInserts.push({ accountId, key: starterKey });
+				ensureStarterEntitlement(store, accountId, "native_client_backfill");
+				result.starterCardsGranted += 1;
+			}
+		}
+
+		if (result.samples.length < 12 && (linkInserts.some((row) => row.playerId === playerId) || !character)) {
+			result.samples.push({
+				playerId,
+				username,
+				accountId,
+				email: account.emailCanonical,
+				cardSource: launchCardMarkers.has(playerId) ? "launch_24h_card" : starterCardCacheKey(accountId)
+			});
+		}
+	}
+
+	if (result.conflicts.length && !dryRun) {
+		throw new HttpError(409, "native_backfill_conflicts");
+	}
+	result.subscriptionsMigrated = subscriptionMigrationAccounts.size;
+
+	const pendingGameWrites = {
+		linkInserts,
+		starterInserts,
+		subscriptionUpserts: Array.from(subscriptionUpserts.values())
+	};
+	if (!dryRun && !options.deferGameWrites) {
+		await applyNativeBackfillGameWrites(pendingGameWrites);
+	}
+	if (!dryRun && options.deferGameWrites) result.pendingGameWrites = pendingGameWrites;
+
+	result.gameWrites = {
+		webAccountLinksInserted: linkInserts.length,
+		starterCardsInserted: starterInserts.length,
+		accountSubscriptionsUpserted: subscriptionUpserts.size
+	};
+	return result;
+}
+
+async function applyNativeBackfillGameWrites(writes = {}) {
+	const linkInserts = Array.isArray(writes.linkInserts) ? writes.linkInserts : [];
+	const starterInserts = Array.isArray(writes.starterInserts) ? writes.starterInserts : [];
+	const subscriptionUpserts = Array.isArray(writes.subscriptionUpserts) ? writes.subscriptionUpserts : [];
+	if (!linkInserts.length && !starterInserts.length && !subscriptionUpserts.length) return;
+	const sql = ["BEGIN IMMEDIATE;"];
+	for (const link of linkInserts) {
+		sql.push(`
+			INSERT INTO player_cache (playerID, type, key, value)
+			SELECT ${Number(link.playerId)}, 0, ${sqlString(openRscAccountIdCacheKey)}, ${sqlString(link.accountId)}
+			WHERE NOT EXISTS (
+				SELECT 1 FROM player_cache
+				WHERE playerID = ${Number(link.playerId)} AND key = ${sqlString(openRscAccountIdCacheKey)}
+			);`);
+	}
+	for (const starter of starterInserts) {
+		sql.push(`
+			INSERT INTO player_cache (playerID, type, key, value)
+			SELECT 0, 0, ${sqlString(starter.key)}, ${sqlString(starterCardAvailable)}
+			WHERE NOT EXISTS (
+				SELECT 1 FROM player_cache WHERE playerID = 0 AND key = ${sqlString(starter.key)}
+			);`);
+	}
+	for (const subscription of subscriptionUpserts) {
+		sql.push(
+			`DELETE FROM player_cache WHERE playerID = 0 AND key = ${sqlString(subscription.key)};`,
+			`INSERT INTO player_cache (playerID, type, key, value) VALUES (0, 3, ${sqlString(subscription.key)}, ${sqlString(subscription.expiresAt)});`
+		);
+	}
+	sql.push("COMMIT;");
+	await sqliteWriteJson(sql.join("\n"));
+}
+
+function findCharacterByAccountAndName(store, accountId, normalizedName) {
+	return store.characters.find((character) =>
+		Number(character.accountId) === Number(accountId) &&
+		normalizeUsername(character.normalizedName || character.name || "") === normalizedName
+	) || null;
+}
+
+function nativeCharacterState(store, player, accountId, existingCharacter) {
+	const username = cleanUsername(player.username || "");
+	const playerId = Number(player.id);
+	const male = Number(player.male) !== 0;
+	const appearanceData = {
+		male,
+		hairColour: Number(player.haircolour || 0),
+		topColour: Number(player.topcolour || 0),
+		trouserColour: Number(player.trousercolour || 0),
+		skinColour: Number(player.skincolour || 0),
+		headSprite: Number(player.headsprite || 0),
+		bodySprite: Number(player.bodysprite || 0)
+	};
+	return {
+		id: existingCharacter ? existingCharacter.id : nextId(store, "character"),
+		accountId,
+		playerId,
+		name: username,
+		normalizedName: normalizeUsername(username),
+		path: "OpenRSC save",
+		image: `/openrsc/avatar/${playerId}.png`,
+		combat: Number(player.combat || 3),
+		total: String(player.skill_total || 27),
+		quest: Number(player.quest_points || 0),
+		kills: Number(player.kills || 0),
+		status: "Void Island",
+		title: "No title equipped",
+		subscription: "Unsubscribed",
+		lastLogin: Number(player.login_date || 0) > 0
+			? new Date(Number(player.login_date) * 1000).toISOString()
+			: "Never",
+		appearance: `${male ? "Male" : "Female"}, hair ${appearanceData.hairColour}, top ${appearanceData.topColour}, trousers ${appearanceData.trouserColour}, skin ${appearanceData.skinColour}, head sprite ${appearanceData.headSprite}, body sprite ${appearanceData.bodySprite}`,
+		gear: ["No wielded equipment saved"],
+		appearanceData,
+		equipment: [],
+		linkStatus: "linked",
+		source: existingCharacter && existingCharacter.source === "openrsc-sqlite-created"
+			? existingCharacter.source
+			: "openrsc-sqlite-native",
+		linkedAt: now(),
+		createdAt: existingCharacter && existingCharacter.createdAt || now(),
+		updatedAt: now()
+	};
+}
+
+function nativeCharacterNeedsUpdate(character, nextCharacter) {
+	const fields = [
+		"accountId", "playerId", "name", "normalizedName", "path", "combat", "total",
+		"quest", "kills", "status", "title", "subscription", "lastLogin", "appearance",
+		"linkStatus", "source"
+	];
+	for (const field of fields) {
+		if (String(character[field] == null ? "" : character[field])
+			!== String(nextCharacter[field] == null ? "" : nextCharacter[field])) {
+			return true;
+		}
+	}
+	return JSON.stringify(character.appearanceData || null) !== JSON.stringify(nextCharacter.appearanceData || null)
+		|| JSON.stringify(character.gear || []) !== JSON.stringify(nextCharacter.gear || [])
+		|| JSON.stringify(character.equipment || []) !== JSON.stringify(nextCharacter.equipment || []);
+}
+
+function syntheticNativeEmail(playerId) {
+	return `native-player-${Number(playerId)}@native.voidscape.invalid`;
+}
+
+function ensureStarterEntitlement(store, accountId, source) {
+	const existing = store.entitlements.find((entry) =>
+		Number(entry.accountId) === Number(accountId) &&
+		entry.type === starterFreeSubscriptionType &&
+		(entry.status === "granted" || entry.status === "consumed")
+	);
+	if (existing) return existing;
+	const entitlement = {
+		id: nextId(store, "entitlement"),
+		accountId,
+		type: starterFreeSubscriptionType,
+		status: "granted",
+		source,
+		codeHint: null,
+		startsAt: null,
+		expiresAt: null,
+		createdAt: now(),
+		consumedAt: null
+	};
+	store.entitlements.push(entitlement);
+	return entitlement;
+}
+
 async function syncStarterCardToOpenRsc(account) {
 	if (!openRscDbPath || !account) return;
 	const key = starterCardCacheKey(account.id);
@@ -4405,7 +6466,7 @@ async function unlinkOpenRscPlayerFromAccount(playerId, accountId) {
 	`);
 }
 
-async function deleteOpenRscPlayer(character) {
+async function deleteOpenRscPlayer(character, accountId) {
 	const playerId = Number(character && character.playerId || 0);
 	const normalizedName = normalizeUsername(character && character.name || "");
 	if (!playerId || !normalizedName) {
@@ -4413,92 +6474,221 @@ async function deleteOpenRscPlayer(character) {
 	}
 
 	const playerRows = await sqliteJson(`
-		SELECT id, online
-		FROM players
-		WHERE id = ${playerId}
-		  AND lower(username) = ${sqlString(normalizedName)}
+		SELECT p.id, p.online, pc.value AS webAccountId
+		FROM players p
+		LEFT JOIN player_cache pc
+		  ON pc.playerID = p.id
+		 AND pc.key = ${sqlString(openRscAccountIdCacheKey)}
+		WHERE p.id = ${playerId}
+		  AND lower(p.username) = ${sqlString(normalizedName)}
+		ORDER BY pc.dbid DESC
 		LIMIT 1
 	`);
 	if (!playerRows.length) return false;
+	if (!playerRows[0].webAccountId) {
+		throw new HttpError(409, "character_link_missing");
+	}
+	if (Number(playerRows[0].webAccountId) !== Number(accountId)) {
+		throw new HttpError(409, "character_link_mismatch");
+	}
 	if (Number(playerRows[0].online || 0) !== 0) {
 		throw new HttpError(409, "character_online");
 	}
 
 	const tables = await openRscExistingTables([
 		"auctions",
+		"auction_sales",
+		"bank",
 		"bankpresets",
+		"bestiaryloot",
+		"capped_experience",
+		"curstats",
+		"droplogs",
 		"equipped",
+		"experience",
 		"expired_auctions",
+		"former_names",
+		"friends",
+		"ignores",
+		"invitems",
+		"ironman",
+		"itemstatuses",
+		"logins",
+		"maxstats",
+		"npckills",
+		"player_cache",
+		"player_change_recovery",
+		"player_contact_details",
+		"player_recovery",
+		"player_security_changes",
+		"quests",
+		"recovery_attempts",
 		"voidarena_ranked_matches",
 		"voidarena_ranked_stats"
 	]);
 	const sql = [
 		"BEGIN IMMEDIATE;",
-		"CREATE TEMP TABLE portal_deleted_item_ids (itemID INTEGER PRIMARY KEY);",
-		`INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM invitems WHERE playerID = ${playerId};`,
-		`INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM bank WHERE playerID = ${playerId};`
+		"CREATE TEMP TABLE portal_delete_guard (id INTEGER PRIMARY KEY);",
+		`INSERT INTO portal_delete_guard
+			SELECT p.id
+			FROM players p
+			JOIN player_cache pc
+			  ON pc.playerID = p.id
+			 AND pc.key = ${sqlString(openRscAccountIdCacheKey)}
+			 AND pc.value = ${sqlString(accountId)}
+			WHERE p.id = ${playerId}
+			  AND lower(p.username) = ${sqlString(normalizedName)}
+			  AND p.online = 0;`,
+		"CREATE TEMP TABLE portal_deleted_item_ids (itemID INTEGER PRIMARY KEY);"
 	];
+	if (tables.has("invitems")) {
+		sql.push("INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM invitems WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	}
+	if (tables.has("bank")) {
+		sql.push("INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM bank WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	}
 	if (tables.has("equipped")) {
-		sql.push(`INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM equipped WHERE playerID = ${playerId};`);
+		sql.push("INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM equipped WHERE playerID IN (SELECT id FROM portal_delete_guard);");
 	}
 	if (tables.has("auctions")) {
-		sql.push(`INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM auctions WHERE seller = ${playerId};`);
+		sql.push("INSERT OR IGNORE INTO portal_deleted_item_ids SELECT itemID FROM auctions WHERE seller IN (SELECT id FROM portal_delete_guard);");
 	}
 	if (tables.has("expired_auctions")) {
-		sql.push(`INSERT OR IGNORE INTO portal_deleted_item_ids SELECT item_id FROM expired_auctions WHERE playerID = ${playerId};`);
+		sql.push("INSERT OR IGNORE INTO portal_deleted_item_ids SELECT item_id FROM expired_auctions WHERE playerID IN (SELECT id FROM portal_delete_guard);");
 	}
-	sql.push(
-		`DELETE FROM bank WHERE playerID = ${playerId};`,
-		`DELETE FROM invitems WHERE playerID = ${playerId};`,
-		`DELETE FROM itemstatuses WHERE itemID IN (SELECT itemID FROM portal_deleted_item_ids);`
-	);
+	if (tables.has("bank")) {
+		sql.push("DELETE FROM bank WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	}
+	if (tables.has("invitems")) {
+		sql.push("DELETE FROM invitems WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	}
+	if (tables.has("itemstatuses")) {
+		sql.push("DELETE FROM itemstatuses WHERE itemID IN (SELECT itemID FROM portal_deleted_item_ids);");
+	}
 	if (tables.has("equipped")) {
-		sql.push(`DELETE FROM equipped WHERE playerID = ${playerId};`);
+		sql.push("DELETE FROM equipped WHERE playerID IN (SELECT id FROM portal_delete_guard);");
 	}
 	if (tables.has("auctions")) {
-		sql.push(`DELETE FROM auctions WHERE seller = ${playerId};`);
+		sql.push("DELETE FROM auctions WHERE seller IN (SELECT id FROM portal_delete_guard);");
 	}
 	if (tables.has("expired_auctions")) {
-		sql.push(`DELETE FROM expired_auctions WHERE playerID = ${playerId};`);
+		sql.push("DELETE FROM expired_auctions WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	}
+	if (tables.has("auction_sales")) {
+		sql.push("DELETE FROM auction_sales WHERE seller IN (SELECT id FROM portal_delete_guard) OR buyer IN (SELECT id FROM portal_delete_guard);");
 	}
 	if (tables.has("bankpresets")) {
-		sql.push(`DELETE FROM bankpresets WHERE playerID = ${playerId};`);
+		sql.push("DELETE FROM bankpresets WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	}
+	if (tables.has("droplogs")) {
+		sql.push("DELETE FROM droplogs WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	}
+	if (tables.has("former_names")) {
+		sql.push("DELETE FROM former_names WHERE playerId IN (SELECT id FROM portal_delete_guard);");
 	}
 	if (tables.has("voidarena_ranked_matches")) {
-		sql.push(`DELETE FROM voidarena_ranked_matches WHERE winnerID = ${playerId} OR loserID = ${playerId};`);
+		sql.push("DELETE FROM voidarena_ranked_matches WHERE winnerID IN (SELECT id FROM portal_delete_guard) OR loserID IN (SELECT id FROM portal_delete_guard);");
 	}
 	if (tables.has("voidarena_ranked_stats")) {
-		sql.push(`DELETE FROM voidarena_ranked_stats WHERE playerID = ${playerId};`);
+		sql.push("DELETE FROM voidarena_ranked_stats WHERE playerID IN (SELECT id FROM portal_delete_guard);");
 	}
+	if (tables.has("bestiaryloot")) sql.push("DELETE FROM bestiaryloot WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("capped_experience")) sql.push("DELETE FROM capped_experience WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("curstats")) sql.push("DELETE FROM curstats WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("experience")) sql.push("DELETE FROM experience WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("friends")) sql.push("DELETE FROM friends WHERE playerID IN (SELECT id FROM portal_delete_guard) OR friend IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("ignores")) sql.push("DELETE FROM ignores WHERE playerID IN (SELECT id FROM portal_delete_guard) OR \"ignore\" IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("ironman")) sql.push("DELETE FROM ironman WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("logins")) sql.push("DELETE FROM logins WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("maxstats")) sql.push("DELETE FROM maxstats WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("npckills")) sql.push("DELETE FROM npckills WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("player_cache")) sql.push("DELETE FROM player_cache WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("player_change_recovery")) sql.push("DELETE FROM player_change_recovery WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("player_contact_details")) sql.push("DELETE FROM player_contact_details WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("player_recovery")) sql.push("DELETE FROM player_recovery WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("player_security_changes")) sql.push("DELETE FROM player_security_changes WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("quests")) sql.push("DELETE FROM quests WHERE playerID IN (SELECT id FROM portal_delete_guard);");
+	if (tables.has("recovery_attempts")) sql.push("DELETE FROM recovery_attempts WHERE playerID IN (SELECT id FROM portal_delete_guard);");
 	sql.push(
-		`DELETE FROM bestiaryloot WHERE playerID = ${playerId};`,
-		`DELETE FROM capped_experience WHERE playerID = ${playerId};`,
-		`DELETE FROM curstats WHERE playerID = ${playerId};`,
-		`DELETE FROM experience WHERE playerID = ${playerId};`,
-		`DELETE FROM friends WHERE playerID = ${playerId} OR friend = ${playerId};`,
-		`DELETE FROM ignores WHERE playerID = ${playerId} OR "ignore" = ${playerId};`,
-		`DELETE FROM ironman WHERE playerID = ${playerId};`,
-		`DELETE FROM logins WHERE playerID = ${playerId};`,
-		`DELETE FROM maxstats WHERE playerID = ${playerId};`,
-		`DELETE FROM npckills WHERE playerID = ${playerId};`,
-		`DELETE FROM player_cache WHERE playerID = ${playerId};`,
-		`DELETE FROM player_change_recovery WHERE playerID = ${playerId};`,
-		`DELETE FROM player_contact_details WHERE playerID = ${playerId};`,
-		`DELETE FROM player_recovery WHERE playerID = ${playerId};`,
-		`DELETE FROM player_security_changes WHERE playerID = ${playerId};`,
-		`DELETE FROM quests WHERE playerID = ${playerId};`,
-		`DELETE FROM recovery_attempts WHERE playerID = ${playerId};`,
-		`DELETE FROM players WHERE id = ${playerId} AND lower(username) = ${sqlString(normalizedName)};`,
+		`DELETE FROM players WHERE id IN (SELECT id FROM portal_delete_guard) AND lower(username) = ${sqlString(normalizedName)};`,
+		"SELECT changes() AS playersDeleted;",
+		"DROP TABLE portal_delete_guard;",
 		"DROP TABLE portal_deleted_item_ids;",
-		"COMMIT;",
-		"SELECT 1 AS ok;"
+		"COMMIT;"
 	);
-	await sqliteWriteJson(sql.join("\n"));
+	const rows = await sqliteWriteJson(sql.join("\n"));
+	if (Number(rows[0] && rows[0].playersDeleted || 0) !== 1) {
+		throw new HttpError(409, "character_delete_conflict");
+	}
 	return true;
 }
 
+async function updateOpenRscPlayerPassword(character, accountId, password, ip) {
+	if (!openRscDbPath) throw new HttpError(503, "openrsc_db_not_configured");
+	const playerId = Number(character && character.playerId);
+	const normalizedName = normalizeUsername(character && character.name || "");
+	if (!playerId || !normalizedName) throw new HttpError(409, "character_link_missing");
+	const preflight = await sqliteJson(`
+		SELECT p.id, p.username, p.pass, COALESCE(p.salt, '') AS salt, p.online,
+		       (
+			SELECT pc.value
+			FROM player_cache pc
+			WHERE pc.playerID = p.id
+			  AND pc.key = ${sqlString(openRscAccountIdCacheKey)}
+			ORDER BY pc.dbid DESC
+			LIMIT 1
+		       ) AS webAccountId
+		FROM players p
+		WHERE p.id = ${playerId}
+		  AND lower(p.username) = ${sqlString(normalizedName)}
+		LIMIT 1
+	`);
+	const player = preflight[0];
+	if (!player || String(player.webAccountId || "") !== String(accountId)) {
+		throw new HttpError(409, "character_link_mismatch");
+	}
+	if (Number(player.online || 0) !== 0) throw new HttpError(409, "character_online");
+	const newHash = await canonicalGamePasswordHash(password, String(player.salt || ""));
+	const changedAt = now();
+	const changedAtSeconds = Math.floor(Date.parse(changedAt) / 1000);
+	const rows = await sqliteWriteJson(`
+		BEGIN IMMEDIATE;
+		CREATE TEMP TABLE portal_password_guard (playerID INTEGER PRIMARY KEY);
+		INSERT INTO portal_password_guard (playerID)
+		SELECT p.id
+		FROM players p
+		WHERE p.id = ${playerId}
+		  AND lower(p.username) = ${sqlString(normalizedName)}
+		  AND p.online = 0
+		  AND p.pass = ${sqlString(String(player.pass || ""))}
+		  AND COALESCE(p.salt, '') = ${sqlString(String(player.salt || ""))}
+		  AND CAST((
+			SELECT pc.value
+			FROM player_cache pc
+			WHERE pc.playerID = p.id
+			  AND pc.key = ${sqlString(openRscAccountIdCacheKey)}
+			ORDER BY pc.dbid DESC
+			LIMIT 1
+		  ) AS TEXT) = ${sqlString(String(accountId))};
+		UPDATE players
+		SET pass = ${sqlString(newHash)}
+		WHERE id IN (SELECT playerID FROM portal_password_guard);
+		SELECT changes() AS playersUpdated;
+		INSERT INTO player_security_changes (playerID, eventAlias, date, ip, message)
+		SELECT playerID, 'pass_change', ${changedAtSeconds}, ${sqlString(ip || "0.0.0.0")}, 'Portal account game-password reset'
+		FROM portal_password_guard;
+		DROP TABLE portal_password_guard;
+		COMMIT;
+	`);
+	if (Number(rows[0] && rows[0].playersUpdated || 0) !== 1) {
+		throw new HttpError(409, "character_link_mismatch");
+	}
+	return changedAt;
+}
+
 async function createOpenRscPlayer({ accountId, username, email, password, ip }) {
-	const passwordState = legacyGamePasswordHash(password);
+	const passwordSalt = randomBytes(15).toString("base64url").slice(0, 20);
+	const passwordHash = await canonicalGamePasswordHash(password, passwordSalt);
 	const createdAt = Math.floor(Date.now() / 1000);
 	const rows = await sqliteWriteJson(`
 		BEGIN IMMEDIATE;
@@ -4507,8 +6697,8 @@ async function createOpenRscPlayer({ accountId, username, email, password, ip })
 		) VALUES (
 			${sqlString(username)},
 			${sqlString(email || "")},
-			${sqlString(passwordState.hash)},
-			${sqlString(passwordState.salt)},
+			${sqlString(passwordHash)},
+			${sqlString(passwordSalt)},
 			${createdAt},
 			${sqlString(ip || "127.0.0.1")},
 			10,
@@ -4665,9 +6855,77 @@ async function sqliteJson(query) {
 	}
 }
 
+function withOpenRscWriteLock(callback) {
+	if (!openRscDbPath) return Promise.reject(new HttpError(503, "openrsc_db_not_configured"));
+	return new Promise((resolveLock, rejectLock) => {
+		const child = spawn("sqlite3", ["-batch", openRscDbPath], {
+			stdio: ["pipe", "pipe", "pipe"]
+		});
+		const readyMarker = "__VOIDSCAPE_PORTAL_WRITE_LOCKED__";
+		let stdout = "";
+		let stderr = "";
+		let callbackStarted = false;
+		let callbackResult;
+		let callbackError = null;
+		let settled = false;
+		const acquisitionTimeout = setTimeout(() => {
+			if (callbackStarted || settled) return;
+			settled = true;
+			child.kill("SIGKILL");
+			rejectLock(new HttpError(503, "openrsc_claim_lock_unavailable"));
+		}, 10000);
+
+		child.stdout.setEncoding("utf8");
+		child.stderr.setEncoding("utf8");
+		child.stderr.on("data", (chunk) => {
+			if (stderr.length < 4096) stderr += chunk;
+		});
+		child.stdout.on("data", (chunk) => {
+			if (stdout.length < 4096) stdout += chunk;
+			if (callbackStarted || !stdout.includes(readyMarker)) return;
+			callbackStarted = true;
+			clearTimeout(acquisitionTimeout);
+			Promise.resolve()
+				.then(callback)
+				.then((result) => {
+					callbackResult = result;
+					child.stdin.end("ROLLBACK;\n");
+				})
+				.catch((error) => {
+					callbackError = error;
+					child.stdin.end("ROLLBACK;\n");
+				});
+		});
+		child.on("error", (error) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(acquisitionTimeout);
+			rejectLock(error && error.code === "ENOENT"
+				? new HttpError(503, "sqlite3_not_available")
+				: new HttpError(503, "openrsc_claim_lock_unavailable"));
+		});
+		child.on("close", (code) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(acquisitionTimeout);
+			if (callbackError) {
+				rejectLock(callbackError);
+				return;
+			}
+			if (!callbackStarted || code !== 0) {
+				if (stderr) console.error("openrsc_claim_lock_failed", stderr.trim().slice(0, 180));
+				rejectLock(new HttpError(503, "openrsc_claim_lock_unavailable"));
+				return;
+			}
+			resolveLock(callbackResult);
+		});
+		child.stdin.write(".bail on\n.timeout 5000\nBEGIN IMMEDIATE;\n.print " + readyMarker + "\n");
+	});
+}
+
 async function sqliteWriteJson(query) {
 	try {
-		const { stdout } = await execFile("sqlite3", ["-json", openRscDbPath, query], {
+		const { stdout } = await execFile("sqlite3", ["-cmd", ".timeout 5000", "-json", openRscDbPath, query], {
 			maxBuffer: 1024 * 1024
 		});
 		return stdout.trim() ? JSON.parse(stdout) : [];
@@ -4916,7 +7174,21 @@ function grantStarterCardEntitlement(store, founder, source = "prelaunch_signup"
 }
 
 async function grantStarterCardIfEligible(store, account, founder, source, request, context) {
-	recordSignupSignals(store, account, request, context);
+	if (!context || !context.signupSignalsRecorded) {
+		recordSignupSignals(store, account, request, context);
+	}
+	if (!launchFreeCardWindowOpen()) {
+		account.starterCardReview = {
+			status: "closed",
+			reasons: ["starter_card_launch_window_closed"],
+			createdAt: now()
+		};
+		audit(store, "starter_card_window_closed", {
+			accountId: account.id,
+			source
+		});
+		return null;
+	}
 	const decision = starterCardDecision(store, account, request, context);
 	if (!decision.allowed) {
 		account.starterCardReview = {
@@ -4942,7 +7214,7 @@ function starterCardDecision(store, account, request, context = {}) {
 	const ip = clientIp(request);
 	const since = Date.now() - 1000 * 60 * 60 * 24;
 	const ipGrantCount = countAbuseSignals(store, "starter_card_granted_ip", ip, since);
-	if (!isLocalIp(ip) && ipGrantCount >= starterIpDailyLimit) {
+	if (!isLocalIp(ip) && starterIpDailyLimit > 0 && ipGrantCount >= starterIpDailyLimit) {
 		reasons.push("starter_card_ip_daily_limit");
 	}
 
@@ -4966,8 +7238,229 @@ function starterCardDecision(store, account, request, context = {}) {
 	};
 }
 
+function assertAccountSignupIpAllowed(store, request) {
+	assertSignupAllowed(store, request);
+}
+
+function rejectRateLimit(request, rule, context = {}) {
+	const accountId = Number(context.accountId || 0);
+	console.warn(JSON.stringify({
+		event: "portal_rate_limit_decision",
+		decision: "deny",
+		rule: String(rule || "unspecified").slice(0, 80),
+		route: String(request && request.url || "").split("?", 1)[0].slice(0, 160),
+		ipHashPrefix: abuseHash(clientIp(request)).slice(0, 12),
+		...(accountId > 0 ? { accountId } : {}),
+		createdAt: now()
+	}));
+	throw new HttpError(429, "rate_limited");
+}
+
+function assertSignupAllowed(store, request) {
+	const profile = clientAbuseProfile(request);
+	if (profile.local) return;
+	assertClientIpNotBlocked(profile);
+	const nowMs = Date.now();
+	const hourlyLimit = profile.proxy ? Math.min(signupIpHourlyLimit, proxySignupIpDailyLimit) : signupIpHourlyLimit;
+	const dailyLimit = profile.proxy ? Math.min(signupIpDailyLimit, proxySignupIpDailyLimit) : signupIpDailyLimit;
+	if (countSignupSignalsByIp(store, profile.ip, nowMs - 1000 * 60 * 60) >= hourlyLimit) {
+		rejectRateLimit(request, "signup_ip_hourly");
+	}
+	if (countSignupSignalsByIp(store, profile.ip, nowMs - 1000 * 60 * 60 * 24) >= dailyLimit) {
+		rejectRateLimit(request, "signup_ip_daily");
+	}
+	if (profile.subnetKey && signupSubnetHourlyLimit > 0
+		&& countSignupSignalsBySubnet(store, profile.subnetKey, nowMs - 1000 * 60 * 60) >= signupSubnetHourlyLimit) {
+		rejectRateLimit(request, "signup_subnet_hourly");
+	}
+	if (profile.subnetKey && signupSubnetDailyLimit > 0
+		&& countSignupSignalsBySubnet(store, profile.subnetKey, nowMs - 1000 * 60 * 60 * 24) >= signupSubnetDailyLimit) {
+		rejectRateLimit(request, "signup_subnet_daily");
+	}
+}
+
+async function assertCharacterCreationAllowed(store, account, request) {
+	const profile = clientAbuseProfile(request);
+	assertClientIpNotBlocked(profile);
+	const nowMs = Date.now();
+	const hourAgo = nowMs - 1000 * 60 * 60;
+	const dayAgo = nowMs - 1000 * 60 * 60 * 24;
+	if (!profile.local) {
+		const hourlyIpLimit = profile.proxy ? Math.min(characterIpHourlyLimit, proxyCharacterIpDailyLimit) : characterIpHourlyLimit;
+		const dailyIpLimit = profile.proxy ? Math.min(characterIpDailyLimit, proxyCharacterIpDailyLimit) : characterIpDailyLimit;
+		if (await characterIpCount(store, profile.ip, hourAgo) >= hourlyIpLimit) {
+			rejectRateLimit(request, "character_ip_hourly", { accountId: account.id });
+		}
+		if (await characterIpCount(store, profile.ip, dayAgo) >= dailyIpLimit) {
+			rejectRateLimit(request, "character_ip_daily", { accountId: account.id });
+		}
+		if (profile.subnetKey && characterSubnetHourlyLimit > 0
+			&& await characterSubnetCount(store, profile.subnetKey, hourAgo) >= characterSubnetHourlyLimit) {
+			rejectRateLimit(request, "character_subnet_hourly", { accountId: account.id });
+		}
+		if (profile.subnetKey && characterSubnetDailyLimit > 0
+			&& await characterSubnetCount(store, profile.subnetKey, dayAgo) >= characterSubnetDailyLimit) {
+			rejectRateLimit(request, "character_subnet_daily", { accountId: account.id });
+		}
+	}
+	if (await characterAccountCount(store, account.id, hourAgo) >= characterAccountHourlyLimit) {
+		rejectRateLimit(request, "character_account_hourly", { accountId: account.id });
+	}
+	if (await characterAccountCount(store, account.id, dayAgo) >= characterAccountDailyLimit) {
+		rejectRateLimit(request, "character_account_daily", { accountId: account.id });
+	}
+}
+
+function countSignupSignalsByIp(store, ip, sinceMs) {
+	return countAbuseSignals(store, "account_signup_ip", ip, sinceMs)
+		+ countAbuseSignals(store, "founder_signup_ip", ip, sinceMs);
+}
+
+function countSignupSignalsBySubnet(store, subnetKey, sinceMs) {
+	return countAbuseSignals(store, "account_signup_subnet", subnetKey, sinceMs)
+		+ countAbuseSignals(store, "founder_signup_subnet", subnetKey, sinceMs);
+}
+
+async function characterIpCount(store, ip, sinceMs) {
+	const signalCount = countAbuseSignals(store, "character_created_ip", ip, sinceMs);
+	const openRscCount = await openRscCharacterCreationsByIp(ip, sinceMs);
+	const initialSignupCount = countAbuseSignals(store, "character_signup_initial_ip", ip, sinceMs);
+	return Math.max(0, Math.max(signalCount, openRscCount) - initialSignupCount);
+}
+
+async function characterSubnetCount(store, subnetKey, sinceMs) {
+	const signalCount = countAbuseSignals(store, "character_created_subnet", subnetKey, sinceMs);
+	const openRscCount = await openRscCharacterCreationsBySubnet(subnetKey, sinceMs);
+	const initialSignupCount = countAbuseSignals(store, "character_signup_initial_subnet", subnetKey, sinceMs);
+	return Math.max(0, Math.max(signalCount, openRscCount) - initialSignupCount);
+}
+
+async function characterAccountCount(store, accountId, sinceMs) {
+	const signalCount = countAbuseSignals(store, "character_created_account", accountId, sinceMs);
+	const openRscCount = await openRscCharacterCreationsByAccount(accountId, sinceMs);
+	const initialSignupCount = countAbuseSignals(store, "character_signup_initial_account", accountId, sinceMs);
+	return Math.max(0, Math.max(signalCount, openRscCount) - initialSignupCount);
+}
+
+async function openRscCharacterCreationsByIp(ip, sinceMs) {
+	if (!openRscDbPath || !ip) return 0;
+	const sinceSeconds = Math.floor(Number(sinceMs || 0) / 1000);
+	const rows = await sqliteJson(`
+		SELECT COUNT(*) AS count
+		FROM players
+		WHERE creation_ip = ${sqlString(ip)}
+		  AND creation_date >= ${sinceSeconds}
+	`);
+	return Number(rows[0] && rows[0].count || 0);
+}
+
+async function openRscCharacterCreationsBySubnet(subnetKey, sinceMs) {
+	if (!openRscDbPath || !subnetKey) return 0;
+	const prefix = ipv4SubnetSqlPrefix(subnetKey);
+	if (!prefix) return 0;
+	const sinceSeconds = Math.floor(Number(sinceMs || 0) / 1000);
+	const rows = await sqliteJson(`
+		SELECT COUNT(*) AS count
+		FROM players
+		WHERE creation_ip LIKE ${sqlString(`${prefix}%`)}
+		  AND creation_date >= ${sinceSeconds}
+	`);
+	return Number(rows[0] && rows[0].count || 0);
+}
+
+async function openRscCharacterCreationsByAccount(accountId, sinceMs) {
+	if (!openRscDbPath || !Number(accountId)) return 0;
+	const sinceSeconds = Math.floor(Number(sinceMs || 0) / 1000);
+	const rows = await sqliteJson(`
+		SELECT COUNT(DISTINCT p.id) AS count
+		FROM players p
+		JOIN player_cache pc
+		  ON pc.playerID = p.id
+		 AND pc.key = ${sqlString(openRscAccountIdCacheKey)}
+		 AND pc.value = ${sqlString(accountId)}
+		WHERE p.creation_date >= ${sinceSeconds}
+	`);
+	return Number(rows[0] && rows[0].count || 0);
+}
+
+function clientAbuseProfile(request) {
+	const ip = clientIp(request);
+	return {
+		ip,
+		local: isLocalIp(ip),
+		subnetKey: ipv4SubnetKey(ip),
+		blocked: cidrContains(blockedIpCidrs, ip),
+		proxy: cidrContains(proxyIpCidrs, ip)
+	};
+}
+
+function assertClientIpNotBlocked(profile) {
+	if (profile && profile.blocked && !profile.local) {
+		throw new HttpError(403, "ip_blocked");
+	}
+}
+
+function ipv4SubnetKey(ip) {
+	const intValue = ipv4ToInt(ip);
+	if (intValue === null) return "";
+	return `ipv4:${(intValue >>> 24) & 255}.${(intValue >>> 16) & 255}.${(intValue >>> 8) & 255}.0/24`;
+}
+
+function ipv4SubnetSqlPrefix(subnetKey) {
+	const match = /^ipv4:(\d{1,3}\.\d{1,3}\.\d{1,3})\.0\/24$/.exec(String(subnetKey || ""));
+	return match ? `${match[1]}.` : "";
+}
+
+function cidrList(value) {
+	return String(value || "")
+		.split(/[,\s]+/)
+		.map((entry) => entry.trim())
+		.filter(Boolean)
+		.map(parseCidr)
+		.filter(Boolean);
+}
+
+function parseCidr(value) {
+	const text = String(value || "").trim();
+	if (!text) return null;
+	const parts = text.split("/");
+	const base = ipv4ToInt(parts[0]);
+	if (base === null) return null;
+	const prefix = parts.length > 1 ? Number(parts[1]) : 32;
+	if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) return null;
+	const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+	return {
+		base: (base & mask) >>> 0,
+		mask,
+		prefix
+	};
+}
+
+function cidrContains(ranges, ip) {
+	if (!Array.isArray(ranges) || !ranges.length) return false;
+	const value = ipv4ToInt(ip);
+	if (value === null) return false;
+	return ranges.some((range) => ((value & range.mask) >>> 0) === range.base);
+}
+
+function ipv4ToInt(ip) {
+	const text = String(ip || "").trim();
+	const ipv4 = text.startsWith("::ffff:") ? text.slice("::ffff:".length) : text;
+	const parts = ipv4.split(".");
+	if (parts.length !== 4) return null;
+	let value = 0;
+	for (const part of parts) {
+		if (!/^\d{1,3}$/.test(part)) return null;
+		const number = Number(part);
+		if (!Number.isInteger(number) || number < 0 || number > 255) return null;
+		value = ((value << 8) + number) >>> 0;
+	}
+	return value >>> 0;
+}
+
 function recordSignupSignals(store, account, request, context = {}) {
 	const ip = clientIp(request);
+	const subnetKey = ipv4SubnetKey(ip);
 	recordAbuseSignal(store, {
 		accountId: account.id,
 		signalType: "account_signup_ip",
@@ -4982,6 +7475,15 @@ function recordSignupSignals(store, account, request, context = {}) {
 		bucket: emailDomainBucket(context.emailCanonical || account.emailCanonical || ""),
 		metadata: { provider: context.provider || "password" }
 	});
+	if (subnetKey) {
+		recordAbuseSignal(store, {
+			accountId: account.id,
+			signalType: "account_signup_subnet",
+			signalValue: subnetKey,
+			bucket: dailyBucket(),
+			metadata: { provider: context.provider || "password", local: isLocalIp(ip) }
+		});
+	}
 	if (context.provider && context.providerSubject) {
 		recordAbuseSignal(store, {
 			accountId: account.id,
@@ -4991,6 +7493,63 @@ function recordSignupSignals(store, account, request, context = {}) {
 			metadata: { provider: context.provider }
 		});
 	}
+}
+
+function recordCharacterCreationSignal(store, account, playerId, username, request, context = {}) {
+	const ip = clientIp(request);
+	const subnetKey = ipv4SubnetKey(ip);
+	const metadata = {
+		local: isLocalIp(ip),
+		playerId: Number(playerId || 0),
+		initialSignup: Boolean(context.initialSignup)
+	};
+	recordAbuseSignal(store, {
+		accountId: account.id,
+		signalType: "character_created_ip",
+		signalValue: ip,
+		bucket: dailyBucket(),
+		metadata
+	});
+	if (subnetKey) {
+		recordAbuseSignal(store, {
+			accountId: account.id,
+			signalType: "character_created_subnet",
+			signalValue: subnetKey,
+			bucket: dailyBucket(),
+			metadata
+		});
+	}
+	recordAbuseSignal(store, {
+		accountId: account.id,
+		signalType: "character_created_account",
+		signalValue: account.id,
+		bucket: dailyBucket(),
+		metadata
+	});
+	if (!context.initialSignup) return;
+	recordAbuseSignal(store, {
+		accountId: account.id,
+		signalType: "character_signup_initial_ip",
+		signalValue: ip,
+		bucket: dailyBucket(),
+		metadata
+	});
+	if (subnetKey) {
+		recordAbuseSignal(store, {
+			accountId: account.id,
+			signalType: "character_signup_initial_subnet",
+			signalValue: subnetKey,
+			bucket: dailyBucket(),
+			metadata
+		});
+	}
+	recordAbuseSignal(store, {
+		accountId: account.id,
+		signalType: "character_signup_initial_account",
+		signalValue: account.id,
+		bucket: dailyBucket(),
+		metadata
+	});
 }
 
 function recordStarterGrantSignals(store, account, request, context = {}) {
@@ -5211,6 +7770,7 @@ async function upsertGoogleAccount(store, profile, payload, request) {
 	}
 
 	if (!account) {
+		assertAccountSignupIpAllowed(store, request);
 		const founder = await reserveFounder(store, {
 			username: profile.username,
 			email: profile.emailDisplay,
@@ -5304,6 +7864,62 @@ function requireSession(request, store) {
 	return { account, session };
 }
 
+function revokeCurrentSession(request, store) {
+	const auth = request.headers.authorization || "";
+	const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+	if (!token) return false;
+	const tokenHash = hashToken(token);
+	const session = store.sessions.find((entry) => entry.tokenHash === tokenHash && !entry.revokedAt);
+	if (!session) return false;
+	session.expiresAt = Date.now();
+	session.revokedAt = now();
+	session.lastSeenAt = now();
+	audit(store, "account_logout", { accountId: session.accountId, sessionId: session.id });
+	return true;
+}
+
+function revokeOtherAccountSessions(store, accountId, currentSessionId) {
+	let revoked = 0;
+	store.sessions.forEach((entry) => {
+		if (entry.accountId === accountId && entry.id !== currentSessionId && entry.expiresAt > Date.now() && !entry.revokedAt) {
+			entry.expiresAt = Date.now();
+			entry.revokedAt = now();
+			revoked += 1;
+		}
+	});
+	return revoked;
+}
+
+async function requireSensitiveAccountAuth(store, account, session, currentPassword) {
+	if (account.passwordHash) {
+		if (!(await verifyPassword(String(currentPassword || ""), account.passwordHash))) {
+			throw new HttpError(401, "invalid_current_password");
+		}
+		return "password";
+	}
+	const hasFederatedIdentity = store.identities.some((entry) =>
+		entry.accountId === account.id && [googleIdentityProvider, "discord"].includes(entry.provider)
+	);
+	const sessionCreatedAt = Date.parse(session.createdAt || "");
+	if (hasFederatedIdentity && Number.isFinite(sessionCreatedAt) && Date.now() - sessionCreatedAt <= sensitiveActionWindowMs) {
+		return "recent_federated_login";
+	}
+	throw new HttpError(401, "reauthentication_required");
+}
+
+function optionalSession(request, store) {
+	const auth = request.headers.authorization || "";
+	const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+	if (!token) return null;
+	const tokenHash = hashToken(token);
+	const session = store.sessions.find((entry) => entry.tokenHash === tokenHash && entry.expiresAt > Date.now() && !entry.revokedAt);
+	if (!session) throw new HttpError(401, "invalid_session");
+	session.lastSeenAt = now();
+	const account = store.accounts.find((entry) => entry.id === session.accountId);
+	if (!account || account.status !== "active") throw new HttpError(401, "invalid_account");
+	return { account, session };
+}
+
 function requireAccount(request, store) {
 	const { account } = requireSession(request, store);
 	return account;
@@ -5376,15 +7992,29 @@ function revokeAccountSessions(store, accountId) {
 	return revoked;
 }
 
-async function updateStore(mutator) {
-	const next = writeQueue.then(async () => {
+async function updateStore(mutator, options = {}) {
+	const execute = async () => {
 		const store = await loadStore();
+		recoverInterruptedEmailEvents(store);
 		const result = await mutator(store);
 		await saveStore(store);
 		return result;
-	});
+	};
+	const next = writeQueue.then(() => options.lockOpenRscWrites
+		? withOpenRscWriteLock(execute)
+		: execute());
 	writeQueue = next.catch(() => undefined);
 	return next;
+}
+
+function recoverInterruptedEmailEvents(store) {
+	const cutoff = Date.now() - interruptedEmailRecoveryMs;
+	for (const event of store.emailEvents || []) {
+		if (event.status !== "sending" || Date.parse(event.updatedAt || "") > cutoff) continue;
+		event.status = "failed";
+		event.lastError = "email_delivery_interrupted";
+		event.updatedAt = now();
+	}
 }
 
 async function loadStore() {
@@ -5417,7 +8047,10 @@ function normalizeStore(store) {
 			identity: Number(store.nextIds && store.nextIds.identity) || 1,
 			audit: Number(store.nextIds && store.nextIds.audit) || 1,
 			abuseSignal: Number(store.nextIds && store.nextIds.abuseSignal) || 1,
-			emailEvent: Number(store.nextIds && store.nextIds.emailEvent) || 1
+			emailEvent: Number(store.nextIds && store.nextIds.emailEvent) || 1,
+			emailVerification: Number(store.nextIds && store.nextIds.emailVerification) || 1,
+			passwordResetToken: Number(store.nextIds && store.nextIds.passwordResetToken) || 1,
+			legacyAccountClaim: Number(store.nextIds && store.nextIds.legacyAccountClaim) || 1
 		},
 		accounts: Array.isArray(store.accounts) ? store.accounts : [],
 		identities: Array.isArray(store.identities) ? store.identities : [],
@@ -5431,8 +8064,15 @@ function normalizeStore(store) {
 		oauthStates: Array.isArray(store.oauthStates) ? store.oauthStates : [],
 		audit: Array.isArray(store.audit) ? store.audit : [],
 		abuseSignals: Array.isArray(store.abuseSignals) ? store.abuseSignals : [],
-		emailEvents: Array.isArray(store.emailEvents) ? store.emailEvents : []
+		emailEvents: Array.isArray(store.emailEvents) ? store.emailEvents : [],
+		emailVerifications: Array.isArray(store.emailVerifications) ? store.emailVerifications : [],
+		passwordResetTokens: Array.isArray(store.passwordResetTokens) ? store.passwordResetTokens : [],
+		legacyAccountClaims: Array.isArray(store.legacyAccountClaims) ? store.legacyAccountClaims : []
 	};
+}
+
+function cloneJson(value) {
+	return JSON.parse(JSON.stringify(value));
 }
 
 function nextId(store, key) {
@@ -5604,6 +8244,14 @@ function requireGamePassword(password) {
 	return text;
 }
 
+function requireLegacyGamePassword(password) {
+	const text = String(password || "").trim().replaceAll(" ", "_");
+	if (!text || text.length > 20 || /[\u0000-\u001f\u007f]/.test(text)) {
+		throw new HttpError(400, "invalid_game_password");
+	}
+	return text;
+}
+
 function requireLaunchFirstGamePassword(password) {
 	const text = String(password || "");
 	if (!/^[a-zA-Z0-9]{8,20}$/.test(text)) {
@@ -5612,13 +8260,66 @@ function requireLaunchFirstGamePassword(password) {
 	return text;
 }
 
-function legacyGamePasswordHash(password) {
-	const salt = randomBytes(15).toString("base64url").slice(0, 20);
-	const md5 = createHash("md5").update(password).digest("hex");
-	return {
-		salt,
-		hash: createHash("sha512").update(salt + md5).digest("hex")
-	};
+function canonicalGamePasswordHash(password, salt) {
+	return runGamePasswordHelper("hash", password, salt);
+}
+
+function verifyCanonicalGamePassword(password, salt, encodedHash) {
+	return runGamePasswordHelper("check", password, salt, encodedHash);
+}
+
+function runGamePasswordHelper(mode, password, salt, encodedHash = "") {
+	return new Promise((resolveResult, rejectResult) => {
+		const child = spawn(gamePasswordJavaBin, [
+			"-cp",
+			gamePasswordHelperClasspath,
+			"com.openrsc.server.util.rsc.PortalPasswordHasher"
+		], {
+			stdio: ["pipe", "pipe", "pipe"]
+		});
+		let stdout = "";
+		let stderr = "";
+		let settled = false;
+		const timeout = setTimeout(() => {
+			if (settled) return;
+			settled = true;
+			child.kill("SIGKILL");
+			rejectResult(new HttpError(503, "game_password_hasher_unavailable"));
+		}, 15000);
+		child.stdout.setEncoding("utf8");
+		child.stderr.setEncoding("utf8");
+		child.stdout.on("data", (chunk) => {
+			if (stdout.length < 4096) stdout += chunk;
+		});
+		child.stderr.on("data", (chunk) => {
+			if (stderr.length < 4096) stderr += chunk;
+		});
+		child.on("error", () => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timeout);
+			rejectResult(new HttpError(503, "game_password_hasher_unavailable"));
+		});
+		child.on("close", (code) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timeout);
+			const output = stdout.trim();
+			const validOutput = mode === "hash"
+				? /^\$2y\$10\$[./A-Za-z0-9]{53}$/.test(output)
+				: mode === "check" && (output === "true" || output === "false");
+			if (code !== 0 || !validOutput) {
+				if (stderr) console.error("game_password_hasher_failed", stderr.trim().slice(0, 180));
+				rejectResult(new HttpError(503, "game_password_hasher_unavailable"));
+				return;
+			}
+			resolveResult(mode === "check" ? output === "true" : output);
+		});
+		const encode = (value) => Buffer.from(String(value || ""), "utf8").toString("base64url");
+		const lines = [mode, encode(password), encode(salt)];
+		if (mode === "check") lines.push(encode(encodedHash));
+		child.stdin.end(`${lines.join("\n")}\n`);
+	});
 }
 
 function clientIp(request) {
@@ -5672,6 +8373,68 @@ function oauthPublicState() {
 			clientId: googleClientId || ""
 		}
 	};
+}
+
+function captchaPublicState() {
+	return {
+		provider: captchaProvider,
+		signupRequired: captchaSignupRequired,
+		characterRequired: captchaCharacterRequired,
+		siteKey: captchaSiteKey,
+		configured: captchaConfigured()
+	};
+}
+
+function captchaConfigured() {
+	if (captchaBypassToken) return true;
+	return captchaProvider === "turnstile" && Boolean(captchaSecret && captchaSiteKey);
+}
+
+async function requireCaptcha(request, payload, purpose) {
+	const required = purpose === "character" ? captchaCharacterRequired : captchaSignupRequired;
+	if (!required) return;
+	if (!captchaConfigured()) {
+		throw new HttpError(503, "captcha_not_configured");
+	}
+	const token = String(payload.captchaToken || payload.turnstileToken || "").trim();
+	if (!token) {
+		throw new HttpError(403, "captcha_required");
+	}
+	if (captchaBypassToken && constantTimeMatches(token, captchaBypassToken)) {
+		return;
+	}
+	if (captchaBypassToken && !captchaSecret) {
+		throw new HttpError(403, "captcha_failed");
+	}
+	if (captchaProvider !== "turnstile" || !captchaSecret) {
+		throw new HttpError(503, "captcha_not_configured");
+	}
+	let response;
+	try {
+		const body = new URLSearchParams();
+		body.set("secret", captchaSecret);
+		body.set("response", token);
+		body.set("remoteip", clientIp(request));
+		response = await fetch(captchaVerifyUrl, {
+			method: "POST",
+			headers: { "content-type": "application/x-www-form-urlencoded" },
+			body
+		});
+	} catch (error) {
+		throw new HttpError(503, "captcha_unavailable");
+	}
+	if (!response.ok) {
+		throw new HttpError(503, "captcha_unavailable");
+	}
+	let result;
+	try {
+		result = await response.json();
+	} catch (error) {
+		throw new HttpError(503, "captcha_unavailable");
+	}
+	if (!result || result.success !== true) {
+		throw new HttpError(403, "captcha_failed");
+	}
 }
 
 function formatRemaining(expiresAt) {
@@ -5810,6 +8573,38 @@ function hashToken(token) {
 	return createHash("sha256").update(token).digest("base64url");
 }
 
+function sealText(value) {
+	const iv = randomBytes(12);
+	const key = createHash("sha256").update(`${abuseHashSalt}:portal-seal`).digest();
+	const cipher = createCipheriv("aes-256-gcm", key, iv);
+	const ciphertext = Buffer.concat([
+		cipher.update(String(value || ""), "utf8"),
+		cipher.final()
+	]);
+	const tag = cipher.getAuthTag();
+	return [
+		"v1",
+		iv.toString("base64url"),
+		tag.toString("base64url"),
+		ciphertext.toString("base64url")
+	].join(".");
+}
+
+function unsealText(value) {
+	const parts = String(value || "").split(".");
+	if (parts.length !== 4 || parts[0] !== "v1") throw new HttpError(400, "invalid_sealed_value");
+	const key = createHash("sha256").update(`${abuseHashSalt}:portal-seal`).digest();
+	const iv = Buffer.from(parts[1], "base64url");
+	const tag = Buffer.from(parts[2], "base64url");
+	const ciphertext = Buffer.from(parts[3], "base64url");
+	const decipher = createDecipheriv("aes-256-gcm", key, iv);
+	decipher.setAuthTag(tag);
+	return Buffer.concat([
+		decipher.update(ciphertext),
+		decipher.final()
+	]).toString("utf8");
+}
+
 function constantTimeMatches(actual, expected) {
 	const actualHash = Buffer.from(hashToken(actual));
 	const expectedHash = Buffer.from(hashToken(expected));
@@ -5843,9 +8638,33 @@ async function readJson(request) {
 function json(response, status, body) {
 	response.writeHead(status, {
 		"content-type": "application/json; charset=utf-8",
-		"cache-control": "no-store"
+		"cache-control": "no-store",
+		...securityHeaders("application/json")
 	});
 	response.end(`${JSON.stringify(body, null, 2)}\n`);
+}
+
+function securityHeaders(contentTypeValue = "") {
+	return {
+		"content-security-policy": [
+			"default-src 'self'",
+			"script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com",
+			"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+			"font-src 'self' https://fonts.gstatic.com data:",
+			"img-src 'self' data: https:",
+			"connect-src 'self' https://accounts.google.com https://www.googleapis.com https://challenges.cloudflare.com",
+			"frame-src https://accounts.google.com",
+			"frame-ancestors 'none'",
+			"base-uri 'self'",
+			"form-action 'self'",
+			"object-src 'none'"
+		].join("; "),
+		"cross-origin-opener-policy": "same-origin-allow-popups",
+		"permissions-policy": "camera=(), microphone=(), geolocation=(), payment=()",
+		"referrer-policy": "strict-origin-when-cross-origin",
+		"x-content-type-options": "nosniff",
+		"x-frame-options": "DENY"
+	};
 }
 
 function contentType(filePath) {

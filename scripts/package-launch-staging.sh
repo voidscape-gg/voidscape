@@ -11,7 +11,7 @@ WS_PORT="43496"
 PORTAL_URL=""
 WEB_URL=""
 WS_URL=""
-LAUNCH_AT="2026-07-11T18:00:00Z"
+LAUNCH_AT="2026-07-18T18:00:00Z"
 SERVER_PRESET="$ROOT/server/preservation.conf"
 SKIP_BUILD=0
 SKIP_WEB_BUILD=0
@@ -33,6 +33,7 @@ Usage: scripts/package-launch-staging.sh --host HOST --portal-url URL --web-url 
 Builds a staging bundle for the launch flow:
   - server/core.jar and server/plugins.jar
   - a production-like local.launch-staging.conf with command lockdown on
+  - the headless-player runtime, systemd units, and operator runbooks for /opt/voidscape
   - web/portal plus a launch-signup portal.env template
   - dist/web-teavm staged as play/
   - a staging-configured desktop launcher jar and sidecar properties
@@ -49,8 +50,9 @@ Options:
   --ws-port PORT           Game WebSocket port. Default: 43496.
   --ws-url URL             Public WSS URL for /play verification.
                            Default: <portal-url>/play/ws/ converted to wss://.
-  --launch-at ISO          Launch timestamp. Default: 2026-07-11T18:00:00Z.
-  --server-preset FILE     Source config for generated local.launch-staging.conf.
+  --launch-at ISO          Launch timestamp. Default: 2026-07-18T18:00:00Z.
+  --server-preset FILE     Secret-free base config for generated local.launch-staging.conf.
+                           The reviewed launch contract is applied afterward.
                            Default: server/preservation.conf.
   --output-dir DIR         Bundle output directory. Default: dist/launch-staging.
   --skip-build             Reuse existing server/client/launcher jars.
@@ -253,45 +255,66 @@ CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "==> Packaging server artifacts"
 cp "$ROOT/server/core.jar" "$OUTPUT_DIR/server/core.jar"
 cp "$ROOT/server/plugins.jar" "$OUTPUT_DIR/server/plugins.jar"
+helper_tmp="$(mktemp -d "${TMPDIR:-/tmp}/voidscape-portal-helper.XXXXXX")"
+(
+	cd "$helper_tmp"
+	jar xf "$ROOT/server/core.jar" \
+		com/openrsc/server/util/BCrypt.class \
+		com/openrsc/server/util/rsc/PortalPasswordHasher.class
+	jar cf "$OUTPUT_DIR/server/portal-password-helper.jar" com
+)
+rm -rf "$helper_tmp"
 bundle_copy_dir "$ROOT/server/database" "$OUTPUT_DIR/server/database"
+bundle_copy_dir "$ROOT/server/conf/server/defs" "$OUTPUT_DIR/server/conf/server/defs"
 
-python3 - "$SERVER_PRESET" "$OUTPUT_DIR/server/local.launch-staging.conf" "$VERSION" "$GAME_PORT" "$WS_PORT" <<'PY'
-import re
-import sys
-from pathlib import Path
+python3 scripts/generate-launch-server-config.py \
+	"$SERVER_PRESET" \
+	"$OUTPUT_DIR/server/local.launch-staging.conf" \
+	--client-version "$VERSION" \
+	--server-port "$GAME_PORT" \
+	--ws-port "$WS_PORT"
+cp "$ROOT/scripts/launch-config-contract.json" \
+	"$OUTPUT_DIR/server/launch-config-contract.json"
 
-source, target, client_version, server_port, ws_port = sys.argv[1:]
-text = Path(source).read_text()
-updates = {
-    "server_name": "Voidscape",
-    "server_name_welcome": "Voidscape",
-    "welcome_text": "Welcome to Voidscape.",
-    "client_version": client_version,
-    "enforce_custom_client_version": "true",
-    "server_port": server_port,
-    "ws_server_port": ws_port,
-    "want_feature_websockets": "true",
-    "member_world": "true",
-    "want_pcap_logging": "false",
-    "production_command_lockdown": "true",
-    "want_email": "false",
-    "want_packet_register": "true",
-}
-
-for key, value in updates.items():
-    pattern = re.compile(rf"(^\s*{re.escape(key)}\s*:\s*)[^#\n]*(.*)$", re.MULTILINE)
-    if pattern.search(text):
-        def repl(match, v=value):
-            suffix = match.group(2)
-            if suffix and not suffix.startswith(" "):
-                suffix = " " + suffix
-            return f"{match.group(1)}{v}{suffix}"
-        text = pattern.sub(repl, text, count=1)
-    else:
-        text += f"\n\t{key}: {value}\n"
-
-Path(target).write_text(text)
-PY
+echo "==> Packaging headless-player runtime"
+mkdir -p \
+	"$OUTPUT_DIR/scripts" \
+	"$OUTPUT_DIR/tools/voidbot" \
+	"$OUTPUT_DIR/tools/headless_players" \
+	"$OUTPUT_DIR/Deployment_Scripts/systemd" \
+	"$OUTPUT_DIR/docs/subsystems"
+for name in \
+	headless-player-helper.py \
+	headless-players.sh \
+	provision-headless-players.sh \
+	run-headless-controller.sh \
+	run-headless-player.sh
+do
+	cp -p "$ROOT/scripts/$name" "$OUTPUT_DIR/scripts/$name"
+done
+for name in cli.py protocol.py voidbot voidbotd.py; do
+	cp -p "$ROOT/tools/voidbot/$name" "$OUTPUT_DIR/tools/voidbot/$name"
+done
+for name in controller.py roster.json; do
+	cp -p "$ROOT/tools/headless_players/$name" "$OUTPUT_DIR/tools/headless_players/$name"
+done
+for name in \
+	voidscape-headless.target \
+	voidscape-headless@.service \
+	voidscape-headless-controller.service
+do
+	cp -p "$ROOT/Deployment_Scripts/systemd/$name" \
+		"$OUTPUT_DIR/Deployment_Scripts/systemd/$name"
+done
+cat > "$OUTPUT_DIR/Deployment_Scripts/systemd/voidscape-headless.env" <<EOF
+HEADLESS_SERVER_CONFIG=/opt/voidscape/server/local.conf
+HEADLESS_GAME_PORT=$GAME_PORT
+HEADLESS_DEFS_DIR=/opt/voidscape/server/conf/server/defs
+VOIDBOT_CLIENT_VERSION=$VERSION
+EOF
+cp -p "$ROOT/docs/subsystems/headless-players.md" \
+	"$OUTPUT_DIR/docs/subsystems/headless-players.md"
+cp -p "$ROOT/docs/OPERATIONS.md" "$OUTPUT_DIR/docs/OPERATIONS.md"
 
 echo "==> Packaging portal"
 bundle_copy_dir "$ROOT/web/portal" "$OUTPUT_DIR/portal/web-portal"
@@ -307,8 +330,39 @@ PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db
 PORTAL_INTEGRITY_SNAPSHOT=/var/lib/voidscape-portal/integrity-summary.json
 PORTAL_INTEGRITY_FINDINGS=/var/lib/voidscape-portal/integrity-findings.json
 PORTAL_PUBLIC_ORIGIN=$PORTAL_URL
-PORTAL_SIGNUP_IP_DAILY_LIMIT=10
-PORTAL_STARTER_IP_DAILY_LIMIT=10
+PORTAL_EMAIL_VERIFICATION_REQUIRED=1
+PORTAL_EMAIL_VERIFICATION_TTL_HOURS=48
+PORTAL_EMAIL_VERIFICATION_IP_LIMIT=3
+PORTAL_EMAIL_VERIFICATION_EMAIL_LIMIT=3
+PORTAL_EMAIL_VERIFICATION_WINDOW_MINUTES=60
+PORTAL_PASSWORD_RESET_TTL_MINUTES=30
+PORTAL_PASSWORD_RESET_IP_LIMIT=5
+PORTAL_PASSWORD_RESET_ACCOUNT_LIMIT=3
+PORTAL_PASSWORD_RESET_WINDOW_MINUTES=60
+PORTAL_LEGACY_CLAIM_TTL_MINUTES=30
+PORTAL_LEGACY_CLAIM_IP_LIMIT=10
+PORTAL_LEGACY_CLAIM_CHARACTER_LIMIT=5
+PORTAL_LEGACY_CLAIM_WINDOW_MINUTES=60
+PORTAL_SENSITIVE_ACTION_WINDOW_MINUTES=10
+PORTAL_GAME_PASSWORD_RESET_LIMIT=5
+PORTAL_GAME_PASSWORD_RESET_WINDOW_MINUTES=60
+PORTAL_GAME_PASSWORD_HELPER_CLASSPATH=/opt/voidscape/server/portal-password-helper.jar
+PORTAL_SIGNUP_IP_HOURLY_LIMIT=3
+PORTAL_SIGNUP_IP_DAILY_LIMIT=5
+PORTAL_SIGNUP_SUBNET_HOURLY_LIMIT=20
+PORTAL_SIGNUP_SUBNET_DAILY_LIMIT=50
+PORTAL_CHARACTER_ACCOUNT_HOURLY_LIMIT=5
+PORTAL_CHARACTER_ACCOUNT_DAILY_LIMIT=10
+PORTAL_CHARACTER_IP_HOURLY_LIMIT=10
+PORTAL_CHARACTER_IP_DAILY_LIMIT=20
+PORTAL_CHARACTER_SUBNET_HOURLY_LIMIT=50
+PORTAL_CHARACTER_SUBNET_DAILY_LIMIT=100
+# Comma/space-separated IPv4 CIDRs; use /32 entries for exact-IP blocks.
+PORTAL_BLOCKED_IP_CIDRS=
+PORTAL_PROXY_IP_CIDRS=
+PORTAL_PROXY_SIGNUP_IP_DAILY_LIMIT=1
+PORTAL_PROXY_CHARACTER_IP_DAILY_LIMIT=1
+PORTAL_STARTER_IP_DAILY_LIMIT=0
 PORTAL_ABUSE_HASH_SALT=CHANGE_ME_STABLE_PRIVATE_SECRET
 # PORTAL_ADMIN_TOKEN=CHANGE_ME_LONG_RANDOM_SECRET
 # PORTAL_ANDROID_APK overrides the APK served by /downloads/android-apk.
@@ -316,14 +370,14 @@ PORTAL_ABUSE_HASH_SALT=CHANGE_ME_STABLE_PRIVATE_SECRET
 # PORTAL_ANDROID_APK=/opt/voidscape/downloads/voidscape-staging-release.apk
 # PORTAL_GOOGLE_CLIENT_ID=
 # PORTAL_GOOGLE_JWKS_URL=https://www.googleapis.com/oauth2/v3/certs
-# Resend email delivery is optional for staging; enable dry-run for smoke tests
-# or set a real API key once DNS is verified.
+# Verified-email registration and password recovery require Resend delivery.
+# Use dry-run only for non-public staging smoke tests.
 # PORTAL_EMAIL_PROVIDER=resend
 # PORTAL_EMAIL_DRY_RUN=1
 # PORTAL_RESEND_API_KEY=
 # PORTAL_EMAIL_FROM="Voidscape <launch@voidscape.gg>"
 # PORTAL_EMAIL_REPLY_TO=support@voidscape.gg
-# PORTAL_REQUIRE_EMAIL=1
+PORTAL_REQUIRE_EMAIL=1
 # PORTAL_TURNSTILE_SITE_KEY=
 # PORTAL_TURNSTILE_SECRET=
 # PORTAL_PAYMENT_PROVIDER=
@@ -401,7 +455,7 @@ if [[ "$SKIP_ANDROID" -eq 0 ]]; then
 	echo "==> Packaging Android APK for staging host"
 	ANDROID_BACKUP="$(mktemp)"
 	cp "$ANDROID_CONFIG" "$ANDROID_BACKUP"
-	python3 - "$ANDROID_CONFIG" "$GAME_HOST" "$GAME_PORT" "$PORTAL_URL/#account" "$PORTAL_URL/#security" <<'PY'
+	python3 - "$ANDROID_CONFIG" "$GAME_HOST" "$GAME_PORT" "$PORTAL_URL/portal?auth=login" "$PORTAL_URL/portal?auth=recovery" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -459,17 +513,45 @@ cat > "$OUTPUT_DIR/VERIFY-STAGING.sh" <<EOF
 set -euo pipefail
 BUNDLE_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="\${VOIDSCAPE_REPO_ROOT:-\$(pwd)}"
-EXTRA_ARGS=()
+if [[ -z "\${VOIDSCAPE_DEPLOYED_SERVER_CONFIG:-}" ]]; then
+	echo "ERROR: set VOIDSCAPE_DEPLOYED_SERVER_CONFIG to a copy of the actual deployed local.conf" >&2
+	exit 2
+fi
+if [[ ! -f "\$VOIDSCAPE_DEPLOYED_SERVER_CONFIG" ]]; then
+	echo "ERROR: deployed server config copy not found: \$VOIDSCAPE_DEPLOYED_SERVER_CONFIG" >&2
+	exit 2
+fi
+if [[ -z "\${VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG:-}" ]]; then
+	echo "ERROR: set VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG to a copy of the actual deployed connections.conf" >&2
+	exit 2
+fi
+if [[ ! -f "\$VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG" ]]; then
+	echo "ERROR: deployed connections config copy not found: \$VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG" >&2
+	exit 2
+fi
+for arg in "\$@"; do
+	case "\$arg" in
+		--run-signup|--skip-signup|--server-config|--connections-config|--skip-server-config)
+			echo "ERROR: VERIFY-STAGING.sh owns \$arg; use its VOIDSCAPE_* environment controls" >&2
+			exit 2
+			;;
+	esac
+done
+SIGNUP_MODE=(--skip-signup)
+if [[ "\${VOIDSCAPE_VERIFY_RUN_SIGNUP:-0}" == "1" ]]; then
+	SIGNUP_MODE=(--run-signup)
+fi
 "\$REPO_ROOT/scripts/verify-launch-staging.mjs" \\
   --portal-url "$PORTAL_URL/" \\
   --web-url "$WEB_URL" \\
   --ws "$WS_URL" \\
   --expected-build-manifest "\$BUNDLE_DIR/play/voidscape-web-build.json" \\
-  --server-config "\$BUNDLE_DIR/server/local.launch-staging.conf" \\
+  --server-config "\$VOIDSCAPE_DEPLOYED_SERVER_CONFIG" \\
+  --connections-config "\$VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG" \\
   --expected-client-version "$VERSION" \\
   --out "\$BUNDLE_DIR/logs/verify-staging-\$(date -u +%Y%m%dT%H%M%SZ)" \\
-  "\${EXTRA_ARGS[@]}" \\
-  --run-signup
+  "\${SIGNUP_MODE[@]}" \\
+  "\$@"
 EOF
 chmod +x "$OUTPUT_DIR/VERIFY-STAGING.sh"
 
@@ -489,9 +571,14 @@ Client version: $VERSION
 
 ## Files
 
-- \`server/core.jar\` and \`server/plugins.jar\`
+- \`server/core.jar\`, \`server/plugins.jar\`, and the isolated \`server/portal-password-helper.jar\`
 - \`server/database/\`
+- \`server/conf/server/defs/\`
 - \`server/local.launch-staging.conf\`
+- \`server/launch-config-contract.json\`
+- \`scripts/\`, \`tools/voidbot/\`, and \`tools/headless_players/\` fleet runtime files
+- \`Deployment_Scripts/systemd/voidscape-headless*\` fleet units and generated non-secret environment
+- \`docs/subsystems/headless-players.md\` and \`docs/OPERATIONS.md\` operator runbooks
 - \`portal/web-portal/\`
 - \`portal/portal.env.staging\`
 - \`play/\`
@@ -505,37 +592,109 @@ Suggested single-host layout:
 \`\`\`text
 /opt/voidscape/server/core.jar
 /opt/voidscape/server/plugins.jar
+/opt/voidscape/server/portal-password-helper.jar
 /opt/voidscape/server/database/
+/opt/voidscape/server/conf/server/defs/
 /opt/voidscape/server/local.conf
+/opt/voidscape/scripts/
+/opt/voidscape/tools/voidbot/
+/opt/voidscape/tools/headless_players/
+/opt/voidscape/docs/subsystems/headless-players.md
+/opt/voidscape/docs/OPERATIONS.md
 /opt/voidscape/web/portal/
 /opt/voidscape/web/play/
+/etc/systemd/system/voidscape-headless.target
+/etc/systemd/system/voidscape-headless@.service
+/etc/systemd/system/voidscape-headless-controller.service
+/etc/voidscape/headless.env
 /var/lib/voidscape-portal/
 \`\`\`
 
-Copy \`server/local.launch-staging.conf\` to the deployed server's \`local.conf\`
-or merge its release-critical values into the real private config:
+Copy \`server/local.launch-staging.conf\` to the deployed server's \`local.conf\`,
+or merge every value in \`server/launch-config-contract.json\` plus this bundle's
+\`client_version: $VERSION\`, \`server_port: $GAME_PORT\`, and
+\`ws_server_port: $WS_PORT\` into the real private config. The hosted verifier
+rejects a missing, changed, or duplicate contract key.
 
-- \`client_version: $VERSION\`
-- \`enforce_custom_client_version: true\`
-- \`production_command_lockdown: true\`
-- \`want_email: false\`
-- \`want_packet_register: true\`
-- \`want_pcap_logging: false\`
-- \`member_world: true\`
-- \`want_feature_websockets: true\`
+Copy the bundle's \`scripts/\`, \`tools/\`, \`docs/\`, and
+\`server/conf/server/defs/\` trees to the same paths below \`/opt/voidscape\`.
+Before installing or starting the fleet, create its ten static nologin service users
+with primary group \`voidscape\` (the unit does not use \`DynamicUser=\`):
+
+\`\`\`bash
+set -euo pipefail
+voidscape_gid="\$(getent group voidscape | cut -d: -f3)"
+uid_min="\$(awk '\$1 == "UID_MIN" { print \$2; exit }' /etc/login.defs)"
+test -n "\$voidscape_gid"
+test -n "\$uid_min"
+for profile in fireee ch0p ultraz vinny six-seven college pknskate p-h-i-s-h fulani az; do
+  account="voidscape-headless-\$profile"
+  if ! getent passwd "\$account" >/dev/null; then
+    useradd --system --no-create-home --home-dir /nonexistent \\
+      --shell /usr/sbin/nologin --gid voidscape "\$account"
+  fi
+  IFS=: read -r name _ uid gid _ home shell < <(getent passwd "\$account")
+  test "\$name" = "\$account"
+  test "\$uid" -gt 0
+  test "\$uid" -lt "\$uid_min"
+  test "\$gid" = "\$voidscape_gid"
+  test "\$home" = /nonexistent
+  test "\$shell" = /usr/sbin/nologin
+  test "\$(id -nG "\$account")" = voidscape
+done
+install -d -o root -g voidscape -m 0710 /etc/voidscape
+install -d -o root -g root -m 0700 /etc/voidscape/headless-players
+\`\`\`
+
+Install the three \`voidscape-headless*\` unit files from
+\`Deployment_Scripts/systemd/\` into \`/etc/systemd/system/\`. Install the generated
+\`Deployment_Scripts/systemd/voidscape-headless.env\` as root-owned mode 0644
+\`/etc/voidscape/headless.env\`, run \`systemctl daemon-reload\`, and verify both
+service definitions still set
+\`LimitCORE=0\`. Provisioning is deliberately SQLite-only and must fail closed on
+another active store; follow the packaged \`docs/subsystems/headless-players.md\`.
+The fleet target never starts a game-server service. For a non-default isolated
+world, create the documented non-secret \`/etc/voidscape/headless.env\` with its
+active config path, game port, definitions path, and exact client version before
+starting the target.
+Do not start the target until the ordinary accounts and root-owned mode-0600
+credential/receipt files exist and a database-paired encrypted off-host backup has
+been created by the packaged \`docs/OPERATIONS.md\` procedure. Credentials are
+intentionally never bundled, and no plaintext credential archive is permitted.
+
+For this packaged world, provision only with every selected-world input explicit:
+
+\`\`\`bash
+cd /opt/voidscape
+HEADLESS_CREDENTIAL_DIR=/etc/voidscape/headless-players \\
+HEADLESS_SERVER_CONFIG=/opt/voidscape/server/local.conf \\
+HEADLESS_CONNECTIONS_CONFIG=/opt/voidscape/server/connections.conf \\
+HEADLESS_DATABASE=/opt/voidscape/server/inc/sqlite/voidscape.db \\
+HEADLESS_PASSWORD_HELPER_CLASSPATH=/opt/voidscape/server/portal-password-helper.jar \\
+HEADLESS_GAME_HOST=127.0.0.1 \\
+HEADLESS_GAME_PORT=$GAME_PORT \\
+VOIDBOT_CLIENT_VERSION=$VERSION \\
+  scripts/provision-headless-players.sh
+\`\`\`
 
 Copy \`portal/portal.env.staging\` to the host, replace the two
 \`CHANGE_ME\` values, and keep \`PORTAL_GOOGLE_CLIENT_ID\` unset unless Google
-is intentionally being tested. Enable the Resend email variables only after the
-sender domain is verified, or use \`PORTAL_EMAIL_DRY_RUN=1\` for staging smoke.
+is intentionally being tested. Verified signup and password recovery require
+working Resend delivery; use \`PORTAL_EMAIL_DRY_RUN=1\` only for private staging.
 
 ## Verify
 
-After services restart and HTTPS/WSS are reachable:
+After services restart and HTTPS/WSS are reachable, point the gate at copies of
+the configs the running server actually loaded. Verification is non-mutating by
+default; set \`VOIDSCAPE_VERIFY_RUN_SIGNUP=1\` only for an isolated staging DB when
+one real staged account and character should be created:
 
 \`\`\`bash
 cd $OUTPUT_DIR
-VOIDSCAPE_REPO_ROOT=/path/to/voidscape-source ./VERIFY-STAGING.sh
+VOIDSCAPE_REPO_ROOT=/path/to/voidscape-source \\
+VOIDSCAPE_DEPLOYED_SERVER_CONFIG=/path/to/deployed-local.conf \\
+VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG=/path/to/deployed-connections.conf \\
+  ./VERIFY-STAGING.sh
 \`\`\`
 
 For the final launch candidate, also run Android emulator/physical smoke and a
@@ -566,7 +725,11 @@ front of people. Fill the blanks with the actual deployed paths from the host.
   - \`PORTAL_ABUSE_HASH_SALT\`
   - \`PORTAL_ADMIN_TOKEN\`, if staff admin endpoints are enabled
 - Keep \`PORTAL_GOOGLE_CLIENT_ID\` unset unless Google sign-in is intentionally enabled and tested.
-- If email is enabled, confirm \`PORTAL_EMAIL_PROVIDER=resend\`, \`PORTAL_RESEND_API_KEY\`, and \`PORTAL_PUBLIC_ORIGIN\` are set, then check \`/api/health.config.email.configured\`.
+- Confirm \`PORTAL_EMAIL_VERIFICATION_REQUIRED=1\`, \`PORTAL_REQUIRE_EMAIL=1\`, \`PORTAL_EMAIL_PROVIDER=resend\`, \`PORTAL_RESEND_API_KEY\`, and \`PORTAL_PUBLIC_ORIGIN\` are set, then check \`/api/health.config.email.configured\` and \`.verificationRequired\`.
+- Confirm \`PORTAL_GAME_PASSWORD_HELPER_CLASSPATH=/opt/voidscape/server/portal-password-helper.jar\` and that the packaged helper jar passes its stdin check before enabling Character Manager password changes or older native-account claims.
+- Confirm all ten static \`voidscape-headless-<profile>\` identities pass the exact UID, primary-group, home, shell, and supplementary-group checks in \`DEPLOYMENT.md\`; confirm the installed player/controller units both retain \`LimitCORE=0\`.
+- Install \`Deployment_Scripts/systemd/voidscape-headless.env\` as root-owned mode 0644 \`/etc/voidscape/headless.env\` so this bundle's generated game port and client version reach every fleet service.
+- Confirm an approved encryption recipient and off-host sink are ready for the database-paired backup of \`/etc/voidscape/headless-players\`. Never stage, bundle, or archive those files in plaintext.
 - If Android is public, prefer a release APK bundle, confirm \`MANIFEST.txt\` says \`android_apk_type=release\`, and set \`PORTAL_ANDROID_APK\` to that APK if it lives outside the default build path.
 
 ## Backup Paths
@@ -577,27 +740,66 @@ Record these before overwriting live files:
 Portal backup:
 Play/web-client backup:
 Server jar/config backup:
-Database backup:
+Database backup (paired with headless credentials):
+Headless credential/receipt backup (encrypted, off-host):
 Launcher/APK public-download backup:
 \`\`\`
 
 Suggested single-host backup commands:
 
 \`\`\`bash
+set -euo pipefail
 stamp="\$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p /opt/voidscape/backups
 tar -czf "/opt/voidscape/backups/portal-prelaunch-\$stamp.tgz" -C /opt/voidscape/web portal
 tar -czf "/opt/voidscape/backups/play-prelaunch-\$stamp.tgz" -C /opt/voidscape/web play
-tar -czf "/opt/voidscape/backups/server-prelaunch-\$stamp.tgz" -C /opt/voidscape server/core.jar server/plugins.jar server/local.conf
+tar -czf "/opt/voidscape/backups/server-prelaunch-\$stamp.tgz" -C /opt/voidscape server/core.jar server/plugins.jar server/portal-password-helper.jar server/local.conf
+systemctl stop voidscape-headless.target
+python3 /opt/voidscape/scripts/headless-player-helper.py check-sqlite-roster-offline \\
+  --roster /opt/voidscape/tools/headless_players/roster.json \\
+  --connections-config /opt/voidscape/server/connections.conf \\
+  --server-config /opt/voidscape/server/local.conf \\
+  --database /opt/voidscape/server/inc/sqlite/voidscape.db >/dev/null
 sqlite3 /opt/voidscape/server/inc/sqlite/voidscape.db ".backup '/opt/voidscape/backups/voidscape-\$stamp.sqlite'"
+headless_archive="/mnt/offsite-encrypted/voidscape-headless-\$stamp.tar.age"
+credential_members=()
+for profile in fireee ch0p ultraz vinny six-seven college pknskate p-h-i-s-h fulani az; do
+  credential_members+=("headless-players/\$profile.password")
+  credential_members+=("headless-players/\$profile.provisioned")
+done
+tar --numeric-owner -C /etc/voidscape -cf - "\${credential_members[@]}" |
+  age --encrypt --recipient '<AGE_RECIPIENT>' > "\$headless_archive"
+test -s "\$headless_archive"
+actual_members="\$(mktemp)"
+expected_members="\$(mktemp)"
+trap 'rm -f "\$actual_members" "\$expected_members"' EXIT
+age --decrypt --identity /root/.config/age/keys.txt "\$headless_archive" |
+  tar -tf - | LC_ALL=C sort > "\$actual_members"
+{
+  for profile in fireee ch0p ultraz vinny six-seven college pknskate p-h-i-s-h fulani az; do
+    printf 'headless-players/%s.password\\n' "\$profile"
+    printf 'headless-players/%s.provisioned\\n' "\$profile"
+  done
+} | LC_ALL=C sort > "\$expected_members"
+test "\$(wc -l < "\$actual_members" | tr -d ' ')" -eq 20
+test "\$(grep -Ec '^headless-players/[^/]+[.](password|provisioned)\$' "\$actual_members")" -eq 20
+cmp -s "\$expected_members" "\$actual_members"
+rm -f "\$actual_members" "\$expected_members"
+trap - EXIT
 \`\`\`
 
 If production is MariaDB, use the matching dump/restore commands from
-\`docs/OPERATIONS.md\` instead of the SQLite backup line.
+\`docs/OPERATIONS.md\` instead of the SQLite backup line. The fleet provisioning
+script itself is SQLite-only and must fail closed on MariaDB/MySQL. The encrypted
+credential command streams directly to its off-host artifact; never replace it with
+a plaintext tarball.
 
 ## Deploy
 
-- Copy \`server/core.jar\`, \`server/plugins.jar\`, and the release-critical config values into the live server path.
+- Copy \`server/core.jar\`, \`server/plugins.jar\`, \`server/portal-password-helper.jar\`, and the release-critical config values into the live server path.
+- Copy \`server/conf/server/defs/\`, \`scripts/\`, \`tools/voidbot/\`, \`tools/headless_players/\`, and \`docs/\` into the matching paths below \`/opt/voidscape\`.
+- Create the exact ten static users from \`docs/subsystems/headless-players.md\`; install the three \`Deployment_Scripts/systemd/voidscape-headless*\` units, run \`systemctl daemon-reload\`, and verify both service kinds report \`LimitCORE=0\`.
+- Install \`Deployment_Scripts/systemd/voidscape-headless.env\` as \`/etc/voidscape/headless.env\` and provision the ordinary accounts only through the explicit SQLite fail-closed command in \`DEPLOYMENT.md\`. Start \`voidscape-headless.target\` only after its root-owned external credentials exist and the paired database plus encrypted off-host credential backup above has succeeded.
 - Copy \`portal/web-portal/\` to the live portal static/app path.
 - Copy \`play/\` to the live \`/play/\` static root.
 - Copy \`launcher/VoidscapeLauncher-staging.jar\` and \`launcher/voidscape-launcher.properties\` to the public download path when ready.
@@ -610,7 +812,10 @@ Run this exact bundle verifier after syncing and restarting:
 
 \`\`\`bash
 cd <synced-bundle-dir>
-VOIDSCAPE_REPO_ROOT=/path/to/voidscape-source ./VERIFY-STAGING.sh
+VOIDSCAPE_REPO_ROOT=/path/to/voidscape-source \\
+VOIDSCAPE_DEPLOYED_SERVER_CONFIG=/path/to/deployed-local.conf \\
+VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG=/path/to/deployed-connections.conf \\
+  ./VERIFY-STAGING.sh
 \`\`\`
 
 Then archive this handoff file, \`MANIFEST.txt\`, and the verifier output with
@@ -620,12 +825,13 @@ the backup paths above.
 
 Use rollback only after stopping or draining player traffic.
 
-1. Stop or gate the portal and game server.
+1. Stop \`voidscape-headless.target\`, then stop or gate the portal and game server.
 2. Restore the previous portal directory from the portal backup.
 3. Restore the previous \`/play/\` directory from the web-client backup.
 4. Restore previous server jars and config from the server backup.
-5. Restore the database backup only if the failed release changed persistent state or corrupted accounts.
-6. Restart services and rerun the non-mutating health checks:
+5. Restore the database backup only if the failed release changed persistent state or corrupted accounts. If fleet rows or credentials changed, keep the target stopped and restore the paired encrypted credential archive before verification.
+6. Require \`check-sqlite-roster-offline\` to pass against the restored rows, then rerun the fleet provisioning verifier; stop on any online-row, receipt, password, or store mismatch. A legacy snapshot containing fleet \`online=1\` flags may be reconciled only by booting the game server with the fleet still disabled so normal startup clears stale sessions, then stopping/gating it again and repeating the offline check.
+7. Restart the game/portal services, start the headless target only after those checks pass, and rerun the non-mutating health checks:
    - \`curl -fsS $PORTAL_URL/api/health\`
    - \`curl -fsS $PORTAL_URL/api/public\`
    - \`scripts/verify-web-teavm-deployment.sh $WEB_URL --expected-build-manifest <previous-manifest> --deep-manifest\`
@@ -653,6 +859,12 @@ Verified at:
 \`\`\`
 EOF
 
+if find "$OUTPUT_DIR" -type f \( -name '*.password' -o -name '*.provisioned' \) \
+	-print -quit | grep -q .; then
+	echo "ERROR: refusing to package headless credential or receipt files" >&2
+	exit 1
+fi
+
 cat > "$OUTPUT_DIR/MANIFEST.txt" <<EOF
 created_at=$CREATED_AT
 commit=$FULL_COMMIT
@@ -666,6 +878,16 @@ web_url=$WEB_URL
 ws_url=$WS_URL
 server_core_sha256=$(sha256_file "$OUTPUT_DIR/server/core.jar")
 server_plugins_sha256=$(sha256_file "$OUTPUT_DIR/server/plugins.jar")
+server_config_sha256=$(sha256_file "$OUTPUT_DIR/server/local.launch-staging.conf")
+launch_config_contract_sha256=$(sha256_file "$ROOT/scripts/launch-config-contract.json")
+portal_password_helper_sha256=$(sha256_file "$OUTPUT_DIR/server/portal-password-helper.jar")
+headless_controller_sha256=$(sha256_file "$OUTPUT_DIR/tools/headless_players/controller.py")
+headless_roster_sha256=$(sha256_file "$OUTPUT_DIR/tools/headless_players/roster.json")
+voidbotd_sha256=$(sha256_file "$OUTPUT_DIR/tools/voidbot/voidbotd.py")
+headless_target_sha256=$(sha256_file "$OUTPUT_DIR/Deployment_Scripts/systemd/voidscape-headless.target")
+headless_env_sha256=$(sha256_file "$OUTPUT_DIR/Deployment_Scripts/systemd/voidscape-headless.env")
+headless_runbook_sha256=$(sha256_file "$OUTPUT_DIR/docs/subsystems/headless-players.md")
+operations_runbook_sha256=$(sha256_file "$OUTPUT_DIR/docs/OPERATIONS.md")
 launcher_sha256=$(sha256_file "$OUTPUT_DIR/launcher/VoidscapeLauncher-staging.jar")
 web_build_manifest_sha256=$(sha256_file "$OUTPUT_DIR/play/voidscape-web-build.json")
 EOF
