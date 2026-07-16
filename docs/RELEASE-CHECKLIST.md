@@ -2,6 +2,11 @@
 
 Use this before any player-facing test, public weekend, or real launch. The goal is not ceremony; it is catching avoidable drift before players do.
 
+For the July 18, 2026 public opening, the current status, owners, evidence, and
+protected pre-signed-player cohort are tracked in
+`docs/LAUNCH-READINESS-2026-07-18.md`. This file remains the reusable normative
+checklist; the dated document is the living execution record.
+
 For a held release candidate, complete the local build, packaging, and evidence gates, then stop at **Held-candidate boundary**. Production deployment, public-link changes, Google Play upload, track rollout, and review submission require a separate explicit go-live decision.
 
 ## Release target
@@ -65,6 +70,9 @@ For a held release candidate, complete the local build, packaging, and evidence 
 - [ ] Newly created public accounts have user rank, not Admin or another staff rank.
 - [ ] Existing-account login tested after migration.
 - [ ] Player save/logout/relogin tested.
+- [ ] Any prelaunch entitlement cohort is frozen from an authoritative source, stored outside Git with a timestamp/count/SHA-256, and reconciled before and after cutover without recording player identities in release evidence.
+- [ ] Every eligible prelaunch account is preserved with exactly one intended entitlement, while QA, headless, banned, disposable, and test accounts are excluded unless explicitly approved.
+- [ ] The free-card entitlement is idempotent: available, claimed, full-inventory, repeat-claim, and linked-character cases are verified without double minting or losing the reservation.
 
 ## Server smoke test
 
