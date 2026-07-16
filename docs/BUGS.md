@@ -305,6 +305,17 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Intake — dump raw bug reports here
 
+- Pre-signed-player free subscription cards are required per character, but the
+  current `starter_card:<webAccountId>` marker is global to the parent account: the
+  first character changes it to claimed for every sibling. A qualifying account with
+  ten characters must receive ten independently claimable cards, while each character
+  may claim only once. The portal entitlement, legacy-code conversion, launch reset,
+  vendor claim, create/link hooks, deletion policy, and regression tests all need a
+  per-character campaign ledger; owner clarified this launch contract on 2026-07-16.
+- Production portal-store loading treats a missing, unreadable, or malformed existing
+  JSON store as an empty store. A later write could persist that empty state and lose
+  the protected pre-signup roster; production startup must fail closed while retaining
+  an explicit first-run initialization path.
 - Headless Karamja traveller death recovery can strand a session in
   `journey-funding-missing`: Ultraz respawned at `(120,648)` with only item ids
   466/473/476, no coins or sellable starter sword, and an empty bank. The controller
