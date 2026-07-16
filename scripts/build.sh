@@ -76,6 +76,11 @@ python3 "$SCRIPT_DIR/test-skill-batching-coverage.py"
 echo "==> Testing avatar runtime directory creation"
 "$SCRIPT_DIR/test-avatar-file-store-java.sh"
 
+echo "==> Testing portal public-static boundary"
+"$SCRIPT_DIR/test-portal-static-boundary.sh"
+python3 "$SCRIPT_DIR/test-package-portal-runtime.py"
+python3 "$SCRIPT_DIR/test-launch-staging-config.py"
+
 echo "==> Testing gathering input buffer policy"
 "$SCRIPT_DIR/test-gather-repeat-buffer-java.sh"
 python3 "$SCRIPT_DIR/test-gather-input-buffer-contract.py"

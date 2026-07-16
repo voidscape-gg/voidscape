@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { execFile as execFileCallback, spawn } from "node:child_process";
 import { createCipheriv, createDecipheriv, createHash, createPublicKey, randomBytes, scrypt as scryptCallback, timingSafeEqual, verify as verifySignature } from "node:crypto";
 import { promisify } from "node:util";
@@ -12,6 +12,13 @@ const scrypt = promisify(scryptCallback);
 const execFile = promisify(execFileCallback);
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(rootDir, "../..");
+const publicStaticContract = await loadPublicStaticContract(
+	join(rootDir, "public-static-contract.json")
+);
+const publicStaticRoutes = new Map(Object.entries(publicStaticContract.routes));
+const publicStaticRootFiles = new Set(publicStaticContract.rootFiles);
+const publicStaticAssetFiles = new Set(publicStaticContract.assetFiles);
+const publicStaticNumericPngDirectories = new Set(publicStaticContract.numericPngDirectories);
 const port = Number(process.env.PORT || 8788);
 const bindHost = process.env.PORTAL_BIND_HOST || "127.0.0.1";
 const trustProxyHeader = process.env.PORTAL_TRUST_PROXY === "1";
@@ -755,7 +762,18 @@ async function handleRequest(request, response) {
 		await serveOpenRscAvatar(response, url.pathname);
 		return;
 	}
-	await serveStatic(request, response, url.pathname);
+	await serveStatic(request, response, rawRequestPathname(request.url));
+}
+
+function rawRequestPathname(requestUrl) {
+	const raw = String(requestUrl || "");
+	const queryIndex = raw.indexOf("?");
+	const fragmentIndex = raw.indexOf("#");
+	const end = Math.min(
+		queryIndex === -1 ? raw.length : queryIndex,
+		fragmentIndex === -1 ? raw.length : fragmentIndex
+	);
+	return raw.slice(0, end);
 }
 
 async function handleApi(request, response, url) {
@@ -4012,29 +4030,10 @@ function safeReturnTo(value) {
 }
 
 async function serveStatic(request, response, pathname) {
-	const targetPath = pathname === "/"
-		? "/index.html"
-		: pathname === "/portal" || pathname === "/portal/"
-			? "/portal.html"
-			: pathname === "/privacy"
-				? "/privacy.html"
-				: pathname === "/community-rules"
-					? "/community-rules.html"
-					: pathname === "/data-deletion"
-						? "/data-deletion.html"
-						: pathname === "/features"
-							? "/features.html"
-								: pathname === "/loot-editor" || pathname === "/loot-editor/"
-									? "/loot-editor.html"
-										: pathname === "/loot-editor-guide" || pathname === "/loot-editor-guide/"
-											? "/loot-editor-guide.html"
-												: pathname === "/npcs" || pathname === "/drops"
-													? "/npcs.html"
-														: pathname === "/discord"
-															? "/discord.html"
-																: pathname === "/transparency"
-																	? "/transparency.html"
-																	: decodeURIComponent(pathname);
+	const targetPath = publicStaticTarget(pathname);
+	if (!["GET", "HEAD"].includes(request.method || "GET")) {
+		throw new HttpError(405, "method_not_allowed");
+	}
 	const resolved = resolve(rootDir, `.${targetPath}`);
 	const isInsideRoot = relative(rootDir, resolved).split(/[\\/]/)[0] !== "..";
 	if (!isInsideRoot) throw new HttpError(403, "forbidden");
@@ -4042,14 +4041,11 @@ async function serveStatic(request, response, pathname) {
 	let filePath = normalize(resolved);
 	let fileStat;
 	try {
-		fileStat = await stat(filePath);
-		if (fileStat.isDirectory()) {
-			filePath = join(filePath, "index.html");
-			fileStat = await stat(filePath);
-		}
+		fileStat = await lstat(filePath);
 	} catch (error) {
 		throw new HttpError(404, "not_found");
 	}
+	if (!fileStat.isFile()) throw new HttpError(404, "not_found");
 
 	const type = contentType(filePath);
 	const range = request.headers.range;
@@ -4102,6 +4098,90 @@ async function serveStatic(request, response, pathname) {
 		...securityHeaders(type)
 	});
 	response.end(body);
+}
+
+function publicStaticTarget(pathname) {
+	if (!pathname.startsWith("/")
+		|| pathname.includes("%")
+		|| pathname.includes("\\")
+		|| pathname.includes("\0")
+		|| pathname.includes("//")) {
+		throw new HttpError(404, "not_found");
+	}
+
+	const routeTarget = publicStaticRoutes.get(pathname);
+	if (routeTarget) return `/${routeTarget}`;
+
+	const relativePath = pathname.slice(1);
+	if (publicStaticRootFiles.has(relativePath)) return `/${relativePath}`;
+	const segments = relativePath.split("/");
+	if (!relativePath.startsWith("assets/")
+		|| segments.some((segment) => !segment || segment === "." || segment === ".." || segment.startsWith("."))) {
+		throw new HttpError(404, "not_found");
+	}
+	const assetName = segments.at(-1);
+	const assetDirectory = segments.slice(0, -1).join("/");
+	if (publicStaticAssetFiles.has(relativePath)
+		|| (publicStaticNumericPngDirectories.has(assetDirectory) && /^[0-9]+\.png$/.test(assetName))) {
+		return `/${relativePath}`;
+	}
+	throw new HttpError(404, "not_found");
+}
+
+async function loadPublicStaticContract(contractPath) {
+	let contract;
+	try {
+		contract = JSON.parse(await readFile(contractPath, "utf8"));
+	} catch (error) {
+		throw new Error(`Cannot load portal static contract: ${error.message}`);
+	}
+	if (!contract || typeof contract !== "object" || Array.isArray(contract)) {
+		throw new Error("Portal static contract must be an object");
+	}
+	const stringArray = (key) => {
+		const values = contract[key];
+		if (!Array.isArray(values) || values.length === 0
+			|| values.some((value) => typeof value !== "string" || !value)) {
+			throw new Error(`Portal static contract ${key} must be a non-empty string array`);
+		}
+		if (new Set(values).size !== values.length) {
+			throw new Error(`Portal static contract ${key} contains duplicates`);
+		}
+		return values;
+	};
+	const rootFiles = stringArray("rootFiles");
+	const rootFileSet = new Set(rootFiles);
+	if (rootFiles.some((value) => value.includes("/") || value.includes("\\") || value.startsWith("."))) {
+		throw new Error("Portal static root files must be non-hidden basenames");
+	}
+	const safeAssetPath = (value) => {
+		const segments = value.split("/");
+		return segments.length >= 2
+			&& segments[0] === "assets"
+			&& segments.every((segment) => segment
+				&& segment !== "."
+				&& segment !== ".."
+				&& !segment.startsWith(".")
+				&& /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(segment));
+	};
+	const assetFiles = stringArray("assetFiles");
+	if (assetFiles.some((value) => !safeAssetPath(value))) {
+		throw new Error("Portal static asset files contain an unsafe path");
+	}
+	const numericPngDirectories = stringArray("numericPngDirectories");
+	if (numericPngDirectories.some((value) => !safeAssetPath(value) || value.split("/").some((segment) => segment.includes(".")))) {
+		throw new Error("Portal static numeric PNG directories contain an unsafe path");
+	}
+	if (!contract.routes || typeof contract.routes !== "object" || Array.isArray(contract.routes)) {
+		throw new Error("Portal static contract routes must be an object");
+	}
+	for (const [route, target] of Object.entries(contract.routes)) {
+		if (!route.startsWith("/") || route.includes("%") || route.includes("\\") || route.includes("\0")
+			|| route.includes("//") || typeof target !== "string" || !rootFileSet.has(target)) {
+			throw new Error(`Portal static contract contains an unsafe route: ${route}`);
+		}
+	}
+	return { routes: contract.routes, rootFiles, assetFiles, numericPngDirectories };
 }
 
 async function serveDownload(request, response, pathname) {
@@ -8960,7 +9040,9 @@ function contentType(filePath) {
 		".webp": "image/webp",
 		".svg": "image/svg+xml",
 		".mp4": "video/mp4",
-		".webm": "video/webm"
+		".webm": "video/webm",
+		".woff2": "font/woff2",
+		".ttf": "font/ttf"
 	}[ext] || "application/octet-stream";
 }
 

@@ -27,6 +27,19 @@ to resume from these two files alone. Keep every entry self-contained.
 ## Loop state
 
 - **Active bug:** None.
+- **Session preflight 2026-07-16 (VS-089):** branch
+  `codex/release-10139-integration`; VS-088 is committed at `b8ea420f`, its public-safe
+  mirror is committed at `27158188`, and the pre-change full `scripts/build.sh` passes.
+  Static request-path inspection proves that the launch bundle copies the complete
+  tracked portal tree and the Node fallback serves any regular file beneath it. Direct
+  requests for `dev-server.mjs`, `api-smoke.mjs`, `README.md`, SQL schemas, and
+  `build-meta.json` therefore return the files unless an unbundled proxy rule happens
+  to block them. A later independent status-only HEAD audit returned HTTP 200 for
+  these forbidden paths on `voidscape.gg`, `www.voidscape.gg`, and the sslip origin;
+  it did not retrieve response bodies. Plan: make application serving allowlist-only,
+  minimize the packaged portal runtime, add matching nginx defense-in-depth, verify
+  every public origin, and preserve the stop-before-deployment boundary until Ryan
+  makes a separate production-containment decision.
 - **Session preflight 2026-07-16 (VS-088):** branch
   `codex/release-10139-integration`; tracked worktree was clean at `5ac873d8`, and the
   pre-change `scripts/build.sh` passed. Exact 10139 desktop/web/Android/Play/server
@@ -90,14 +103,15 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — VS-088 verified. The release contract now freezes the
-  reviewed Voidscape game profile instead of silently inheriting preservation
-  defaults; an isolated loopback rehearsal loaded all 1,680 custom-landscape regions,
-  26 Enclave locs, seven Rift locs, the Auction NPC, and the intended client settings.
-  A fresh server tree also creates its avatar output directory on first logout.
-- **Next action:** commit and mirror the verified VS-088 fix into the public clean tree,
-  then regenerate and verify the exact commit-bound held release bundle without
-  deploying any surface.
+- **Last session:** 2026-07-16 — VS-089 verified locally. The portal serves an exact
+  static allowlist, the release package contains only the required runtime and public
+  files, the generated Nginx layer adds generic defense-in-depth, and the hosted gate
+  checks allowed/forbidden paths on every production origin. Portal API/schema tests,
+  the complete packaged-tree test, the minimized-runtime HTTP matrix, the all-origin
+  verifier, launch-config coverage, and `scripts/build.sh` pass.
+- **Next action:** commit and mirror the verified VS-089 fix into the standalone clean
+  public tree, then triage the new per-character founder-card and fail-closed portal
+  store Intake reports. Do not deploy, push, or publish without separate authorization.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -1015,6 +1029,31 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-089 — Portal static fallback exposes private runtime/source files (FIXED)
+- Status: verified · Severity: P1 · Area: web-portal / release packaging / source hygiene
+- Root cause: the Node fallback mapped every otherwise-unmatched URL to any regular
+  file below `web/portal`, while release packaging copied that entire tracked tree.
+  The Nginx fragment protected only `/api/admin/`, so runtime source, API smoke code,
+  documentation, database schemas, and generated build metadata were downloadable.
+  Status-only production HEAD probes observed HTTP 200 on the apex, `www`, and sslip
+  origins; no response bodies were retrieved and no credential exposure was found.
+- Fix: a tracked contract now allowlists exact friendly routes, public root files,
+  explicit assets, and numeric NPC/item PNG directories. Raw encoded, hidden,
+  traversal-like, directory, symlink, runtime, support, schema, and metadata requests
+  fail closed. The release packager copies only that public set plus the required Node
+  runtime/contract, and its generated Nginx fragment generically rejects hidden
+  segments and non-asset source/support extensions. Operator handoffs install the
+  snippet and private portal environment with exact ownership/modes. The hosted gate
+  checks positive and forbidden paths on all three production origins.
+- Verified 2026-07-16: `scripts/test-portal-api.sh` and
+  `scripts/test-portal-schema.sh` pass. The focused HTTP suite boots the minimized
+  package, includes a representative private `build-meta.json`, preserves public
+  GET/HEAD/range behavior, and passes three-origin status-only verification. The
+  package test proves whole-tree equality and rejects symlink/non-regular entries;
+  launch-config regression coverage binds the generic Nginx rules and exact operator
+  commands. Shell/Node syntax, `git diff --check`, and full `scripts/build.sh` pass.
+  This was a local fix only: production was not changed, pushed, or published.
 
 ### VS-088 — Release rehearsal and launch config drift from intended Voidscape profile (FIXED)
 - Status: verified · Severity: P1 · Area: release-config / server-content / client QA

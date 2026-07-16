@@ -560,6 +560,16 @@ expect_status() {
 	fi
 }
 
+for public_static_path in \
+	/dev-server.mjs /%64ev-server.mjs /api-smoke.mjs /README.md \
+	/schema/sqlite/001_web_accounts.sql /build-meta.json \
+	/public-static-contract.json /.env /.git/config \
+	/assets/generated/buttons-tabs.png /assets/private.json
+do
+	expect_status 404 --path-as-is -I "http://127.0.0.1:${public_port}${public_static_path}"
+done
+expect_status 200 -I "http://127.0.0.1:${public_port}/styles.css"
+
 expect_invalid_game_password() {
 	local response_file="$tmp_dir/invalid-game-password.json"
 	local actual

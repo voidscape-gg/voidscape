@@ -605,9 +605,25 @@ cat > "$OUTPUT_DIR/ops/nginx/voidscape-admin-public-block.location.conf" <<'EOF'
 location ^~ /api/admin/ {
 	return 404;
 }
+
+# Defense in depth: the portal process also denies these runtime/support paths,
+# and the release packager omits every file here except the required runtime and
+# metadata inputs.
+location ~ "^/(?!\.well-known(?:/|$))(?:.*/)?\." { return 404; }
+location ~* "^/(?!assets/).+\.(?:cjs|conf|env|gradle|java|json|kt|kts|lock|map|md|mjs|properties|py|sh|sql|toml|ts|tsx|xml|ya?ml)(?:/|$)" { return 404; }
+location = /dev-server.mjs { return 404; }
+location = /api-smoke.mjs { return 404; }
+location = /README.md { return 404; }
+location = /build-meta.json { return 404; }
+location = /public-static-contract.json { return 404; }
+location = /schema { return 404; }
+location ^~ /schema/ { return 404; }
+location = /.env { return 404; }
+location = /.git { return 404; }
+location ^~ /.git/ { return 404; }
 EOF
 cat > "$OUTPUT_DIR/ops/nginx/README.md" <<'EOF'
-# Public admin-route boundary
+# Public portal-route boundary
 
 Install `voidscape-admin-public-block.location.conf` below
 `/etc/nginx/snippets/` and include it inside every public TLS server block that
@@ -616,16 +632,36 @@ proxies to the portal. For the known production layout, that includes both the
 `https://voidscape.5.161.114.251.sslip.io/` block. Keep the portal backend bound to
 `127.0.0.1:8788`.
 
+```bash
+install -d -o root -g root -m 0755 /etc/nginx/snippets
+install -o root -g root -m 0644 \
+  voidscape-admin-public-block.location.conf \
+  /etc/nginx/snippets/voidscape-admin-public-block.location.conf
+```
+
+Every one of those three TLS `server` blocks must contain this exact directive:
+
+```nginx
+include /etc/nginx/snippets/voidscape-admin-public-block.location.conf;
+```
+
 After `nginx -t`, reload nginx and require HTTP 404 from all three public
-origins, both without a token and with a fake `x-portal-admin-token` header.
-Do not send a real maintenance token to a public URL.
+origins for `/api/admin/signups`, both without a token and with a fake
+`x-portal-admin-token` header. Also require HTTP 404 from the runtime, support,
+schema, metadata, and dotfile paths listed in the snippet. Do not send a real
+maintenance token to a public URL.
+
+```bash
+nginx -t && systemctl reload nginx
+```
 EOF
 chmod 0644 "$OUTPUT_DIR/ops/nginx/"*
 
 echo "==> Packaging portal"
-bundle_copy_tracked_tree "web/portal" "$OUTPUT_DIR/portal/web-portal"
+python3 "$ROOT/scripts/package-portal-runtime.py" \
+	--repo-root "$ROOT" \
+	--target "$OUTPUT_DIR/portal/web-portal"
 normalize_public_tree_modes "$OUTPUT_DIR/portal/web-portal"
-rm -f "$OUTPUT_DIR/portal/web-portal/build-meta.json"
 cat > "$OUTPUT_DIR/portal/portal.env.staging" <<EOF
 PORT=8788
 PORTAL_BIND_HOST=127.0.0.1
@@ -1021,6 +1057,9 @@ if [[ -n "$ANDROID_PLAY_URL" ]]; then
 fi
 "\$BUNDLE_DIR/scripts/verify-launch-staging.mjs" \\
   --portal-url "$PORTAL_URL/" \\
+  --public-origin "https://voidscape.gg/" \\
+  --public-origin "https://www.voidscape.gg/" \\
+  --public-origin "https://voidscape.5.161.114.251.sslip.io/" \\
   --web-url "$WEB_URL" \\
   --ws "$WS_URL" \\
   --launch-at "$LAUNCH_AT" \\
@@ -1064,6 +1103,7 @@ Client version: $VERSION
 - \`portal/web-portal/\`
 - \`portal/web-portal.SHA256\`
 - \`portal/portal.env.staging\`
+- \`ops/nginx/voidscape-admin-public-block.location.conf\` and its install README
 - \`play/\`
 - \`launcher/VoidscapeLauncher-staging.jar\`
 - \`android/voidscape-staging.apk\` when Android packaging was enabled
@@ -1093,6 +1133,7 @@ Suggested single-host layout:
 /opt/voidscape/docs/OPERATIONS.md
 /opt/voidscape/web/portal/
 /etc/voidscape/portal.env
+/etc/nginx/snippets/voidscape-admin-public-block.location.conf
 /var/www/html/play/
 /var/www/html/voidscape/
 /etc/systemd/system/voidscape-headless.target
@@ -1177,10 +1218,39 @@ VOIDBOT_CLIENT_VERSION=$VERSION \\
   scripts/provision-headless-players.sh
 \`\`\`
 
-Copy \`portal/portal.env.staging\` to the host, replace the two
-\`CHANGE_ME\` values, and keep \`PORTAL_GOOGLE_CLIENT_ID\` unset unless Google
-is intentionally being tested. Verified signup and password recovery require
-working Resend delivery; use \`PORTAL_EMAIL_DRY_RUN=1\` only for private staging.
+Install the non-secret portal template with private service-readable permissions,
+then set the real values only in \`/etc/voidscape/portal.env\` (never in the bundle):
+
+\`\`\`bash
+install -d -o root -g voidscape -m 0750 /etc/voidscape
+install -o root -g voidscape -m 0600 \\
+  portal/portal.env.staging /etc/voidscape/portal.env
+\`\`\`
+
+Replace the two \`CHANGE_ME\` values in the installed private file and keep
+\`PORTAL_GOOGLE_CLIENT_ID\` unset unless Google is intentionally being tested.
+Verified signup and password recovery require working Resend delivery; use
+\`PORTAL_EMAIL_DRY_RUN=1\` only for private staging.
+
+Install the public-boundary snippet and add the exact include to **every** TLS
+\`server\` block for \`voidscape.gg\`, \`www.voidscape.gg\`, and the sslip origin:
+
+\`\`\`bash
+install -d -o root -g root -m 0755 /etc/nginx/snippets
+install -o root -g root -m 0644 \\
+  ops/nginx/voidscape-admin-public-block.location.conf \\
+  /etc/nginx/snippets/voidscape-admin-public-block.location.conf
+\`\`\`
+
+\`\`\`nginx
+include /etc/nginx/snippets/voidscape-admin-public-block.location.conf;
+\`\`\`
+
+After editing all three server blocks, validate and reload atomically:
+
+\`\`\`bash
+nginx -t && systemctl reload nginx
+\`\`\`
 
 ## Verify
 
@@ -1220,7 +1290,9 @@ front of people. Fill the blanks with the actual deployed paths from the host.
 ## Before Deploy
 
 - Confirm this bundle came from the intended commit: \`$FULL_COMMIT\`.
-- Confirm \`portal/portal.env.staging\` has real private values for:
+- Keep \`portal/portal.env.staging\` secret-free. Install it as
+  \`root:voidscape\` mode \`0600\`, then set real private values only in
+  \`/etc/voidscape/portal.env\` for:
   - \`PORTAL_ABUSE_HASH_SALT\`
   - \`PORTAL_ADMIN_TOKEN\`, if staff admin endpoints are enabled
 - Keep \`PORTAL_GOOGLE_CLIENT_ID\` unset unless Google sign-in is intentionally enabled and tested.
@@ -1296,6 +1368,22 @@ membership so both game and portal receive the dedicated supplemental group.
   those accounts and units only when simulated players are an explicit launch
   feature; the bundled fleet remains available as QA tooling.
 - Copy \`portal/web-portal/\` to \`/opt/voidscape/web/portal/\`.
+- Install the private portal environment and public Nginx boundary exactly:
+
+\`\`\`bash
+install -d -o root -g voidscape -m 0750 /etc/voidscape
+install -o root -g voidscape -m 0600 \\
+  portal/portal.env.staging /etc/voidscape/portal.env
+install -d -o root -g root -m 0755 /etc/nginx/snippets
+install -o root -g root -m 0644 \\
+  ops/nginx/voidscape-admin-public-block.location.conf \\
+  /etc/nginx/snippets/voidscape-admin-public-block.location.conf
+\`\`\`
+
+  Set secrets only in the installed portal file. Add
+  \`include /etc/nginx/snippets/voidscape-admin-public-block.location.conf;\`
+  to every TLS server block for the apex, \`www\`, and sslip origins, then run
+  \`nginx -t && systemctl reload nginx\`.
 - Copy \`play/\` to \`/var/www/html/play/\`.
 - Copy \`launcher/VoidscapeLauncher-staging.jar\` and \`launcher/voidscape-launcher.properties\` to \`/opt/voidscape/launcher/\`; publish the launcher only after the deployment gate.
 - Copy \`android/voidscape-staging.apk\` to \`/var/www/html/voidscape/\` only when Android direct download should be live; set \`PORTAL_ANDROID_APK\` to that path if it is not the default build output.

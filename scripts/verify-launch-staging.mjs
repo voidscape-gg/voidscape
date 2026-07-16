@@ -65,9 +65,7 @@ async function main() {
 		throw new Error("Portal URL must be https:// unless --allow-http is set.");
 	}
 	pass("portal url", args.portalUrl.href);
-	const adminPublicInputs = args.adminPublicUrls.length
-		? [...args.adminPublicUrls]
-		: [args.portalUrl.href];
+	const adminPublicInputs = [args.portalUrl.href, ...args.adminPublicUrls];
 	const productionAdminOrigins = [
 		"https://voidscape.gg/",
 		"https://www.voidscape.gg/",
@@ -76,7 +74,7 @@ async function main() {
 	const targetsProduction = [args.portalUrl.href, ...adminPublicInputs]
 		.some((value) => productionAdminOrigins.some((origin) => new URL(origin).hostname === new URL(value).hostname));
 	if (targetsProduction) adminPublicInputs.push(...productionAdminOrigins);
-	args.adminPublicUrls = [...new Set(adminPublicInputs.map((value) => normalizeBaseUrl(value, "admin public").href))];
+	args.adminPublicUrls = [...new Set(adminPublicInputs.map((value) => normalizeBaseUrl(value, "public origin").href))];
 	for (const value of args.adminPublicUrls) {
 		const url = new URL(value);
 		if (!args.allowHttp && url.protocol !== "https:") {
@@ -89,6 +87,10 @@ async function main() {
 		}
 	} else if (args.adminToken) {
 		throw new Error("--admin-token is allowed only with --allow-local-admin-token-guard; public admin routes must stay externally blocked.");
+	}
+	if (args.staticBoundaryOnly) {
+		await verifyPublicStaticBoundary();
+		return;
 	}
 
 	if (!args.skipWebVerify) {
@@ -129,6 +131,7 @@ async function main() {
 
 	await verifyServerConfig();
 	await verifyPortalHealth();
+	await verifyPublicStaticBoundary();
 	await verifyPublicLaunchPayload();
 	await verifyLauncherUpdateChannel();
 	await verifyDisabledProviderSurfaces();
@@ -196,6 +199,34 @@ async function verifyPortalHealth() {
 	assertCheck("portal abuse salt configured", body.config && body.config.abuseHashSaltConfigured === true, JSON.stringify(body.config || null));
 	assertCheck("portal verified-email signup required", body.config && body.config.email && body.config.email.verificationRequired === true, JSON.stringify(body.config && body.config.email || null));
 	assertCheck("portal recovery email delivery configured", body.config && body.config.email && body.config.email.configured === true, JSON.stringify(body.config && body.config.email || null));
+}
+
+async function verifyPublicStaticBoundary() {
+	for (const publicBase of args.adminPublicUrls) {
+		const label = new URL(publicBase).host;
+		for (const path of ["/styles.css", "/assets/favicon.png"]) {
+			const response = await requestStatusOnly(path, publicBase);
+			assertCheck(`public static file available on ${label}: ${path}`, response.status === 200, `HTTP ${response.status}`);
+		}
+		for (const path of [
+			"/dev-server.mjs",
+			"/%64ev-server.mjs",
+			"/%2564ev-server.mjs",
+			"/DEV-SERVER.MJS",
+			"/api-smoke.mjs",
+			"/README.md",
+			"/schema/sqlite/001_web_accounts.sql",
+			"/schema%2fsqlite%2f001_web_accounts.sql",
+			"/build-meta.json",
+			"/public-static-contract.json",
+			"/.env",
+			"/.git/config",
+			"/assets/private.json"
+		]) {
+			const response = await requestStatusOnly(path, publicBase);
+			assertCheck(`private portal path blocked on ${label}: ${path}`, response.status === 404, `HTTP ${response.status}`);
+		}
+	}
 }
 
 async function verifyPublicLaunchPayload() {
@@ -687,6 +718,21 @@ async function request(path, options = {}) {
 	return { status: response.status, body: parsed, text, bytes, headers: responseHeaders };
 }
 
+async function requestStatusOnly(path, baseUrl = args.portalUrl) {
+	const url = new URL(path, baseUrl);
+	const response = await fetch(url, { method: "HEAD", redirect: "manual" });
+	if (response.body) await response.body.cancel();
+	const responseHeaders = Object.fromEntries(response.headers.entries());
+	const artifactName = safeArtifactName(`HEAD-${url.host}-${url.pathname}`);
+	await writeFile(resolve(args.out, `${artifactName}-${Date.now()}.json`), JSON.stringify({
+		url: url.href,
+		status: response.status,
+		headers: responseHeaders,
+		body: "not-read-status-only"
+	}, null, 2));
+	return { status: response.status, headers: responseHeaders };
+}
+
 function parseArgs(argv) {
 	const parsed = {
 		out: defaultOut,
@@ -775,7 +821,11 @@ function parseArgs(argv) {
 				parsed.adminToken = value();
 				break;
 			case "--admin-public-url":
+			case "--public-origin":
 				parsed.adminPublicUrls.push(value());
+				break;
+			case "--static-boundary-only":
+				parsed.staticBoundaryOnly = true;
 				break;
 			case "--chrome":
 				parsed.chrome = value();
@@ -865,8 +915,10 @@ Useful options:
   --signup-password PASSWORD    Exact portal/game password; required for --run-signup.
   --verification-timeout-seconds N  Bounded email-completion wait. Default: 240.
   --verification-poll-seconds N     Login-probe interval. Default: 30; max 9 probes.
-  --admin-public-url URL        Public origin whose /api/admin/* must return 404;
-                                repeat for non-production aliases.
+  --public-origin URL           Public origin whose static-private and /api/admin/*
+                                paths must return 404; repeat for every alias.
+  --admin-public-url URL        Backward-compatible alias for --public-origin.
+  --static-boundary-only        Run only the public/private static-path checks.
   --admin-token TOKEN           Loopback-only proof; requires --allow-local-admin-token-guard.
   --no-web-smoke                Static/deep web verification only.
   --skip-web-verify             Portal/config rehearsal only.
@@ -916,6 +968,7 @@ async function writeSummary() {
 		serverConfig: args.serverConfig || "",
 		connectionsConfig: args.connectionsConfig || "",
 		serverConfigOnly: Boolean(args.serverConfigOnly),
+		staticBoundaryOnly: Boolean(args.staticBoundaryOnly),
 		signupMode: args.runSignup ? "final" : args.pendingEmailRehearsal ? "pending-email-rehearsal" : "skipped",
 		signup: args.runSignup || args.pendingEmailRehearsal ? {
 			username: signupUser,

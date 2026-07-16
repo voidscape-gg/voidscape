@@ -218,6 +218,43 @@ class LaunchStagingConfigTest(unittest.TestCase):
             package,
         )
 
+    def test_portal_public_boundary_packaging_and_handoff_are_fail_closed(self):
+        package = (ROOT / "scripts" / "package-launch-staging.sh").read_text(
+            encoding="utf-8"
+        )
+        verifier = (ROOT / "scripts" / "verify-launch-staging.mjs").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('python3 "$ROOT/scripts/package-portal-runtime.py"', package)
+        self.assertIn(
+            'location ~ "^/(?!\\.well-known(?:/|$))(?:.*/)?\\."', package
+        )
+        self.assertIn('location ~* "^/(?!assets/).+\\.', package)
+        self.assertGreaterEqual(package.count('--public-origin "https://'), 3)
+        self.assertGreaterEqual(
+            package.count("install -o root -g voidscape -m 0600"), 2
+        )
+        self.assertGreaterEqual(
+            package.count(
+                "include /etc/nginx/snippets/"
+                "voidscape-admin-public-block.location.conf;"
+            ),
+            3,
+        )
+        self.assertGreaterEqual(
+            package.count("nginx -t && systemctl reload nginx"), 3
+        )
+        self.assertIn(
+            "const adminPublicInputs = [args.portalUrl.href, ...args.adminPublicUrls];",
+            verifier,
+        )
+        self.assertGreaterEqual(
+            verifier.count("for (const publicBase of args.adminPublicUrls)"), 2
+        )
+        self.assertIn("requestStatusOnly(path, publicBase)", verifier)
+        self.assertIn('case "--static-boundary-only":', verifier)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
