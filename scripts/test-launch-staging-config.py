@@ -135,10 +135,13 @@ class LaunchStagingConfigTest(unittest.TestCase):
         self.assertIn("VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG", package)
         self.assertIn("VOIDSCAPE_VERIFY_RUN_SIGNUP", package)
         self.assertIn("SIGNUP_MODE=(--skip-signup)", package)
+        self.assertNotIn("VOIDSCAPE_REPO_ROOT", package)
         self.assertIn(
-            "VOIDSCAPE_REPO_ROOT=/path/to/voidscape-source \\\\\n",
+            'verify_exact_sha256_tree "\\$BUNDLE_DIR/scripts" "\\$BUNDLE_DIR/scripts.SHA256"',
             package,
         )
+        self.assertIn('"\\$BUNDLE_DIR/scripts/verify-launch-staging.mjs"', package)
+        self.assertNotIn("VOIDSCAPE_SKIP_DEPLOYED_BYTE_CHECK", package)
         self.assertIn("\\`VOIDSCAPE_VERIFY_RUN_SIGNUP=1\\`", package)
         self.assertNotIn(
             '--server-config "\\$BUNDLE_DIR/server/local.launch-staging.conf"',

@@ -2,6 +2,7 @@
 # Package a production-like launch staging bundle.
 
 set -euo pipefail
+umask 022
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT_DIR="$ROOT/dist/launch-staging"
@@ -559,12 +560,21 @@ mkdir -p \
 for name in \
 	headless-player-helper.py \
 	headless-players.sh \
+	launch-config-contract.json \
 	provision-headless-players.sh \
 	run-headless-controller.sh \
-	run-headless-player.sh
+	run-headless-player.sh \
+	smoke-web-teavm-iphone.sh \
+	verify-launch-staging.mjs \
+	verify-web-teavm-deployment.sh
 do
 	cp -p "$ROOT/scripts/$name" "$OUTPUT_DIR/scripts/$name"
 done
+chmod +x \
+	"$OUTPUT_DIR/scripts/smoke-web-teavm-iphone.sh" \
+	"$OUTPUT_DIR/scripts/verify-launch-staging.mjs" \
+	"$OUTPUT_DIR/scripts/verify-web-teavm-deployment.sh"
+write_sha256_tree "$OUTPUT_DIR/scripts" "$OUTPUT_DIR/scripts.SHA256"
 for name in cli.py protocol.py voidbot voidbotd.py; do
 	cp -p "$ROOT/tools/voidbot/$name" "$OUTPUT_DIR/tools/voidbot/$name"
 done
@@ -936,7 +946,6 @@ if [[ "$PROMOTABLE_TEXT" != "true" && "\${VOIDSCAPE_ALLOW_REHEARSAL_VERIFY:-0}" 
 	echo "ERROR: bundle is non-promotable ($PROMOTION_BLOCKERS_TEXT); set VOIDSCAPE_ALLOW_REHEARSAL_VERIFY=1 only for an isolated rehearsal." >&2
 	exit 1
 fi
-REPO_ROOT="\${VOIDSCAPE_REPO_ROOT:-\$(pwd)}"
 DEPLOYED_SERVER_DIR="\${VOIDSCAPE_DEPLOYED_SERVER_DIR:-/opt/voidscape/server}"
 DEPLOYED_CLIENT_DIR="\${VOIDSCAPE_DEPLOYED_CLIENT_DIR:-/opt/voidscape/client}"
 DEPLOYED_LAUNCHER_JAR="\${VOIDSCAPE_DEPLOYED_LAUNCHER_JAR:-/opt/voidscape/launcher/VoidscapeLauncher-staging.jar}"
@@ -947,7 +956,7 @@ verify_exact_sha256_tree() {
 	"\$BUNDLE_DIR/ops/verify/verify-exact-sha256-tree.py" \
 		"\$deployed_root" "\$expected_manifest"
 }
-if [[ "\${VOIDSCAPE_SKIP_DEPLOYED_BYTE_CHECK:-0}" != "1" ]]; then
+	verify_exact_sha256_tree "\$BUNDLE_DIR/scripts" "\$BUNDLE_DIR/scripts.SHA256"
 	for pair in \
 		"\$BUNDLE_DIR/server/core.jar:\$DEPLOYED_SERVER_DIR/core.jar" \
 		"\$BUNDLE_DIR/server/plugins.jar:\$DEPLOYED_SERVER_DIR/plugins.jar" \
@@ -966,7 +975,6 @@ if [[ "\${VOIDSCAPE_SKIP_DEPLOYED_BYTE_CHECK:-0}" != "1" ]]; then
 	verify_exact_sha256_tree "\$DEPLOYED_SERVER_DIR/database" "\$BUNDLE_DIR/server/database.SHA256"
 	verify_exact_sha256_tree "\$DEPLOYED_CLIENT_DIR/Cache" "\$BUNDLE_DIR/client/cache.SHA256"
 	verify_exact_sha256_tree "\$DEPLOYED_PORTAL_DIR" "\$BUNDLE_DIR/portal/web-portal.SHA256"
-fi
 if [[ -z "\${VOIDSCAPE_DEPLOYED_SERVER_CONFIG:-}" ]]; then
 	echo "ERROR: set VOIDSCAPE_DEPLOYED_SERVER_CONFIG to a copy of the actual deployed local.conf" >&2
 	exit 2
@@ -1003,7 +1011,11 @@ if [[ "\${VOIDSCAPE_VERIFY_RUN_SIGNUP:-0}" == "1" ]]; then
 		--verification-poll-seconds "\${VOIDSCAPE_VERIFY_EMAIL_POLL_SECONDS:-30}"
 	)
 fi
-"\$REPO_ROOT/scripts/verify-launch-staging.mjs" \\
+ANDROID_VERIFY_MODE=(--expect-no-android-apk)
+if [[ -f "\$BUNDLE_DIR/android/voidscape-staging.apk" ]]; then
+	ANDROID_VERIFY_MODE=(--expected-android-apk "\$BUNDLE_DIR/android/voidscape-staging.apk")
+fi
+"\$BUNDLE_DIR/scripts/verify-launch-staging.mjs" \\
   --portal-url "$PORTAL_URL/" \\
   --web-url "$WEB_URL" \\
   --ws "$WS_URL" \\
@@ -1013,6 +1025,7 @@ fi
   --connections-config "\$VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG" \\
   --expected-client-version "$VERSION" \\
   --out "\$BUNDLE_DIR/logs/verify-staging-\$(date -u +%Y%m%dT%H%M%SZ)" \\
+	  "\${ANDROID_VERIFY_MODE[@]}" \\
   "\${SIGNUP_MODE[@]}"
 EOF
 chmod +x "$OUTPUT_DIR/VERIFY-STAGING.sh"
@@ -1040,6 +1053,7 @@ Client version: $VERSION
 - \`server/local.launch-staging.conf\`
 - \`server/launch-config-contract.json\`
 - \`scripts/\`, \`tools/voidbot/\`, and \`tools/headless_players/\` fleet runtime files
+- \`scripts.SHA256\`, binding the hosted gate to the packaged verifier scripts
 - \`Deployment_Scripts/systemd/voidscape-headless*\` fleet units and generated non-secret environment
 - \`docs/subsystems/headless-players.md\` and \`docs/OPERATIONS.md\` operator runbooks
 - \`portal/web-portal/\`
@@ -1089,7 +1103,8 @@ or merge every value in \`server/launch-config-contract.json\` plus this bundle'
 rejects a missing, changed, or duplicate contract key.
 
 Copy the bundle's \`scripts/\`, \`tools/\`, \`docs/\`, \`server/conf/\`,
-\`client/\`, and \`launcher/\` trees to the same paths below \`/opt/voidscape\`.
+\`server/database/\`, \`client/\`, and \`launcher/\` trees to the same paths
+below \`/opt/voidscape\`.
 Before installing or starting the fleet, create its ten static nologin service users
 with primary group \`voidscape\` (the unit does not use \`DynamicUser=\`):
 
@@ -1163,7 +1178,6 @@ one real staged account and character should be created:
 
 \`\`\`bash
 cd $OUTPUT_DIR
-VOIDSCAPE_REPO_ROOT=/path/to/voidscape-source \\
 VOIDSCAPE_DEPLOYED_SERVER_CONFIG=/path/to/deployed-local.conf \\
 VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG=/path/to/deployed-connections.conf \\
   ./VERIFY-STAGING.sh
@@ -1254,7 +1268,7 @@ membership so both game and portal receive the dedicated supplemental group.
   \`ops/database/prepare-production-sqlite-permissions.sh\` to enforce the
   reviewed shared SQLite contract (directory \`root:voidscape-db 0770\`, database
   \`voidscape:voidscape-db 0600\`) before either service starts.
-- Copy \`server/conf/\`, \`scripts/\`, \`tools/voidbot/\`, \`tools/headless_players/\`, and \`docs/\` into the matching paths below \`/opt/voidscape\`.
+- Copy \`server/conf/\`, \`server/database/\`, \`client/\`, \`scripts/\`, \`tools/voidbot/\`, \`tools/headless_players/\`, and \`docs/\` into the matching paths below \`/opt/voidscape\`.
 - Keep the simulated world-activity fleet disabled by default. Install or start
   those accounts and units only when simulated players are an explicit launch
   feature; the bundled fleet remains available as QA tooling.
@@ -1270,7 +1284,6 @@ Run this exact bundle verifier after syncing and restarting:
 
 \`\`\`bash
 cd <synced-bundle-dir>
-VOIDSCAPE_REPO_ROOT=/path/to/voidscape-source \\
 VOIDSCAPE_DEPLOYED_SERVER_CONFIG=/path/to/deployed-local.conf \\
 VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG=/path/to/deployed-connections.conf \\
   ./VERIFY-STAGING.sh
@@ -1348,6 +1361,7 @@ server_conf_manifest_sha256=$(sha256_file "$OUTPUT_DIR/server/conf.SHA256")
 server_database_manifest_sha256=$(sha256_file "$OUTPUT_DIR/server/database.SHA256")
 server_database_file_count=$(wc -l < "$OUTPUT_DIR/server/database.SHA256" | tr -d '[:space:]')
 launch_config_contract_sha256=$(sha256_file "$ROOT/scripts/launch-config-contract.json")
+packaged_scripts_manifest_sha256=$(sha256_file "$OUTPUT_DIR/scripts.SHA256")
 portal_password_helper_sha256=$(sha256_file "$OUTPUT_DIR/server/portal-password-helper.jar")
 headless_controller_sha256=$(sha256_file "$OUTPUT_DIR/tools/headless_players/controller.py")
 headless_roster_sha256=$(sha256_file "$OUTPUT_DIR/tools/headless_players/roster.json")

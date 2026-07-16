@@ -41,6 +41,14 @@ grep -q 'normalize_public_tree_modes "$OUTPUT_DIR/server/conf"' "$ROOT/scripts/p
 grep -q 'ops/verify/verify-exact-sha256-tree.py' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'VERIFY-STAGING.sh accepts no positional or option arguments' "$ROOT/scripts/package-launch-staging.sh"
 grep -q -- '--launch-at "$LAUNCH_AT"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'verify_exact_sha256_tree "\\$BUNDLE_DIR/scripts" "\\$BUNDLE_DIR/scripts.SHA256"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q '"\\$BUNDLE_DIR/scripts/verify-launch-staging.mjs"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'ANDROID_VERIFY_MODE=(--expect-no-android-apk)' "$ROOT/scripts/package-launch-staging.sh"
+grep -q -- '--expected-android-apk "\\$BUNDLE_DIR/android/voidscape-staging.apk"' "$ROOT/scripts/package-launch-staging.sh"
+if grep -q 'VOIDSCAPE_SKIP_DEPLOYED_BYTE_CHECK\|VOIDSCAPE_REPO_ROOT' "$ROOT/scripts/package-launch-staging.sh"; then
+	echo "packaged verifier provenance or byte checks can be bypassed" >&2
+	exit 1
+fi
 grep -q 'location \^~ /api/admin/' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'https://voidscape.5.161.114.251.sslip.io/' "$ROOT/scripts/package-launch-staging.sh"
 grep -q '/var/www/html play voidscape' "$ROOT/scripts/package-launch-staging.sh"
@@ -214,6 +222,7 @@ common_404=(
 	--portal-url "$base_404"
 	--skip-web-verify
 	--skip-server-config
+	--expect-no-android-apk
 	--allow-http
 )
 common_403=(
@@ -221,6 +230,7 @@ common_403=(
 	--portal-url "$base_403"
 	--skip-web-verify
 	--skip-server-config
+	--expect-no-android-apk
 	--allow-http
 )
 

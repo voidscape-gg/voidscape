@@ -104,6 +104,9 @@ async function main() {
 	if ((!args.serverConfig || !args.connectionsConfig) && !args.skipServerConfig) {
 		throw new Error("Missing --server-config or --connections-config. Pass copies of both deployed configs, or --skip-server-config for portal-only rehearsal.");
 	}
+	if (args.expectedAndroidApk && args.expectNoAndroidApk) {
+		throw new Error("--expected-android-apk and --expect-no-android-apk are mutually exclusive.");
+	}
 	const signupModes = [args.runSignup, args.pendingEmailRehearsal, args.skipSignup].filter(Boolean).length;
 	if (signupModes !== 1) {
 		throw new Error("Choose exactly one signup mode: --run-signup, --pending-email-rehearsal, or --skip-signup.");
@@ -219,6 +222,24 @@ async function verifyPublicLaunchPayload() {
 	if (android.available === true) {
 		assertCheck("android APK public link", Boolean(android.url) && android.url !== "#", JSON.stringify(android));
 		assertCheck("android APK hash", /^[0-9a-f]{64}$/.test(android.sha256 || ""), JSON.stringify(android));
+	}
+	if (args.expectedAndroidApk) {
+		const expectedPath = resolve(root, args.expectedAndroidApk);
+		assertCheck("expected Android APK exists", existsSync(expectedPath), expectedPath);
+		if (existsSync(expectedPath)) {
+			const expectedBytes = await readFile(expectedPath);
+			const expectedSha256 = createHash("sha256").update(expectedBytes).digest("hex");
+			assertCheck("Android APK is published", android.available === true, JSON.stringify(android));
+			assertCheck("Android APK matches candidate hash", android.sha256 === expectedSha256, `${android.sha256 || "(absent)"} vs ${expectedSha256}`);
+			assertCheck("Android APK matches candidate size", Number(android.sizeBytes) === expectedBytes.length, `${android.sizeBytes} vs ${expectedBytes.length}`);
+			const androidUrl = new URL(String(android.url || "#"), args.portalUrl).href;
+			assertCheck("Android APK download URL", channelUrlOk(androidUrl), androidUrl);
+			if (android.available === true && channelUrlOk(androidUrl)) {
+				await verifyChannelArtifact("Android APK", androidUrl, expectedBytes.length, expectedSha256);
+			}
+		}
+	} else if (args.expectNoAndroidApk) {
+		assertCheck("Android direct APK withheld", android.available !== true, JSON.stringify(android));
 	}
 }
 
@@ -702,6 +723,12 @@ function parseArgs(argv) {
 			case "--expected-client-version":
 				parsed.expectedClientVersion = value();
 				break;
+			case "--expected-android-apk":
+				parsed.expectedAndroidApk = value();
+				break;
+			case "--expect-no-android-apk":
+				parsed.expectNoAndroidApk = true;
+				break;
 			case "--launch-at":
 				parsed.launchAt = value();
 				break;
@@ -813,6 +840,8 @@ Required for the full gate:
 Useful options:
   --ws URL                      WSS URL for web smoke.
   --expected-build-manifest FILE Default: dist/web-teavm/voidscape-web-build.json.
+  --expected-android-apk FILE   Require the public direct APK bytes to match this candidate.
+  --expect-no-android-apk       Require the direct APK row to remain unavailable.
   --signup-username NAME        Exact new QA character; required for --run-signup.
   --signup-email EMAIL          Exact delivered-email address; required for --run-signup.
   --signup-password PASSWORD    Exact portal/game password; required for --run-signup.
