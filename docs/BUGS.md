@@ -27,6 +27,14 @@ to resume from these two files alone. Keep every entry self-contained.
 ## Loop state
 
 - **Active bug:** None.
+- **Session preflight 2026-07-16 (VS-085):** branch
+  `codex/release-10139-integration`; VS-084 is committed at `1e591ad1`. Release QA
+  found `Cache/video/Authentic_Sprites.orsc.bak` in the exact held TeaVM package, and
+  the old verifier accepted it because production hygiene covered runtime/debug files
+  but not editor/download scratch suffixes. The corrected dirty-tree package already
+  excludes the stale file and deep-verifies 538/538; isolate the packaging/verifier
+  contract, add mixed-case/symlink regression coverage, and preserve VS-086 portal
+  footer changes for their own commit.
 - **Session preflight 2026-07-16 (VS-084):** branch
   `codex/release-10139-integration`; tracked worktree clean at
   `28ee1df1667957935354e6ab28baea48b3ecdfe2`. The exact signed Play AAB v10 was
@@ -63,14 +71,14 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — VS-084 verified. Android and TeaVM Create Account now
-  open the rules-gated registration surface directly, the portal preserves the safe
-  registration/referral alias, and Google Play advances to v11 / 1.0.10. Portal API,
-  schema, full visual signup, TeaVM controls, staging guards, API35 bootstrap and exact
-  browser intent, signed APK, signed AAB, provenance, signer, version, and full build
-  gates pass. Play remains held behind managed publishing while v11 replaces v10.
-- **Next action:** triage the release QA finding that TeaVM packaging admitted editor
-  scratch files, then continue the held release-candidate sweep.
+- **Last session:** 2026-07-16 — VS-085 verified. TeaVM production packaging now
+  removes case-insensitive editor/download scratch basenames and suffixes, including
+  symlinks, before manifest generation; both static and deep deployment verification
+  reject the same set by basename without false-positive substring matching. The old
+  held package is rejected for its `.bak`, the clean package deep-verifies 538/538,
+  and mixed-case/symlink/legitimate-extension unit coverage passes.
+- **Next action:** triage the public source-proof footer finding, then rebuild the exact
+  commit-bound release candidate.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -977,6 +985,24 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-085 — TeaVM package admitted editor/download scratch files (FIXED)
+- Status: verified · Severity: P1 · Area: TeaVM web packaging / deployment verification
+- Root cause: production packaging excluded source maps and a short runtime-file list
+  but copied arbitrary cache-tree scratch files. The deployment verifier used the same
+  narrow contract, so `Cache/video/Authentic_Sprites.orsc.bak` entered the exact held
+  package and its signed manifest without failing release QA.
+- Fix: packaging prunes and then rejects case-insensitive `.DS_Store`/`Thumbs.db`
+  basenames plus editor, merge, temporary, and partial-download suffixes from regular
+  files and symlinks before manifest generation. Static and deep hosted verification
+  apply the identical basename/suffix rules; legitimate names that merely contain a
+  token, such as `archive.bakery`, remain valid.
+- Verified 2026-07-16: the new verifier rejects the prior held package specifically for
+  its `.bak`; a newly packaged web root contains 538 manifest files with no scratch
+  path and passes 538/538 deep local verification. Focused unit fixtures prove
+  mixed-case basenames/suffixes and a `.ReJ` symlink are removed while
+  `archive.bakery` survives and remains in the manifest. Shell syntax, whitespace, and
+  the prior full build are green.
 
 ### VS-084 — Android/web Create Account opened sign-in instead of registration (FIXED)
 - Status: verified · Severity: P1 · Area: Android APK / TeaVM web / portal launch
