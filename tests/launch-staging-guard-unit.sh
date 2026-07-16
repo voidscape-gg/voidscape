@@ -40,6 +40,7 @@ grep -q 'verify_exact_sha256_tree "\\$DEPLOYED_PORTAL_DIR"' "$ROOT/scripts/packa
 grep -q 'normalize_public_tree_modes "$OUTPUT_DIR/server/conf"' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'ops/verify/verify-exact-sha256-tree.py' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'VERIFY-STAGING.sh accepts no positional or option arguments' "$ROOT/scripts/package-launch-staging.sh"
+grep -q -- '--launch-at "$LAUNCH_AT"' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'location \^~ /api/admin/' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'https://voidscape.5.161.114.251.sslip.io/' "$ROOT/scripts/package-launch-staging.sh"
 grep -q '/var/www/html play voidscape' "$ROOT/scripts/package-launch-staging.sh"

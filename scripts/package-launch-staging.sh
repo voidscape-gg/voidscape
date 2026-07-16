@@ -1007,6 +1007,7 @@ fi
   --portal-url "$PORTAL_URL/" \\
   --web-url "$WEB_URL" \\
   --ws "$WS_URL" \\
+  --launch-at "$LAUNCH_AT" \\
   --expected-build-manifest "\$BUNDLE_DIR/play/voidscape-web-build.json" \\
   --server-config "\$VOIDSCAPE_DEPLOYED_SERVER_CONFIG" \\
   --connections-config "\$VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG" \\
