@@ -221,6 +221,7 @@ artifacts, apk_path, meta_path = map(Path, sys.argv[1:])
 provenance_path = artifacts / "assets/voidscape-provenance.json"
 with zipfile.ZipFile(apk_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
     archive.write(provenance_path, "assets/voidscape-provenance.json")
+    archive.writestr("assets/cache/archive.bakery", "legitimate payload\n")
 provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
 metadata = {
     "clientVersion": 10127,
@@ -247,6 +248,40 @@ fixture_args=(
 )
 "$CHECKER" "${fixture_args[@]}" >/dev/null
 echo "PASS: signed release-shaped fixture is accepted"
+
+scratch_apk="$fixture_artifacts/scratch-path.apk"
+scratch_meta="$scratch_apk.json"
+python3 - "$fixture_apk" "$fixture_meta" "$scratch_apk" "$scratch_meta" <<'PY'
+import hashlib
+import json
+import sys
+import zipfile
+from pathlib import Path
+
+source_apk, source_meta, output_apk, output_meta = map(Path, sys.argv[1:])
+with zipfile.ZipFile(source_apk) as source, zipfile.ZipFile(
+    output_apk, "w", compression=zipfile.ZIP_DEFLATED
+) as output:
+    for info in source.infolist():
+        output.writestr(info, source.read(info.filename))
+    output.writestr("assets/cache/video/editor.BaK", "scratch payload\n")
+metadata = json.loads(source_meta.read_text(encoding="utf-8"))
+metadata["sha256"] = hashlib.sha256(output_apk.read_bytes()).hexdigest()
+metadata["sizeBytes"] = output_apk.stat().st_size
+output_meta.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+PY
+scratch_args=("${fixture_args[@]}")
+for index in "${!scratch_args[@]}"; do
+	if [[ "${scratch_args[$index]}" == "$fixture_apk" ]]; then
+		scratch_args[$index]="$scratch_apk"
+	elif [[ "${scratch_args[$index]}" == "$fixture_meta" ]]; then
+		scratch_args[$index]="$scratch_meta"
+	fi
+done
+expect_failure \
+	"mixed-case APK scratch path is rejected while archive.bakery is accepted" \
+	"APK contains forbidden runtime/scratch path: assets/cache/video/editor.BaK" \
+	"$CHECKER" "${scratch_args[@]}"
 
 forged_digest_meta="$fixture_artifacts/forged-digest.json"
 forged_commit_meta="$fixture_artifacts/forged-commit.json"

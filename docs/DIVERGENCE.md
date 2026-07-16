@@ -27,6 +27,25 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-16 - Android release packages reject cache scratch artifacts
+
+Android cache sync now excludes case-insensitive mutable runtime basenames and the
+same editor, merge, temporary, and partial-download scratch names used by the TeaVM
+production contract. Both signed-APK and Play-AAB promotion checks independently
+enumerate their ZIP payloads and reject those paths, while legitimate extensions such
+as `archive.bakery` remain valid. This closes the provenance blind spot that allowed an
+ignored `Authentic_Sprites.orsc.bak` safety copy into private Android artifacts without
+making their tracked-input claim dirty. The fresh debug APK retains the custom
+landscape, models, and authentic sprite archives with zero forbidden entries; the old
+private held APK now fails on its exact `.bak` path. Focused APK/AAB gate logs and the
+full build are under `tmp/vs093/`; a clean-commit signed release APK also passes its
+trusted signer, version, hash, embedded provenance, clean-input, and scratch checks.
+The already-held clean Play v11 AAB is unchanged and was not rebuilt, uploaded, or
+published. This changes Android packaging and release verification only: cache source
+bytes, client cohort 10139, gameplay, packets, opcodes, schemas, and live systems are
+unchanged. Reversibility is removing the sync filter and promotion checks, which would
+reopen the ignored-file packaging gap.
+
 ### 2026-07-16 - Production portal containment preserves the launcher update channel
 
 Emergency production containment now blocks root backend `.mjs` and documentation

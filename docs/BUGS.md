@@ -26,7 +26,16 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-091 is verified; resume final release-candidate integration.
+- **Active bug:** none — VS-093 is verified; resume final release-candidate integration.
+- **Session preflight 2026-07-16 (VS-093):** branch
+  `codex/release-10139-integration`; worktree clean at `83202ce9`, and the pre-change
+  `scripts/build.sh` passes. Release audit reproduced one ignored
+  `Client_Base/Cache/video/Authentic_Sprites.orsc.bak` entry in the current private
+  debug/release APKs and prior held direct APK, while the preserved clean Play v11 AAB
+  and clean held APK contain none. Scope is Android cache-sync exclusion plus
+  independent APK/AAB release-check rejection and focused regression coverage. The
+  Play-held AAB remains byte-for-byte untouched; no upload, deploy, push, or source
+  publication is authorized.
 - **Session preflight 2026-07-16 (VS-091):** branch
   `codex/release-10139-integration`; VS-090 is committed and verified at `7ea4d4af`,
   the worktree is clean, and the pre-change `scripts/build.sh` plus portal API suite
@@ -147,14 +156,12 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — completed and verified VS-091 locally. Public portal
-  startup now rejects missing, malformed, partial, symlinked, unreadable, or
-  non-`0700`/`0600` protected paths before listen; runtime damage removes readiness. The
-  absent-only initializer is explicit, service-owned, and audited, and launch
-  operations use a quiesced portal-state plus SQLite `.backup` pair. Focused portal,
-  package, schema, API, syntax, and full-build gates pass. The VS-090 founder/launch
-  card policy remains unchanged and green. No production data, deployment, push, or
-  source publication occurred.
+- **Last session:** 2026-07-16 — completed and verified VS-093 locally. Android cache
+  sync excludes ignored runtime/scratch files, and both APK/AAB promotion gates reject
+  them independently. Focused regressions, a fresh debug build, the full build, and a
+  clean-provenance signed release APK check pass; the custom landscape/model/sprite
+  archives remain packaged. The preserved clean Play v11 AAB remains byte-identical
+  and was not rebuilt or uploaded. No deployment, push, or source publication occurred.
 - **Next action:** resume final release-candidate integration. Validate a protected
   copy of the real portal store against the canonical shape before deployment, then
   complete the paired restore rehearsal and final v12 bundle gates. Do not push,
@@ -1065,6 +1072,25 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-093 — Android packages admit ignored cache scratch files (FIXED)
+- Status: verified · Severity: P1 · Area: Android APK/AAB release packaging
+- Root cause: Android cache sync copied an ignored
+  `Client_Base/Cache/video/Authentic_Sprites.orsc.bak` safety backup into private APKs
+  and AABs. Provenance intentionally measured tracked/non-ignored inputs, and neither
+  promotion checker independently rejected scratch payload names, so an artifact could
+  claim clean source while carrying ignored residue.
+- Fix: cache sync excludes case-insensitive mutable runtime basenames and editor,
+  merge, temporary, and partial-download suffixes. APK and AAB promotion checks inspect
+  their ZIP entries against the same contract; legitimate names such as
+  `archive.bakery` remain valid. The ignored source backup was not deleted, and the
+  already-held clean Play v11 AAB was not rebuilt or uploaded.
+- Verified 2026-07-16: the old private APK fails on its exact `.bak` path. Focused APK
+  and Play regression suites pass; a fresh debug APK contains zero forbidden entries
+  and retains the custom landscape, models, and authentic sprites. `scripts/build.sh`
+  passes, and a clean-commit signed release APK passes signer, version, hash, embedded
+  provenance, clean-input, and scratch checks. Evidence is under `tmp/vs093/`. No
+  deployment, push, source publication, or live-system change occurred.
 
 ### VS-091 — Invalid production portal store silently becomes an empty roster (FIXED)
 - Status: verified · Severity: P1 · Area: web-portal / account-data durability

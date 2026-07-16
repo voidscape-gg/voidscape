@@ -2,6 +2,29 @@ apply plugin: 'com.android.application'
 
 def generatedAssetsDir = file("$buildDir/generated/assets/voidscape")
 def provenanceAssetsDir = file("$rootDir/.gradle/voidscape-provenance-assets")
+def voidscapeMutableCacheBasenames = [
+    "accounts.txt",
+    "config.txt",
+    "credentials.txt",
+    "hideip.txt",
+    "ip.txt",
+    "port.txt",
+    "uid.dat",
+] as Set
+def voidscapeScratchCacheBasenames = [".ds_store", "thumbs.db"] as Set
+def voidscapeScratchCacheSuffixes = [
+    ".bak",
+    ".download",
+    ".new",
+    ".orig",
+    ".part",
+    ".predungeon",
+    ".rej",
+    ".swp",
+    ".temp",
+    ".tmp",
+    "~",
+]
 def uploadKeystorePath = (
     findProperty("voidscape.android.uploadKeystore.file")
         ?: System.getenv("VOIDSCAPE_ANDROID_UPLOAD_KEYSTORE")
@@ -28,13 +51,12 @@ def allowUnsignedRelease = (
 
 tasks.register("syncVoidscapeCache", Sync) {
     from("${rootDir}/../Client_Base/Cache") {
-        exclude "accounts.txt"
-        exclude "config.txt"
-        exclude "credentials.txt"
-        exclude "hideIp.txt"
-        exclude "ip.txt"
-        exclude "port.txt"
-        exclude "uid.dat"
+        exclude { entry ->
+            def basename = entry.name.toLowerCase(java.util.Locale.ROOT)
+            voidscapeMutableCacheBasenames.contains(basename)
+                || voidscapeScratchCacheBasenames.contains(basename)
+                || voidscapeScratchCacheSuffixes.any { basename.endsWith(it) }
+        }
     }
     into(new File(generatedAssetsDir, "cache"))
 }

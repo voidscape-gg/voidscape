@@ -89,6 +89,7 @@ jarsigner.write_text(
     "#!/bin/sh\n"
     "echo 'sm 123 Thu Jan 01 01:01:02 UTC 2026 base/assets/voidscape-provenance.json'\n"
     "echo 'sm 12 Thu Jan 01 01:01:02 UTC 2026 base/assets/release-payload.txt'\n"
+    "echo 'sm 12 Thu Jan 01 01:01:02 UTC 2026 base/assets/cache/archive.bakery'\n"
     "echo 'jar verified.'\n",
     encoding="utf-8",
 )
@@ -97,6 +98,7 @@ unsigned_jarsigner.write_text(
     "#!/bin/sh\n"
     "echo 'sm 123 Thu Jan 01 01:01:02 UTC 2026 base/assets/voidscape-provenance.json'\n"
     "echo '    ? 12 Thu Jan 01 01:01:02 UTC 2026 base/assets/release-payload.txt'\n"
+    "echo 'sm 12 Thu Jan 01 01:01:02 UTC 2026 base/assets/cache/archive.bakery'\n"
     "echo 'jar verified.'\n",
     encoding="utf-8",
 )
@@ -174,6 +176,7 @@ provenance_path, aab_path, meta_path = map(Path, sys.argv[1:])
 with zipfile.ZipFile(aab_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
     archive.write(provenance_path, "base/assets/voidscape-provenance.json")
     archive.writestr("base/assets/release-payload.txt", "payload data\n")
+    archive.writestr("base/assets/cache/archive.bakery", "legitimate payload\n")
 provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
 metadata = {
     "clientVersion": 10132,
@@ -292,7 +295,7 @@ with zipfile.ZipFile(source_aab) as archive:
     )
 
 
-def variant(name, changes):
+def variant(name, changes, extra_entries=()):
     aab = output / f"{name}.aab"
     embedded = dict(provenance)
     embedded.update(changes)
@@ -302,6 +305,8 @@ def variant(name, changes):
             json.dumps(embedded, sort_keys=True) + "\n",
         )
         archive.writestr("base/assets/release-payload.txt", "payload data\n")
+        for path, payload in extra_entries:
+            archive.writestr(path, payload)
     sidecar = dict(metadata)
     sidecar.update(changes)
     sidecar["sha256"] = hashlib.sha256(aab.read_bytes()).hexdigest()
@@ -315,6 +320,11 @@ variant("dirty-input", {"relevantInputDirty": True})
 variant("dirty-override", {"dirtyReleaseOverride": True})
 variant("schema-two", {"metadataSchemaVersion": 2})
 variant("short-commit", {"gitCommit": "abc123"})
+variant(
+    "scratch-path",
+    {},
+    (("base/assets/cache/video/editor.BaK", "scratch payload\n"),),
+)
 
 missing = output / "missing-provenance.aab"
 with zipfile.ZipFile(missing, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -366,6 +376,10 @@ expect_variant_failure \
 	"short provenance commit is rejected" \
 	"gitCommit must be a full 40-hex commit id" \
 	"short-commit"
+expect_variant_failure \
+	"mixed-case AAB scratch path is rejected while archive.bakery is accepted" \
+	"AAB contains forbidden runtime/scratch paths: 'base/assets/cache/video/editor.BaK'" \
+	"scratch-path"
 expect_variant_failure \
 	"missing embedded provenance is rejected" \
 	"signed AAB provenance asset is missing or invalid" \

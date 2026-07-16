@@ -43,6 +43,7 @@ Verifies a Google Play Android App Bundle is safe to upload by checking:
   - sidecar clientVersion matches source and the target server client_version.
   - sidecar artifact/build fields, SHA-256, and size match the AAB.
   - schema-v3 provenance is embedded at base/assets/voidscape-provenance.json.
+  - mutable runtime files and editor/download scratch files are absent from the AAB.
   - embedded and sidecar provenance match the exact clean Android/shared relevant inputs
     and their claimed commit tree.
 
@@ -332,6 +333,40 @@ def is_signature_metadata(name):
     return relative.startswith("SIG-") or relative.endswith((".SF", ".RSA", ".DSA", ".EC"))
 
 
+forbidden_runtime_basenames = {
+    "accounts.txt",
+    "config.txt",
+    "credentials.txt",
+    "hideip.txt",
+    "ip.txt",
+    "port.txt",
+    "uid.dat",
+}
+scratch_basenames = {".ds_store", "thumbs.db"}
+scratch_suffixes = (
+    ".bak",
+    ".download",
+    ".new",
+    ".orig",
+    ".part",
+    ".predungeon",
+    ".rej",
+    ".swp",
+    ".temp",
+    ".tmp",
+    "~",
+)
+
+
+def is_forbidden_packaged_path(name):
+    basename = name.rsplit("/", 1)[-1].lower()
+    return (
+        basename in forbidden_runtime_basenames
+        or basename in scratch_basenames
+        or basename.endswith(scratch_suffixes)
+    )
+
+
 try:
     with zipfile.ZipFile(aab_path) as archive:
         required_entries = {
@@ -341,6 +376,17 @@ try:
         }
 except Exception as exc:
     raise SystemExit(f"ERROR: could not enumerate AAB signature coverage: {exc}")
+
+forbidden_paths = sorted(
+    name for name in required_entries if is_forbidden_packaged_path(name)
+)
+if forbidden_paths:
+    preview = ", ".join(repr(name) for name in forbidden_paths[:10])
+    if len(forbidden_paths) > 10:
+        preview += f", ... ({len(forbidden_paths) - 10} more)"
+    raise SystemExit(
+        "ERROR: AAB contains forbidden runtime/scratch paths: " + preview
+    )
 
 unsigned_entries = sorted(required_entries - signed_entries)
 if unsigned_entries:

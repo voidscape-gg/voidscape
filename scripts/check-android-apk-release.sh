@@ -36,6 +36,7 @@ Verifies an Android APK is safe to promote by checking:
   - sidecar clientVersion matches source and the target server client_version.
   - sidecar artifactType/buildType are apk/release and gitCommit is a full commit id.
   - schema-v3 provenance is embedded inside the signed APK and matches a clean source checkout.
+  - mutable runtime files and editor/download scratch files are absent from the APK.
   - sidecar sha256 and sizeBytes match the APK bytes.
 
 The signer SHA-256 is a public certificate fingerprint, not a keystore password or key.
@@ -311,9 +312,48 @@ except Exception as exc:
 
 errors = []
 expected_application_id = "com.voidscape.gg"
+forbidden_runtime_basenames = {
+    "accounts.txt",
+    "config.txt",
+    "credentials.txt",
+    "hideip.txt",
+    "ip.txt",
+    "port.txt",
+    "uid.dat",
+}
+scratch_basenames = {".ds_store", "thumbs.db"}
+scratch_suffixes = (
+    ".bak",
+    ".download",
+    ".new",
+    ".orig",
+    ".part",
+    ".predungeon",
+    ".rej",
+    ".swp",
+    ".temp",
+    ".tmp",
+    "~",
+)
+
+
+def is_forbidden_packaged_path(name):
+    basename = name.rsplit("/", 1)[-1].lower()
+    return (
+        basename in forbidden_runtime_basenames
+        or basename in scratch_basenames
+        or basename.endswith(scratch_suffixes)
+    )
 
 try:
     with zipfile.ZipFile(apk_path) as archive:
+        forbidden_paths = sorted(
+            {
+                name
+                for name in archive.namelist()
+                if name and not name.endswith("/") and is_forbidden_packaged_path(name)
+            }
+        )
         matches = [
             name for name in archive.namelist()
             if name == "assets/voidscape-provenance.json"
@@ -323,10 +363,13 @@ try:
         embedded = json.loads(archive.read(matches[0]).decode("utf-8"))
 except Exception as exc:
     embedded = {}
+    forbidden_paths = []
     errors.append(f"signed APK provenance asset is missing or invalid: {exc}")
 if not isinstance(embedded, dict):
     errors.append("signed APK provenance asset must contain a JSON object")
     embedded = {}
+for path in forbidden_paths:
+    errors.append(f"APK contains forbidden runtime/scratch path: {path}")
 
 
 def gradle_value(field, pattern, *, numeric=False):
