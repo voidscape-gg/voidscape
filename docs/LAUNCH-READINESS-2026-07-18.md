@@ -13,7 +13,7 @@ database contents, signing material, or private source/history in this file.
 
 - **Verdict:** NO-GO as of 2026-07-16; re-audit after every P0 and P1 gate is closed.
 - **Private branch:** `codex/release-10139-integration`
-- **Last completed private commit:** `b8ea420f120a634aca06384a02420247fce0fda7`
+- **Latest verified release fix:** `6d70d5ee` (VS-089 portal static boundary)
 - **Sanitized public branch:** `codex/launch-rc-public-clean`
 - **Current local public commit:** `271581884add7bb434b715c598de281c631dba62`
 - **Current public `main`:** `57056c6147c105039f3e7b39c33f264cfd776247`
@@ -151,14 +151,14 @@ Freeze evidence:
 | Gate | Owner | Status | Completion evidence |
 |---|---|---|---|
 | Contain public portal access to runtime/source/schema/support files on all three origins. | Production operator | BLOCKED | Status-only probes must show forbidden and encoded paths `404` while allowed public routes remain healthy. Preserve access logs; do not retrieve bodies unnecessarily. |
-| Complete VS-089 as a committed, fail-closed application/package/Nginx boundary. | Codex | IN PROGRESS | `docs/BUGS.md` VS-089; focused static/API/schema tests currently pass, package test currently fails because the contract is untracked. |
+| Complete VS-089 as a committed, fail-closed application/package/Nginx boundary. | Codex | PASS | Commit `6d70d5ee`; `docs/BUGS.md` VS-089; packaged-runtime, exact-tree, all-origin, portal API/schema, launch-config, and full-build checks pass. |
 | Prevent every existing pre-VS-089 portal bundle from being deployed. | Release owner | BLOCKED | Retire/quarantine record naming the superseded bundle paths and hashes. |
 
 ## P1 — required before opening
 
 | Workstream | Owner | Status | Completion evidence |
 |---|---|---|---|
-| Clean source and canonical build | Codex | IN PROGRESS | Clean final commit; `scripts/build.sh` exit `0`; VS-089 focused tests and packaged-runtime test pass. |
+| Clean source and canonical build | Codex | IN PROGRESS | Private source is clean at `6d70d5ee` and `scripts/build.sh` exits `0`; repeat against the final post-reward-fix commit and sanitized public tree. |
 | Final v12 server/client release bundle | Codex | PENDING | Manifest names exact final commit, `source_dirty=false`, exact hashes, protocol `10139`, corrected launch contract, and no blockers. |
 | Bundle hygiene | Codex | PENDING | No personal absolute paths, credentials/keys, backups/archives, `.gitsave`, runtime state, private history, or unexpected files; populated `portal.env` install mode is `0600`. |
 | Correct launch profile and custom content | Codex | PENDING | Complete launch-contract verification; archived boot log shows expected custom region/Enclave/Rift/Auction counts. |
@@ -225,9 +225,10 @@ do not commit secrets or player data.
 | Date | Gate | Result | Commit/artifact | Evidence |
 |---|---|---|---|---|
 | 2026-07-16 | VS-088 launch profile | PASS in isolated rehearsal | `b8ea420f` | `docs/BUGS.md` VS-088; final bundle regeneration still required. |
-| 2026-07-16 | VS-089 focused static boundary | PASS | dirty working tree | `scripts/test-portal-static-boundary.sh` |
-| 2026-07-16 | VS-089 portal API/schema | PASS | dirty working tree | `scripts/test-portal-api.sh`; `scripts/test-portal-schema.sh` |
-| 2026-07-16 | VS-089 package test | FAIL | dirty working tree | Packager correctly refuses untracked `web/portal/public-static-contract.json`. |
+| 2026-07-16 | VS-089 focused static boundary | PASS | `6d70d5ee` | Minimized packaged runtime; allowed/forbidden/range matrix; three independent local origins. |
+| 2026-07-16 | VS-089 portal API/schema | PASS | `6d70d5ee` | `scripts/test-portal-api.sh`; `scripts/test-portal-schema.sh` |
+| 2026-07-16 | VS-089 package test | PASS | `6d70d5ee` | Whole packaged tree exactly equals the contract; no symlink or non-regular entry. |
+| 2026-07-16 | Canonical build after VS-089 | PASS | `6d70d5ee` | `scripts/build.sh` exit `0`; JDK 25 compatibility warnings only. |
 | 2026-07-16 | Existing held portal boundary | FAIL | held bundles from `57056c61` | Forbidden paths are packaged/served; status-only production probes returned `200` on all three origins. |
 | 2026-07-16 | Play status | HELD, NOT PUBLIC | v11 / `1.0.10` / client `10139` | Console: `Managed publishing on`, `Changes ready to publish`, `Publish 1 change`. |
 | 2026-07-16 | Play AAB local identity | PARTIAL | SHA-256 `961b2148bb88300720084fb50c8a8ea3c10d5a739c75d4efc37edaa28cacb62b` | Local sidecar/signature/metadata pass; Play-hosted byte identity pending. |
@@ -261,3 +262,7 @@ or physical-device requirements.
   founder or parent account. A qualifying ten-character account is owed ten cards;
   the current account-global marker and single-use legacy code do not yet meet this
   contract.
+- 2026-07-16: committed and fully verified the local VS-089 fail-closed portal
+  application/package/Nginx boundary at `6d70d5ee`. The live production origins and
+  every superseded bundle remain blocked until an operator performs an explicitly
+  authorized containment/deployment and the hosted probes pass.
