@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "voidscape-paperdoll-v2-workspace/v1",
+  "$defs": {
+    "relative_png": {"type": "string", "pattern": "^[A-Za-z0-9_./-]+\\.png$"},
+    "channel": {
+      "type": "object",
+      "required": ["id", "label", "tintRole", "editable"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "label": {"type": "string", "minLength": 1},
+        "tintRole": {"enum": ["skin", "hair", "facial-hair", "top", "bottom", "primary", "secondary", "fixed"]},
+        "editable": {"type": "boolean"},
+        "masters": {"type": "object", "minProperties": 6, "maxProperties": 6, "additionalProperties": {"$ref": "#/$defs/relative_png"}},
+        "frames": {"type": "object", "minProperties": 18, "maxProperties": 18, "additionalProperties": {"$ref": "#/$defs/relative_png"}}
+      },
+      "oneOf": [{"required": ["masters"], "not": {"required": ["frames"]}}, {"required": ["frames"], "not": {"required": ["masters"]}}],
+      "additionalProperties": false
+    },
+    "asset": {
+      "type": "object",
+      "required": ["id", "label", "kind", "paperdollSlot", "sourceMode", "propagation", "channels"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "label": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["head", "body", "legs", "hair", "facial-hair", "hat", "legacy-control"]},
+        "paperdollSlot": {"type": "integer", "minimum": 0, "maximum": 11},
+        "sourceMode": {"enum": ["native", "legacy-upscaled"]},
+        "propagation": {"enum": ["rigid-head", "explicit-frames"]},
+        "channels": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/channel"}}
+      },
+      "additionalProperties": false
+    },
+    "mask_rule": {
+      "type": "object",
+      "required": ["asset", "allowedMask", "requiredAttachment", "connectivity", "maxComponents"],
+      "properties": {
+        "asset": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "allowedMask": {"enum": ["hair_allowed", "facial_hair_allowed"]},
+        "requiredAttachment": {"enum": ["scalp_attachment", "upper_lip_attachment"]},
+        "connectivity": {"const": 4},
+        "maxComponents": {"type": "integer", "minimum": 1, "maximum": 2}
+      },
+      "additionalProperties": false
+    },
+    "qa_case": {
+      "type": "object",
+      "required": ["id", "baseProfile", "stack", "selectorId", "requiredAssets", "maskRules", "comparisonStack", "tintDiagnostics", "oracleScope"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "baseProfile": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "stack": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "selectorId": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 255}]},
+        "requiredAssets": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}},
+        "maskRules": {"type": "array", "items": {"$ref": "#/$defs/mask_rule"}},
+        "comparisonStack": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}]},
+        "tintDiagnostics": {"type": "boolean"},
+        "oracleScope": {"enum": ["pack-only-full", "slot0-slot5-only", "native-slots-0-1-2", "native-slots-0-1-2-5"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "required": ["schema", "shipping", "name", "template", "poses", "assets", "renderStacks", "preview", "palette", "instructions"],
+  "properties": {
+    "schema": {"const": "voidscape-paperdoll-v2-workspace/v1"},
+    "shipping": {"const": false},
+    "name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$"},
+    "template": {
+      "type": "object", "required": ["path", "sha256", "sourceV1Sha256", "derivedMaskTreeSha256"],
+      "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "sourceV1Sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "derivedMaskTreeSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+      "additionalProperties": false
+    },
+    "poses": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "object"}},
+    "assets": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/asset"}},
+    "renderStacks": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["id", "label", "mode", "assets"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "label": {"type": "string"},
+          "mode": {"enum": ["pack-only", "live-controls"]},
+          "assets": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}}
+        },
+        "additionalProperties": false
+      }
+    },
+    "catalog": {
+      "type": "object", "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^[A-Za-z0-9_./-]+\\.yaml$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "baseProfiles": {"type": "array", "minItems": 2, "items": {"type": "object"}},
+    "selectorRegistry": {
+      "type": "object", "required": ["schema", "defaultEnabled", "namespace", "entries"],
+      "properties": {
+        "schema": {"const": "voidscape-paperdoll-v2-selector-registry/v1"},
+        "defaultEnabled": {"const": false},
+        "namespace": {"type": "object"},
+        "entries": {"type": "array", "minItems": 1, "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "hatOcclusionPolicy": {"type": "object"},
+    "qaCases": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/qa_case"}},
+    "preview": {"const": {"width": 176, "height": 224, "drawX": 24, "drawY": 4, "drawWidth": 128, "drawHeight": 204, "backgroundRgb": 1185824}},
+    "palette": {"type": "object"},
+    "instructions": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}

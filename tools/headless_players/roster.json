@@ -1,0 +1,877 @@
+{
+  "schema": 1,
+  "players": [
+    {
+      "slot": 0,
+      "id": "fireee",
+      "username": "Fireee",
+      "appearance": {
+        "gender": "female",
+        "hairColour": 14,
+        "topColour": 7,
+        "trouserColour": 11,
+        "skinColour": 1,
+        "head": 1,
+        "body": 5
+      },
+      "travelRoute": [
+        {"x": 120, "y": 648},
+        {"x": 129, "y": 634},
+        {"x": 150, "y": 640},
+        {"x": 170, "y": 635},
+        {"x": 190, "y": 630},
+        {"x": 210, "y": 630},
+        {"x": 211, "y": 636}
+      ],
+      "activity": {
+        "type": "woodcutting",
+        "skill": "woodcutting",
+        "toolItemIds": [88, 12, 87],
+        "outputItemIds": [14],
+        "inventoryHighWater": 15,
+        "idleSeconds": {"min": 3, "max": 9},
+        "crowdingRadius": 1,
+        "nodes": [
+          {"objectId": 1, "command": 1, "location": {"x": 212, "y": 634}, "approach": {"x": 211, "y": 634}},
+          {"objectId": 1, "command": 1, "location": {"x": 213, "y": 636}, "approach": {"x": 212, "y": 636}},
+          {"objectId": 1, "command": 1, "location": {"x": 212, "y": 638}, "approach": {"x": 212, "y": 637}}
+        ],
+        "bank": {
+          "npcId": 95,
+          "command": 1,
+          "searchRadius": 4,
+          "approach": {"x": 219, "y": 634},
+          "route": [
+            {"x": 211, "y": 633},
+            {"x": 219, "y": 633},
+            {"x": 219, "y": 634}
+          ]
+        }
+      }
+    },
+    {
+      "slot": 1,
+      "id": "ch0p",
+      "username": "Ch0p",
+      "appearance": {
+        "gender": "male",
+        "hairColour": 10,
+        "topColour": 5,
+        "trouserColour": 9,
+        "skinColour": 2,
+        "head": 1,
+        "body": 2
+      },
+      "travelRoute": [
+        {"x": 120, "y": 648},
+        {"x": 160, "y": 640},
+        {"x": 200, "y": 625},
+        {"x": 240, "y": 610},
+        {"x": 280, "y": 590},
+        {"x": 315, "y": 590},
+        {"x": 327, "y": 576},
+        {"x": 326, "y": 565},
+        {"x": 327, "y": 553},
+        {"x": 328, "y": 553},
+        {"x": 327, "y": 553},
+        {"x": 326, "y": 565},
+        {"x": 327, "y": 576},
+        {"x": 316, "y": 576},
+        {"x": 305, "y": 576},
+        {"x": 294, "y": 576},
+        {"x": 294, "y": 580},
+        {"x": 292, "y": 580},
+        {"x": 292, "y": 590},
+        {"x": 303, "y": 590},
+        {"x": 315, "y": 590},
+        {"x": 315, "y": 598},
+        {"x": 316, "y": 598},
+        {"x": 316, "y": 609},
+        {"x": 315, "y": 609},
+        {"x": 315, "y": 632},
+        {"x": 314, "y": 632},
+        {"x": 314, "y": 634}
+      ],
+      "hazard": {
+        "monitor": true,
+        "foodItemIds": [132, 350],
+        "foodToKeep": 2,
+        "eatBelowRatio": 0.7,
+        "maxTravelFailures": 3,
+        "failureCooldownSeconds": 600
+      },
+      "stagingBank": {
+        "npcId": 95,
+        "command": 1,
+        "searchRadius": 6,
+        "approach": {"x": 328, "y": 553},
+        "route": [
+          {"x": 120, "y": 648},
+          {"x": 160, "y": 640},
+          {"x": 200, "y": 625},
+          {"x": 240, "y": 610},
+          {"x": 280, "y": 590},
+          {"x": 315, "y": 590},
+          {"x": 327, "y": 576},
+          {"x": 326, "y": 565},
+          {"x": 327, "y": 553},
+          {"x": 328, "y": 553}
+        ]
+      },
+      "activity": {
+        "type": "mining",
+        "skill": "mining",
+        "toolItemIds": [1259, 1258, 156],
+        "outputItemIds": [150],
+        "inventoryHighWater": 15,
+        "idleSeconds": {"min": 4, "max": 10},
+        "crowdingRadius": 1,
+        "nodes": [
+          {"objectId": 100, "command": 1, "location": {"x": 309, "y": 635}, "approach": {"x": 309, "y": 634}},
+          {"objectId": 100, "command": 1, "location": {"x": 310, "y": 635}, "approach": {"x": 310, "y": 634}},
+          {"objectId": 100, "command": 1, "location": {"x": 311, "y": 636}, "approach": {"x": 311, "y": 635}},
+          {"objectId": 100, "command": 1, "location": {"x": 312, "y": 636}, "approach": {"x": 312, "y": 635}}
+        ],
+        "bank": {
+          "npcId": 95,
+          "command": 1,
+          "searchRadius": 6,
+          "approach": {"x": 328, "y": 553},
+          "route": [
+            {"x": 314, "y": 634},
+            {"x": 314, "y": 632},
+            {"x": 315, "y": 632},
+            {"x": 315, "y": 609},
+            {"x": 316, "y": 609},
+            {"x": 316, "y": 598},
+            {"x": 315, "y": 598},
+            {"x": 315, "y": 590},
+            {"x": 303, "y": 590},
+            {"x": 292, "y": 590},
+            {"x": 292, "y": 580},
+            {"x": 294, "y": 580},
+            {"x": 294, "y": 576},
+            {"x": 305, "y": 576},
+            {"x": 316, "y": 576},
+            {"x": 327, "y": 576},
+            {"x": 326, "y": 565},
+            {"x": 327, "y": 553},
+            {"x": 328, "y": 553}
+          ]
+        }
+      }
+    },
+    {
+      "slot": 2,
+      "id": "ultraz",
+      "username": "Ultraz",
+      "appearance": {
+        "gender": "female",
+        "hairColour": 12,
+        "topColour": 3,
+        "trouserColour": 8,
+        "skinColour": 2,
+        "head": 1,
+        "body": 5
+      },
+      "travelRoute": [
+        {"x": 120, "y": 648},
+        {"x": 125, "y": 645},
+        {"x": 130, "y": 640},
+        {"x": 135, "y": 640},
+        {"x": 135, "y": 635},
+        {"x": 140, "y": 635},
+        {"x": 145, "y": 640},
+        {"x": 150, "y": 640},
+        {"x": 155, "y": 635},
+        {"x": 160, "y": 635},
+        {"x": 165, "y": 635},
+        {"x": 170, "y": 630},
+        {"x": 175, "y": 625},
+        {"x": 180, "y": 625},
+        {"x": 184, "y": 624},
+        {"x": 189, "y": 624},
+        {"x": 195, "y": 625},
+        {"x": 200, "y": 625},
+        {"x": 205, "y": 625},
+        {"x": 211, "y": 621},
+        {"x": 215, "y": 615},
+        {"x": 220, "y": 610},
+        {"x": 225, "y": 609},
+        {"x": 230, "y": 605},
+        {"x": 235, "y": 600},
+        {"x": 240, "y": 605},
+        {"x": 245, "y": 610},
+        {"x": 250, "y": 615},
+        {"x": 255, "y": 620},
+        {"x": 258, "y": 623},
+        {"x": 260, "y": 630},
+        {"x": 263, "y": 635},
+        {"x": 266, "y": 636},
+        {"x": 270, "y": 640},
+        {"x": 270, "y": 645},
+        {"x": 269, "y": 649}
+      ],
+      "journey": {
+        "currencyItemId": 10,
+        "funding": {
+          "npcId": 83,
+          "saleItemId": 70,
+          "minimumCoins": 60,
+          "searchRadius": 3,
+          "saleTimeoutSeconds": 8.0,
+          "approach": {"x": 135, "y": 641},
+          "route": [
+            {"x": 120, "y": 648},
+            {"x": 125, "y": 645},
+            {"x": 130, "y": 640},
+            {"x": 135, "y": 640}
+          ]
+        },
+        "port": {
+          "npcId": 166,
+          "fare": 30,
+          "searchRadius": 5,
+          "approach": {"x": 269, "y": 649},
+          "route": [
+            {"x": 135, "y": 640},
+            {"x": 135, "y": 635},
+            {"x": 140, "y": 635},
+            {"x": 145, "y": 640},
+            {"x": 150, "y": 640},
+            {"x": 155, "y": 635},
+            {"x": 160, "y": 635},
+            {"x": 165, "y": 635},
+            {"x": 170, "y": 630},
+            {"x": 175, "y": 625},
+            {"x": 180, "y": 625},
+            {"x": 184, "y": 624},
+            {"x": 189, "y": 624},
+            {"x": 195, "y": 625},
+            {"x": 200, "y": 625},
+            {"x": 205, "y": 625},
+            {"x": 211, "y": 621},
+            {"x": 215, "y": 615},
+            {"x": 220, "y": 610},
+            {"x": 225, "y": 609},
+            {"x": 230, "y": 605},
+            {"x": 235, "y": 600},
+            {"x": 240, "y": 605},
+            {"x": 245, "y": 610},
+            {"x": 250, "y": 615},
+            {"x": 255, "y": 620},
+            {"x": 258, "y": 623},
+            {"x": 260, "y": 630},
+            {"x": 263, "y": 635},
+            {"x": 266, "y": 636},
+            {"x": 270, "y": 640},
+            {"x": 270, "y": 645},
+            {"x": 269, "y": 649}
+          ]
+        },
+        "karamja": {
+          "npcId": 317,
+          "fare": 30,
+          "searchRadius": 5,
+          "approach": {"x": 467, "y": 650},
+          "bounds": {"minX": 300, "maxX": 490, "minY": 640, "maxY": 740},
+          "route": [
+            {"x": 324, "y": 713},
+            {"x": 332, "y": 713},
+            {"x": 333, "y": 713},
+            {"x": 333, "y": 710},
+            {"x": 334, "y": 710},
+            {"x": 334, "y": 709},
+            {"x": 342, "y": 709},
+            {"x": 346, "y": 709},
+            {"x": 346, "y": 704},
+            {"x": 354, "y": 704},
+            {"x": 362, "y": 704},
+            {"x": 364, "y": 704},
+            {"x": 364, "y": 703},
+            {"x": 365, "y": 703},
+            {"x": 365, "y": 698},
+            {"x": 367, "y": 698},
+            {"x": 367, "y": 694},
+            {"x": 375, "y": 694},
+            {"x": 382, "y": 694},
+            {"x": 382, "y": 693},
+            {"x": 384, "y": 693},
+            {"x": 384, "y": 692},
+            {"x": 385, "y": 692},
+            {"x": 385, "y": 690},
+            {"x": 386, "y": 690},
+            {"x": 386, "y": 688},
+            {"x": 387, "y": 688},
+            {"x": 387, "y": 686},
+            {"x": 388, "y": 686},
+            {"x": 388, "y": 684},
+            {"x": 389, "y": 684},
+            {"x": 389, "y": 683},
+            {"x": 397, "y": 683},
+            {"x": 405, "y": 683},
+            {"x": 413, "y": 683},
+            {"x": 421, "y": 683},
+            {"x": 429, "y": 683},
+            {"x": 435, "y": 683},
+            {"x": 435, "y": 689},
+            {"x": 443, "y": 689},
+            {"x": 445, "y": 689},
+            {"x": 445, "y": 690},
+            {"x": 452, "y": 690},
+            {"x": 452, "y": 691},
+            {"x": 459, "y": 691},
+            {"x": 459, "y": 690},
+            {"x": 461, "y": 690},
+            {"x": 461, "y": 685},
+            {"x": 463, "y": 685},
+            {"x": 463, "y": 681},
+            {"x": 471, "y": 681},
+            {"x": 477, "y": 681},
+            {"x": 477, "y": 673},
+            {"x": 477, "y": 671},
+            {"x": 469, "y": 671},
+            {"x": 467, "y": 671},
+            {"x": 467, "y": 663},
+            {"x": 467, "y": 655},
+            {"x": 467, "y": 650}
+          ],
+          "survival": {
+            "shieldItemId": 4,
+            "bananaItemId": 249,
+            "bananaTarget": 10,
+            "foodItemIds": [249, 132],
+            "hostileNpcIds": [70, 21, 262, 271, 421],
+            "npcAvoidRadius": 7,
+            "departureHitsRatio": 1.0,
+            "emergencyHitsRatio": 0.9,
+            "safeStageRadius": 0,
+            "supplyCommitPoint": {"x": 385, "y": 690},
+            "hazardSafePre": {"x": 385, "y": 690},
+            "hazardGatePoint": {"x": 435, "y": 683},
+            "hazardSafePost": {"x": 452, "y": 690},
+            "eatTimeoutSeconds": 4.0,
+            "eatRecoverySeconds": 1.5,
+            "bananaTimeoutSeconds": 4.5,
+            "bananaBatchSize": 5,
+            "retreatStepIntervalSeconds": 1.0,
+            "stepMaxAttempts": 4,
+            "supplyBounds": {"minX": 300, "maxX": 364, "minY": 690, "maxY": 720},
+            "supplyRoute": [
+              {"x": 324, "y": 713},
+              {"x": 332, "y": 713},
+              {"x": 333, "y": 713},
+              {"x": 333, "y": 710},
+              {"x": 334, "y": 710},
+              {"x": 334, "y": 709},
+              {"x": 342, "y": 709},
+              {"x": 346, "y": 709},
+              {"x": 346, "y": 704},
+              {"x": 354, "y": 704},
+              {"x": 362, "y": 704},
+              {"x": 364, "y": 704},
+              {"x": 364, "y": 703}
+            ],
+            "safeStagingPoints": [
+              {"x": 324, "y": 713},
+              {"x": 364, "y": 703},
+              {"x": 364, "y": 701},
+              {"x": 364, "y": 699},
+              {"x": 361, "y": 699},
+              {"x": 361, "y": 701},
+              {"x": 361, "y": 703},
+              {"x": 358, "y": 703},
+              {"x": 358, "y": 701},
+              {"x": 385, "y": 690},
+              {"x": 452, "y": 690},
+              {"x": 467, "y": 650}
+            ],
+            "bananaTrees": [
+              {"objectId": 183, "command": 2, "location": {"x": 363, "y": 703}, "approach": {"x": 364, "y": 703}},
+              {"objectId": 183, "command": 2, "location": {"x": 363, "y": 701}, "approach": {"x": 364, "y": 701}},
+              {"objectId": 183, "command": 2, "location": {"x": 363, "y": 699}, "approach": {"x": 364, "y": 699}},
+              {"objectId": 183, "command": 2, "location": {"x": 360, "y": 699}, "approach": {"x": 361, "y": 699}},
+              {"objectId": 183, "command": 2, "location": {"x": 360, "y": 701}, "approach": {"x": 361, "y": 701}},
+              {"objectId": 183, "command": 2, "location": {"x": 360, "y": 703}, "approach": {"x": 361, "y": 703}},
+              {"objectId": 183, "command": 2, "location": {"x": 357, "y": 703}, "approach": {"x": 358, "y": 703}},
+              {"objectId": 183, "command": 2, "location": {"x": 357, "y": 701}, "approach": {"x": 358, "y": 701}}
+            ]
+          }
+        },
+        "ardougne": {
+          "bounds": {"minX": 400, "maxX": 560, "minY": 480, "maxY": 630},
+          "route": [
+            {"x": 538, "y": 617},
+            {"x": 540, "y": 615},
+            {"x": 543, "y": 609},
+            {"x": 545, "y": 605},
+            {"x": 550, "y": 600},
+            {"x": 550, "y": 595},
+            {"x": 553, "y": 591},
+            {"x": 553, "y": 585},
+            {"x": 554, "y": 578},
+            {"x": 555, "y": 574},
+            {"x": 561, "y": 571},
+            {"x": 564, "y": 565},
+            {"x": 567, "y": 561},
+            {"x": 564, "y": 555},
+            {"x": 564, "y": 552},
+            {"x": 564, "y": 545},
+            {"x": 560, "y": 540},
+            {"x": 557, "y": 535},
+            {"x": 557, "y": 530},
+            {"x": 554, "y": 526},
+            {"x": 550, "y": 525},
+            {"x": 545, "y": 520},
+            {"x": 540, "y": 515},
+            {"x": 535, "y": 510},
+            {"x": 530, "y": 505},
+            {"x": 525, "y": 505},
+            {"x": 520, "y": 505},
+            {"x": 515, "y": 500},
+            {"x": 510, "y": 495},
+            {"x": 505, "y": 490},
+            {"x": 500, "y": 490},
+            {"x": 495, "y": 490},
+            {"x": 490, "y": 495},
+            {"x": 485, "y": 495},
+            {"x": 480, "y": 495},
+            {"x": 475, "y": 495},
+            {"x": 472, "y": 498},
+            {"x": 466, "y": 498},
+            {"x": 460, "y": 495},
+            {"x": 455, "y": 500},
+            {"x": 450, "y": 505},
+            {"x": 445, "y": 500},
+            {"x": 440, "y": 500},
+            {"x": 434, "y": 501},
+            {"x": 428, "y": 498},
+            {"x": 423, "y": 498},
+            {"x": 419, "y": 499}
+          ]
+        }
+      },
+      "activity": {
+        "type": "net_fishing",
+        "skill": "fishing",
+        "toolItemIds": [376],
+        "outputItemIds": [349],
+        "inventoryHighWater": 15,
+        "idleSeconds": {"min": 3, "max": 9},
+        "crowdingRadius": 1,
+        "nodes": [
+          {"objectId": 193, "command": 1, "location": {"x": 418, "y": 500}, "approach": {"x": 418, "y": 499}},
+          {"objectId": 193, "command": 1, "location": {"x": 414, "y": 502}, "approach": {"x": 414, "y": 501}}
+        ],
+        "bank": {
+          "npcId": 95,
+          "command": 1,
+          "searchRadius": 4,
+          "approach": {"x": 439, "y": 495},
+          "route": [
+            {"x": 418, "y": 498},
+            {"x": 439, "y": 498},
+            {"x": 439, "y": 495}
+          ]
+        }
+      }
+    },
+    {
+      "slot": 3,
+      "id": "vinny",
+      "username": "Vinny",
+      "appearance": {
+        "gender": "male",
+        "hairColour": 11,
+        "topColour": 4,
+        "trouserColour": 12,
+        "skinColour": 1,
+        "head": 1,
+        "body": 2
+      },
+      "travelRoute": [
+        {"x": 120, "y": 648},
+        {"x": 110, "y": 620},
+        {"x": 100, "y": 590},
+        {"x": 90, "y": 560},
+        {"x": 74, "y": 543},
+        {"x": 71, "y": 543}
+      ],
+      "activity": {
+        "type": "mining",
+        "skill": "mining",
+        "toolItemIds": [156],
+        "outputItemIds": [150],
+        "inventoryHighWater": 15,
+        "idleSeconds": {"min": 3, "max": 8},
+        "crowdingRadius": 1,
+        "nodes": [
+          {"objectId": 100, "command": 1, "location": {"x": 70, "y": 543}, "approach": {"x": 71, "y": 543}},
+          {"objectId": 100, "command": 1, "location": {"x": 69, "y": 544}, "approach": {"x": 68, "y": 545}},
+          {"objectId": 100, "command": 1, "location": {"x": 70, "y": 544}, "approach": {"x": 71, "y": 543}}
+        ],
+        "bank": {
+          "npcId": 95,
+          "command": 1,
+          "searchRadius": 4,
+          "approach": {"x": 100, "y": 512},
+          "route": [
+            {"x": 71, "y": 543},
+            {"x": 72, "y": 540},
+            {"x": 75, "y": 535},
+            {"x": 76, "y": 529},
+            {"x": 78, "y": 523},
+            {"x": 82, "y": 517},
+            {"x": 85, "y": 512},
+            {"x": 90, "y": 507},
+            {"x": 95, "y": 507},
+            {"x": 98, "y": 506},
+            {"x": 100, "y": 512}
+          ]
+        }
+      }
+    },
+    {
+      "slot": 4,
+      "id": "six-seven",
+      "username": "Six Seven",
+      "appearance": {
+        "gender": "male",
+        "hairColour": 13,
+        "topColour": 6,
+        "trouserColour": 10,
+        "skinColour": 3,
+        "head": 1,
+        "body": 2
+      },
+      "travelRoute": [
+        {"x": 120, "y": 648},
+        {"x": 110, "y": 620},
+        {"x": 100, "y": 590},
+        {"x": 90, "y": 560},
+        {"x": 74, "y": 543}
+      ],
+      "activity": {
+        "type": "mining",
+        "skill": "mining",
+        "toolItemIds": [1259, 1258, 156],
+        "outputItemIds": [151, 150, 202],
+        "inventoryHighWater": 15,
+        "idleSeconds": {"min": 4, "max": 9},
+        "crowdingRadius": 1,
+        "training": {
+          "untilLevel": 15,
+          "outputItemIds": [150, 202],
+          "nodes": [
+            {"objectId": 100, "command": 1, "location": {"x": 70, "y": 543}, "approach": {"x": 71, "y": 543}},
+            {"objectId": 100, "command": 1, "location": {"x": 70, "y": 544}, "approach": {"x": 71, "y": 543}},
+            {"objectId": 105, "command": 1, "location": {"x": 78, "y": 545}, "approach": {"x": 77, "y": 545}},
+            {"objectId": 105, "command": 1, "location": {"x": 78, "y": 546}, "approach": {"x": 77, "y": 546}}
+          ]
+        },
+        "nodes": [
+          {"objectId": 102, "command": 1, "location": {"x": 75, "y": 543}, "approach": {"x": 74, "y": 543}},
+          {"objectId": 102, "command": 1, "location": {"x": 76, "y": 543}, "approach": {"x": 77, "y": 543}},
+          {"objectId": 103, "command": 1, "location": {"x": 76, "y": 544}, "approach": {"x": 77, "y": 544}}
+        ],
+        "bank": {
+          "npcId": 95,
+          "command": 1,
+          "searchRadius": 4,
+          "approach": {"x": 104, "y": 512},
+          "route": [
+            {"x": 74, "y": 543},
+            {"x": 75, "y": 540},
+            {"x": 75, "y": 535},
+            {"x": 76, "y": 529},
+            {"x": 78, "y": 523},
+            {"x": 82, "y": 517},
+            {"x": 85, "y": 512},
+            {"x": 90, "y": 507},
+            {"x": 95, "y": 507},
+            {"x": 98, "y": 506},
+            {"x": 104, "y": 512}
+          ]
+        }
+      }
+    },
+    {
+      "slot": 5,
+      "id": "college",
+      "username": "College",
+      "appearance": {
+        "gender": "female",
+        "hairColour": 15,
+        "topColour": 2,
+        "trouserColour": 13,
+        "skinColour": 2,
+        "head": 1,
+        "body": 5
+      },
+      "travelRoute": [
+        {"x": 120, "y": 648},
+        {"x": 110, "y": 620},
+        {"x": 100, "y": 590},
+        {"x": 90, "y": 560},
+        {"x": 80, "y": 546}
+      ],
+      "activity": {
+        "type": "mining",
+        "skill": "mining",
+        "toolItemIds": [1258, 156],
+        "outputItemIds": [202],
+        "inventoryHighWater": 15,
+        "idleSeconds": {"min": 4, "max": 9},
+        "crowdingRadius": 1,
+        "nodes": [
+          {"objectId": 105, "command": 1, "location": {"x": 78, "y": 545}, "approach": {"x": 77, "y": 545}},
+          {"objectId": 105, "command": 1, "location": {"x": 78, "y": 546}, "approach": {"x": 77, "y": 546}},
+          {"objectId": 105, "command": 1, "location": {"x": 79, "y": 546}, "approach": {"x": 80, "y": 546}}
+        ],
+        "bank": {
+          "npcId": 95,
+          "command": 1,
+          "searchRadius": 4,
+          "approach": {"x": 102, "y": 513},
+          "route": [
+            {"x": 80, "y": 546},
+            {"x": 80, "y": 540},
+            {"x": 75, "y": 535},
+            {"x": 76, "y": 529},
+            {"x": 78, "y": 523},
+            {"x": 82, "y": 517},
+            {"x": 85, "y": 512},
+            {"x": 90, "y": 507},
+            {"x": 95, "y": 507},
+            {"x": 98, "y": 506},
+            {"x": 102, "y": 513}
+          ]
+        }
+      }
+    },
+    {
+      "slot": 6,
+      "id": "pknskate",
+      "username": "Pknskate",
+      "appearance": {
+        "gender": "male",
+        "hairColour": 16,
+        "topColour": 8,
+        "trouserColour": 4,
+        "skinColour": 1,
+        "head": 1,
+        "body": 2
+      },
+      "travelRoute": [
+        {"x": 120, "y": 648},
+        {"x": 150, "y": 640},
+        {"x": 180, "y": 635},
+        {"x": 210, "y": 642},
+        {"x": 220, "y": 657},
+        {"x": 223, "y": 659}
+      ],
+      "activity": {
+        "type": "net_fishing",
+        "skill": "fishing",
+        "toolItemIds": [376],
+        "outputItemIds": [349],
+        "inventoryHighWater": 15,
+        "idleSeconds": {"min": 3, "max": 8},
+        "crowdingRadius": 1,
+        "nodes": [
+          {"objectId": 193, "command": 1, "location": {"x": 224, "y": 659}, "approach": {"x": 223, "y": 659}},
+          {"objectId": 193, "command": 1, "location": {"x": 224, "y": 661}, "approach": {"x": 223, "y": 661}},
+          {"objectId": 193, "command": 1, "location": {"x": 221, "y": 664}, "approach": {"x": 221, "y": 663}}
+        ],
+        "bank": {
+          "npcId": 95,
+          "command": 1,
+          "searchRadius": 4,
+          "approach": {"x": 219, "y": 634},
+          "route": [
+            {"x": 220, "y": 657},
+            {"x": 214, "y": 650},
+            {"x": 211, "y": 642},
+            {"x": 211, "y": 633},
+            {"x": 219, "y": 633},
+            {"x": 219, "y": 634}
+          ]
+        }
+      }
+    },
+    {
+      "slot": 7,
+      "id": "p-h-i-s-h",
+      "username": "P H I S H",
+      "appearance": {
+        "gender": "female",
+        "hairColour": 17,
+        "topColour": 9,
+        "trouserColour": 6,
+        "skinColour": 3,
+        "head": 1,
+        "body": 5
+      },
+      "travelRoute": [
+        {"x": 120, "y": 648},
+        {"x": 150, "y": 640},
+        {"x": 180, "y": 635},
+        {"x": 210, "y": 642},
+        {"x": 220, "y": 657},
+        {"x": 223, "y": 661}
+      ],
+      "activity": {
+        "type": "net_fishing",
+        "skill": "fishing",
+        "toolItemIds": [376],
+        "outputItemIds": [349],
+        "inventoryHighWater": 15,
+        "idleSeconds": {"min": 4, "max": 9},
+        "crowdingRadius": 1,
+        "nodes": [
+          {"objectId": 193, "command": 1, "location": {"x": 224, "y": 661}, "approach": {"x": 223, "y": 661}},
+          {"objectId": 193, "command": 1, "location": {"x": 221, "y": 664}, "approach": {"x": 221, "y": 663}},
+          {"objectId": 193, "command": 1, "location": {"x": 224, "y": 659}, "approach": {"x": 223, "y": 659}}
+        ],
+        "bank": {
+          "npcId": 95,
+          "command": 1,
+          "searchRadius": 4,
+          "approach": {"x": 219, "y": 634},
+          "route": [
+            {"x": 220, "y": 657},
+            {"x": 214, "y": 650},
+            {"x": 211, "y": 642},
+            {"x": 211, "y": 633},
+            {"x": 219, "y": 633},
+            {"x": 219, "y": 634}
+          ]
+        }
+      }
+    },
+    {
+      "slot": 8,
+      "id": "fulani",
+      "username": "Fulani",
+      "appearance": {
+        "gender": "female",
+        "hairColour": 10,
+        "topColour": 14,
+        "trouserColour": 2,
+        "skinColour": 2,
+        "head": 1,
+        "body": 5
+      },
+      "travelRoute": [
+        {"x": 120, "y": 648},
+        {"x": 114, "y": 635}
+      ],
+      "activity": {
+        "type": "woodcutting",
+        "skill": "woodcutting",
+        "toolItemIds": [87],
+        "outputItemIds": [14],
+        "inventoryHighWater": 15,
+        "idleSeconds": {"min": 3, "max": 8},
+        "crowdingRadius": 1,
+        "nodes": [
+          {"objectId": 1, "command": 1, "location": {"x": 114, "y": 634}, "approach": {"x": 114, "y": 635}},
+          {"objectId": 1, "command": 1, "location": {"x": 115, "y": 635}, "approach": {"x": 114, "y": 635}},
+          {"objectId": 1, "command": 1, "location": {"x": 110, "y": 640}, "approach": {"x": 109, "y": 639}},
+          {"objectId": 1, "command": 1, "location": {"x": 114, "y": 640}, "approach": {"x": 115, "y": 640}}
+        ],
+        "bank": {
+          "npcId": 95,
+          "command": 1,
+          "searchRadius": 4,
+          "approach": {"x": 219, "y": 634},
+          "route": [
+            {"x": 110, "y": 635},
+            {"x": 110, "y": 630},
+            {"x": 115, "y": 625},
+            {"x": 120, "y": 625},
+            {"x": 125, "y": 625},
+            {"x": 131, "y": 623},
+            {"x": 135, "y": 620},
+            {"x": 140, "y": 616},
+            {"x": 145, "y": 616},
+            {"x": 152, "y": 615},
+            {"x": 159, "y": 614},
+            {"x": 165, "y": 610},
+            {"x": 170, "y": 615},
+            {"x": 175, "y": 620},
+            {"x": 180, "y": 625},
+            {"x": 184, "y": 624},
+            {"x": 189, "y": 624},
+            {"x": 195, "y": 625},
+            {"x": 200, "y": 625},
+            {"x": 205, "y": 625},
+            {"x": 210, "y": 630},
+            {"x": 214, "y": 632},
+            {"x": 219, "y": 634}
+          ]
+        }
+      }
+    },
+    {
+      "slot": 9,
+      "id": "az",
+      "username": "Az",
+      "appearance": {
+        "gender": "male",
+        "hairColour": 12,
+        "topColour": 1,
+        "trouserColour": 14,
+        "skinColour": 4,
+        "head": 1,
+        "body": 2
+      },
+      "travelRoute": [
+        {"x": 120, "y": 648},
+        {"x": 139, "y": 639}
+      ],
+      "activity": {
+        "type": "woodcutting",
+        "skill": "woodcutting",
+        "toolItemIds": [12, 87],
+        "outputItemIds": [14],
+        "inventoryHighWater": 15,
+        "idleSeconds": {"min": 4, "max": 9},
+        "crowdingRadius": 1,
+        "nodes": [
+          {"objectId": 1, "command": 1, "location": {"x": 138, "y": 639}, "approach": {"x": 139, "y": 639}},
+          {"objectId": 1, "command": 1, "location": {"x": 140, "y": 641}, "approach": {"x": 140, "y": 640}},
+          {"objectId": 1, "command": 1, "location": {"x": 137, "y": 643}, "approach": {"x": 138, "y": 643}},
+          {"objectId": 1, "command": 1, "location": {"x": 135, "y": 647}, "approach": {"x": 134, "y": 647}}
+        ],
+        "bank": {
+          "npcId": 95,
+          "command": 1,
+          "searchRadius": 4,
+          "approach": {"x": 219, "y": 634},
+          "route": [
+            {"x": 139, "y": 639},
+            {"x": 129, "y": 634},
+            {"x": 135, "y": 635},
+            {"x": 140, "y": 635},
+            {"x": 145, "y": 640},
+            {"x": 150, "y": 640},
+            {"x": 155, "y": 640},
+            {"x": 160, "y": 640},
+            {"x": 165, "y": 635},
+            {"x": 168, "y": 633},
+            {"x": 174, "y": 633},
+            {"x": 180, "y": 630},
+            {"x": 185, "y": 630},
+            {"x": 190, "y": 630},
+            {"x": 196, "y": 633},
+            {"x": 202, "y": 634},
+            {"x": 208, "y": 633},
+            {"x": 214, "y": 632},
+            {"x": 219, "y": 634}
+          ]
+        }
+      }
+    }
+  ]
+}

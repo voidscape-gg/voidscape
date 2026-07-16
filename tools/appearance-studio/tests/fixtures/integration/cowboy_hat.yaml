@@ -1,0 +1,67 @@
+schema: voidscape-appearance-integration-fixture/v1
+key: cowboy_hat
+profile: authentic
+
+appearance:
+  id: 245
+  legacy_name: cowboyhat
+  category: equipment
+  sprite_base: 1890
+  reservation_size: 27
+  frame_count: 18
+  has_a: true
+  has_f: false
+  paperdoll_slot: 5
+
+item:
+  id: 1609
+  constant: COWBOY_HAT
+  name: Cowboy hat
+  description: A rugged hat from the frontier.
+  appearance_id: 245
+  wearable_id: 32
+  wear_slot: 5
+  inventory_sprite_id: 638
+  inventory_archive_entry: 2788
+  expected_max_custom: 1609
+
+outputs:
+  client_registry: Client_Base/src/com/openrsc/client/entityhandling/GeneratedAppearanceRegistry.java
+  server_registry: server/src/com/openrsc/server/appearance/GeneratedAppearanceRegistry.java
+  client_item_definitions: Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java
+  server_item_definitions: server/conf/server/defs/ItemDefsCustom.json
+  item_constants: server/src/com/openrsc/server/constants/ItemId.java
+  appearance_constants: server/src/com/openrsc/server/constants/AppearanceId.java
+  client_archive: Client_Base/Cache/video/Authentic_Sprites.orsc
+  server_archive: server/conf/server/data/Authentic_Sprites.orsc
+  client_md5: Client_Base/Cache/MD5.SUM
+  appearance_manifest: content/custom/cowboy_hat/appearance.yaml
+  content_metadata: content/custom/cowboy_hat/content.yaml
+
+content_metadata_contract:
+  server_defs:
+    - server/conf/server/defs/ItemDefsCustom.json
+    - server/src/com/openrsc/server/constants/ItemId.java
+    - server/src/com/openrsc/server/constants/AppearanceId.java
+    - server/src/com/openrsc/server/appearance/GeneratedAppearanceRegistry.java
+    - server/src/com/openrsc/server/appearance/GeneratedLookPresets.java
+  client_defs:
+    - Client_Base/src/com/openrsc/client/entityhandling/EntityHandler.java
+    - Client_Base/src/com/openrsc/client/entityhandling/GeneratedAppearanceRegistry.java
+    - Client_Base/src/com/openrsc/client/entityhandling/GeneratedLookPresets.java
+  cache_files:
+    - Client_Base/Cache/video/Authentic_Sprites.orsc
+    - server/conf/server/data/Authentic_Sprites.orsc
+    - Client_Base/Cache/MD5.SUM
+
+archive_contract:
+  managed_entries:
+    first: 1890
+    last: 1907
+  reserved_but_unwritten:
+    first: 1908
+    last: 1916
+  affected_entries_must_match: true
+  whole_archives_may_differ: true
+  md5_tracks: client_archive
+  md5_row_suffix: "*./video/Authentic_Sprites.orsc"

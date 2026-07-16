@@ -187,6 +187,12 @@ real archive. `--commit` requires a `.bak` next to the real archive.
 
 ## Known constraints
 
+This tool remains useful for locked-base extraction and historical hairstyle
+experiments. New production hair/facial-hair work should be imported as
+transparent layers into Appearance Studio's `rsc-player-v1` template, where
+master propagation, anchors, palette/overlap checks, registry allocation,
+transactional publishing, and Workbench QA share one manifest.
+
 - Adding a hairstyle to character creation still requires client and server code
   changes after the art is ready.
 - Server validation currently accepts only appearance IDs `1, 4, 6, 7, 8`.

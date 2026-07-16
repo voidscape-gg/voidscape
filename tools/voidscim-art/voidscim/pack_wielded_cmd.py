@@ -7,7 +7,7 @@ Three coordinated edits, all gated by --commit:
   2. Append a new AnimationDef line to EntityHandler.java::loadAnimationDefinitions()
      just before the closing brace, with hasA/hasF copied from the source.
   3. Update the target item's `appearanceID` in ItemDefsCustom.json to the new
-     AnimationDef's runtime list-position (= count of non-gated entries before it).
+     AnimationDef's one-based runtime appearance ID (= list-position + 1).
 
 Inputs: a frames directory produced by `recolor-wielded`, a target item id
 (must already be registered + wieldable, typically via `register --like <src>`),
@@ -86,6 +86,14 @@ class AnimEntry:
     number: int = -1  # filled by simulate()
 
 
+@dataclass
+class _BraceContext:
+    custom_sprite_gated: bool
+    active: bool
+    condition: str | None = None
+    is_else_branch: bool = False
+
+
 def _parse_anim_args(args_raw: str) -> tuple[str, bool, bool, int]:
     args = _split_args(args_raw)
     name = args[0].strip().strip('"')
@@ -100,10 +108,12 @@ def _parse_anim_args(args_raw: str) -> tuple[str, bool, bool, int]:
     return name, has_a, has_f, len(args)
 
 
-def parse_animations(text: str) -> tuple[list[AnimEntry], int]:
+def parse_animations(text: str, *, allow_bearded_ladies: bool = False) -> tuple[list[AnimEntry], int]:
     """Walk loadAnimationDefinitions(), return (animations, fn_close_brace_pos).
 
     `gated` is True for entries inside any S_WANT_CUSTOM_SPRITES if-block.
+    Exactly one side of the S_ALLOW_BEARDED_LADIES conditional is included,
+    matching the active runtime configuration supplied by the caller.
     `fn_close_brace_pos` is the byte offset of the function's closing `}` so
     callers can splice new lines just before it.
     """
@@ -114,7 +124,8 @@ def parse_animations(text: str) -> tuple[list[AnimEntry], int]:
     n = len(text)
 
     pos = body_start
-    brace_stack: list[bool] = []  # one entry per open brace inside the function: gated?
+    brace_stack: list[_BraceContext] = []
+    pending_else_condition: str | None = None
     animations: list[AnimEntry] = []
     fn_close = -1
 
@@ -148,19 +159,45 @@ def parse_animations(text: str) -> tuple[list[AnimEntry], int]:
                     break
                 stmt_start -= 1
             preceding = text[stmt_start:pos]
-            this_gated = "S_WANT_CUSTOM_SPRITES" in preceding or any(brace_stack)
-            brace_stack.append(this_gated)
+            parent_gated = any(context.custom_sprite_gated for context in brace_stack)
+            parent_active = all(context.active for context in brace_stack)
+            this_gated = "S_WANT_CUSTOM_SPRITES" in preceding or parent_gated
+            condition: str | None = None
+            is_else_branch = bool(re.search(r"\belse\s*$", preceding))
+
+            if "S_ALLOW_BEARDED_LADIES" in preceding:
+                condition = "S_ALLOW_BEARDED_LADIES"
+                this_active = parent_active and allow_bearded_ladies
+            elif is_else_branch and pending_else_condition == "S_ALLOW_BEARDED_LADIES":
+                condition = pending_else_condition
+                this_active = parent_active and not allow_bearded_ladies
+            else:
+                this_active = parent_active
+
+            brace_stack.append(_BraceContext(
+                custom_sprite_gated=this_gated,
+                active=this_active,
+                condition=condition,
+                is_else_branch=is_else_branch,
+            ))
+            pending_else_condition = None
             pos += 1
             continue
         if c == "}":
             if not brace_stack:
                 fn_close = pos
                 break
-            brace_stack.pop()
+            closed = brace_stack.pop()
+            pending_else_condition = (
+                closed.condition if closed.condition and not closed.is_else_branch else None
+            )
             pos += 1
             continue
         match = ANIM_ADD_RE.match(text, pos)
         if match:
+            if not all(context.active for context in brace_stack):
+                pos = match.end()
+                continue
             name, has_a, has_f, argc = _parse_anim_args(match.group(1))
             animations.append(AnimEntry(
                 name=name,
@@ -168,7 +205,7 @@ def parse_animations(text: str) -> tuple[list[AnimEntry], int]:
                 has_a=has_a,
                 has_f=has_f,
                 arg_count=argc,
-                gated=any(brace_stack),
+                gated=any(context.custom_sprite_gated for context in brace_stack),
             ))
             pos = match.end()
             continue
@@ -177,6 +214,18 @@ def parse_animations(text: str) -> tuple[list[AnimEntry], int]:
     if fn_close < 0:
         raise RuntimeError("could not find loadAnimationDefinitions() closing brace")
     return animations, fn_close
+
+
+def _runtime_index_from_appearance_id(appearance_id: int) -> int:
+    if appearance_id <= 0:
+        raise ValueError(f"appearanceID must be positive for a wearable item, got {appearance_id}")
+    return appearance_id - 1
+
+
+def _appearance_id_from_runtime_index(runtime_index: int) -> int:
+    if runtime_index < 0:
+        raise ValueError(f"runtime animation index cannot be negative, got {runtime_index}")
+    return runtime_index + 1
 
 
 def simulate(animations: list[AnimEntry]) -> int:
@@ -250,10 +299,15 @@ def cmd_pack_wielded(target_item: int, source_item: int, frames_dir: str,
     next_number = simulate(animations)
     visible = [a for a in animations if not a.gated]
 
-    if src_appearance_id >= len(visible):
+    try:
+        src_runtime_index = _runtime_index_from_appearance_id(src_appearance_id)
+    except (TypeError, ValueError) as exc:
+        print(f"error: invalid source appearanceID {src_appearance_id!r}: {exc}")
+        return 1
+    if src_runtime_index >= len(visible):
         print(f"error: source appearanceID {src_appearance_id} out of bounds (visible count={len(visible)})")
         return 1
-    src_anim = visible[src_appearance_id]
+    src_anim = visible[src_runtime_index]
     frame_count = _frame_count_for(src_anim.has_a, src_anim.has_f)
 
     new_name = _slug(target_client["name"])
@@ -263,7 +317,8 @@ def cmd_pack_wielded(target_item: int, source_item: int, frames_dir: str,
         print(f"error: name collision unresolvable for {target_client['name']!r}")
         return 1
 
-    new_appearance_id = len(visible)  # new entry will be appended at this list position
+    new_runtime_index = len(visible)  # new entry is appended at this zero-based list position
+    new_appearance_id = _appearance_id_from_runtime_index(new_runtime_index)
     new_archive_base = next_number
     new_archive_range = (new_archive_base, new_archive_base + frame_count - 1)
     new_anim_line = _build_anim_line(new_name, src_anim)
@@ -271,11 +326,13 @@ def cmd_pack_wielded(target_item: int, source_item: int, frames_dir: str,
     print(f"target:    id={target_item} ({target_client['name']!r})")
     print(f"source:    id={source_item} ({src_anim.name!r}, appearanceID={src_appearance_id}, "
           f"hasA={src_anim.has_a}, hasF={src_anim.has_f}, frame_count={frame_count})")
+    print(f"  source AnimationDef.list_pos = {src_runtime_index}")
     print(f"  source AnimationDef.number = {src_anim.number} (archive [{src_anim.number}..{src_anim.number+frame_count-1}])")
     print()
     print(f"allocation for new wielded sprite:")
     print(f"  new AnimationDef name      = {new_name!r}")
-    print(f"  new AnimationDef list_pos  = {new_appearance_id} (= appearanceID for target)")
+    print(f"  new AnimationDef list_pos  = {new_runtime_index}")
+    print(f"  target appearanceID        = {new_appearance_id} (= list_pos + 1)")
     print(f"  new AnimationDef.number    = {new_archive_base}")
     print(f"  archive range              = [{new_archive_range[0]}..{new_archive_range[1]}] ({frame_count} frames)")
 

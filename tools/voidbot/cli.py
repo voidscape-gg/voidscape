@@ -79,12 +79,38 @@ def main():
             args["which"] = pos[2]
     elif cmd == "cast-object" and len(pos) >= 3:
         args["spell"], args["x"], args["y"] = pos[0], pos[1], pos[2]
+    elif cmd in ("cast-player", "cast-npc") and pos:
+        args["spell"] = pos[0]
+        if len(pos) >= 2 and "server_index" not in args:
+            args["server_index"] = pos[1]
     elif cmd == "use-on-item" and len(pos) >= 2:
         args["slot1"], args["slot2"] = pos[0], pos[1]
     elif cmd == "use-item-on-object" and len(pos) >= 3:
         args["x"], args["y"], args["slot"] = pos[0], pos[1], pos[2]
     elif cmd == "use-item-on-npc" and len(pos) >= 2:
         args["server_index"], args["slot"] = pos[0], pos[1]
+    elif cmd == "use-item-on-player" and len(pos) >= 2:
+        args["server_index"], args["slot"] = pos[0], pos[1]
+    elif cmd == "follow-player" and pos:
+        args["server_index"] = pos[0]
+    elif cmd == "friend-add" and pos:
+        args["name"] = " ".join(pos)
+    elif cmd == "trade-request" and pos:
+        args["server_index"] = pos[0]
+    elif cmd == "duel-request" and pos:
+        args["server_index"] = pos[0]
+    elif cmd == "arena-challenge" and pos:
+        args["server_index"] = pos[0]
+    elif cmd == "arena-decline" and pos:
+        args["server_index"] = pos[0]
+    elif cmd == "duel-offer":
+        # Full replacement list: catalog-id:amount[:noted], up to eight rows.
+        # An empty list intentionally clears the offer.
+        args["items"] = pos
+    elif cmd == "combat-style" and pos:
+        args["style"] = pos[0]
+    elif cmd in ("prayer-on", "prayer-off") and pos:
+        args["id"] = pos[0]
     elif cmd == "use-item-on-ground" and len(pos) >= 4:
         args["slot"], args["x"], args["y"], args["ground_id"] = pos[0], pos[1], pos[2], pos[3]
     elif cmd in ("npc-talk", "npc-command", "attack-npc") and pos and "id" not in args and "server_index" not in args:
@@ -93,6 +119,8 @@ def main():
         args["option"] = pos[0]
     elif cmd in ("item-command", "drop", "equip", "unequip") and pos:
         args["slot"] = pos[0]
+    elif cmd == "shop-sell" and len(pos) >= 3:
+        args["id"], args["stock"], args["amount"] = pos[0], pos[1], pos[2]
     elif cmd == "admin" and pos:
         args["command"] = " ".join(pos)
     elif cmd == "say" and pos:

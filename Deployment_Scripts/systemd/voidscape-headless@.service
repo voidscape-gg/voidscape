@@ -1,0 +1,48 @@
+[Unit]
+Description=Voidscape headless player session (%i)
+After=network-online.target
+Wants=network-online.target
+PartOf=voidscape-headless.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=voidscape-headless-%i
+Group=voidscape
+WorkingDirectory=/opt/voidscape
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=HEADLESS_PYTHON=/usr/bin/python3
+Environment=HEADLESS_PLAYERS_ROSTER=/opt/voidscape/tools/headless_players/roster.json
+Environment=HEADLESS_SERVER_CONFIG=/opt/voidscape/server/local.conf
+Environment=HEADLESS_GAME_HOST=127.0.0.1
+Environment=HEADLESS_GAME_PORT=43596
+Environment=HEADLESS_CONTROL_PORT_BASE=19020
+Environment=HEADLESS_STAGGER_SECONDS_PER_SLOT=1.25
+Environment=HEADLESS_DEFS_DIR=/opt/voidscape/server/conf/server/defs
+Environment=VOIDBOT_WANT_BANK_NOTES=1
+Environment=VOIDBOT_CLIENT_VERSION=10139
+EnvironmentFile=-/etc/voidscape/headless.env
+LoadCredential=player-password:/etc/voidscape/headless-players/%i.password
+ExecStartPre=/usr/bin/python3 /opt/voidscape/scripts/headless-player-helper.py check-fleet-runtime-config --path ${HEADLESS_SERVER_CONFIG}
+ExecStart=/opt/voidscape/scripts/run-headless-player.sh %i --password-file %d/player-password
+Restart=always
+RestartSec=10s
+TimeoutStopSec=15s
+LimitCORE=0
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=voidscape-headless.target

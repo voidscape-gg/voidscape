@@ -1,0 +1,48 @@
+schema: voidscape-look/v1
+key: future_mullet_mustache
+name: Mullet + mustache
+status: proposed
+profile: authentic
+template: rsc-player-v1
+compile_target: one-legacy-head-block
+frame_profile: walk-combat-18
+base:
+  key: locked-bald-head
+layers:
+  - key: future_mullet
+    kind: hair
+    manifest: tools/appearance-studio/tests/fixtures/hair_layer.yaml
+    order: 10
+  - key: future_mustache
+    kind: facial-hair
+    manifest: tools/appearance-studio/tests/fixtures/facial_hair_layer.yaml
+    order: 20
+allocation:
+  state: proposed
+  appearance_id: 247
+  sprite_base: 3705
+  reservation_size: 27
+runtime:
+  animation_name: mulletmustache
+  category: player
+  char_colour: 1
+  blue_mask: 0
+  gender_model: 5
+  has_a: true
+  has_f: false
+  paperdoll_slot: 0
+compatibility:
+  retro_fallback_appearance_id: 8
+  custom_sprites: unsupported
+approval:
+  allocation_approved: false
+  art_brief_approved: false
+  production_pixels_approved: false
+  studio_approved: false
+preset:
+  selectable: false
+  hair_colour: null
+  top_colour: null
+  bottom_colour: null
+  skin_colour: null
+art: null

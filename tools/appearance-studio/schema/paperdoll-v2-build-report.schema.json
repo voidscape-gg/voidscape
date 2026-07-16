@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "voidscape-paperdoll-v2-build/v1",
+  "type": "object",
+  "required": ["schema", "valid", "shipping", "humanVisualApproval", "workspace", "template", "pack", "frameCount", "stateCount", "assets", "stacks", "qaCases", "nativeVsFallback", "tintDiagnostics", "alphaPreservation", "maskValidation", "artCompleteness", "compositeRegionValidation", "oneXComparison", "oracleParity", "artifacts"],
+  "properties": {
+    "schema": {"const": "voidscape-paperdoll-v2-build/v1"},
+    "valid": {"type": "boolean"},
+    "shipping": {"const": false},
+    "humanVisualApproval": {"const": false},
+    "workspace": {"type": "string"},
+    "template": {"type": "object"},
+    "pack": {"type": "object"},
+    "frameCount": {"const": 18},
+    "stateCount": {"const": 30},
+    "assets": {"type": "array"},
+    "stacks": {"type": "array", "minItems": 2},
+    "qaCases": {"type": "array", "minItems": 1},
+    "catalog": {"type": "object"},
+    "selectorRegistry": {"type": "object"},
+    "legacyCompatibility": {"type": "object"},
+    "nativeVsFallback": {"type": "object"},
+    "tintDiagnostics": {"type": "array", "minItems": 3},
+    "alphaPreservation": {"type": "object"},
+    "maskValidation": {"type": "object"},
+    "artCompleteness": {"type": "object"},
+    "compositeRegionValidation": {"type": "object"},
+    "oneXComparison": {"type": "object"},
+    "oracleParity": {"type": "object"},
+    "artifacts": {"type": "array"}
+  },
+  "allOf": [
+    {
+      "if": {"required": ["catalog"]},
+      "then": {"required": ["selectorRegistry", "legacyCompatibility"]}
+    }
+  ],
+  "additionalProperties": false
+}

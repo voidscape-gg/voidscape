@@ -37,6 +37,12 @@ if [[ "$JAVA_MAJOR" -gt 21 ]]; then
     echo "WARNING: JDK $JAVA_MAJOR detected. OpenRSC targets JDK 8/11; expect compile warnings." >&2
 fi
 
+echo "==> Testing duel-proof crypto vectors"
+"$SCRIPT_DIR/test-duel-proof-java.sh"
+
+echo "==> Testing duel-proof client handshake"
+"$SCRIPT_DIR/test-duel-proof-client-java.sh"
+
 echo "==> Building voidscape (server + plugins + client)"
 if command -v make >/dev/null 2>&1; then
     make compile
@@ -47,6 +53,30 @@ else
     ant -f Client_Base/build.xml compile
     ant -f PC_Launcher/build.xml compile
 fi
+echo "==> Testing Void Arena ranked policy"
+"$SCRIPT_DIR/test-void-arena-ranked-policy-java.sh"
+echo "==> Testing Void Arena ranked persistence"
+python3 "$SCRIPT_DIR/test-void-arena-ranked-persistence.py"
+echo "==> Testing JDBC transaction exclusion"
+"$SCRIPT_DIR/test-jdbc-transaction-lock-java.sh"
+echo "==> Testing JDBC patch marker statement lifecycle"
+"$SCRIPT_DIR/test-patch-applier-statement-close-java.sh"
+echo "==> Testing Void Arena kit snapshot recovery"
+"$SCRIPT_DIR/test-void-arena-kit-snapshot-java.sh"
+echo "==> Testing Sir Charles finite-resource policy"
+"$SCRIPT_DIR/test-void-arena-sir-policy-java.sh"
+echo "==> Testing Void Dungeon traversal grace"
+"$SCRIPT_DIR/test-void-dungeon-traversal-grace-java.sh"
+echo "==> Testing earned skill batching limits"
+"$SCRIPT_DIR/test-skill-batching-java.sh"
+
+echo "==> Testing earned skill batching coverage"
+python3 "$SCRIPT_DIR/test-skill-batching-coverage.py"
+
+echo "==> Testing gathering input buffer policy"
+"$SCRIPT_DIR/test-gather-repeat-buffer-java.sh"
+python3 "$SCRIPT_DIR/test-gather-input-buffer-contract.py"
+python3 "$REPO_ROOT/tools/voidbot/test_gather_input_packets.py"
 echo "==> Build complete"
 echo "    server/core.jar"
 echo "    server/plugins.jar"

@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "voidscape-paperdoll-template/v2",
+  "$defs": {
+    "point": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer"}}
+      ]
+    },
+    "mask_reference": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "reference": {
+      "type": "object",
+      "required": ["frames_dir", "tree_sha256"],
+      "properties": {
+        "frames_dir": {"type": "string", "minLength": 1},
+        "tree_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "pose_profile": {
+      "type": "object",
+      "required": ["visual_pose", "landmarks", "masks"],
+      "properties": {
+        "visual_pose": {
+          "enum": ["front", "three-quarter-front", "profile", "three-quarter-rear", "rear", "combat-profile"]
+        },
+        "landmarks": {
+          "type": "object",
+          "required": ["forehead", "face_center", "nose_tip", "upper_lip", "chin", "ear", "occiput", "neck", "nape"],
+          "properties": {
+            "forehead": {"$ref": "#/$defs/point"},
+            "face_center": {"$ref": "#/$defs/point"},
+            "nose_tip": {"$ref": "#/$defs/point"},
+            "upper_lip": {"$ref": "#/$defs/point"},
+            "chin": {"$ref": "#/$defs/point"},
+            "ear": {"$ref": "#/$defs/point"},
+            "occiput": {"$ref": "#/$defs/point"},
+            "neck": {"$ref": "#/$defs/point"},
+            "nape": {"$ref": "#/$defs/point"}
+          },
+          "additionalProperties": false
+        },
+        "masks": {
+          "type": "object",
+          "required": ["hair_allowed", "facial_hair_allowed", "scalp_attachment", "upper_lip_attachment", "nape_tail", "face_clearance", "neck_clearance", "protected_anatomy"],
+          "properties": {
+            "hair_allowed": {"$ref": "#/$defs/mask_reference"},
+            "facial_hair_allowed": {"$ref": "#/$defs/mask_reference"},
+            "scalp_attachment": {"$ref": "#/$defs/mask_reference"},
+            "upper_lip_attachment": {"$ref": "#/$defs/mask_reference"},
+            "nape_tail": {"$ref": "#/$defs/mask_reference"},
+            "face_clearance": {"$ref": "#/$defs/mask_reference"},
+            "neck_clearance": {"$ref": "#/$defs/mask_reference"},
+            "protected_anatomy": {"$ref": "#/$defs/mask_reference"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "required": ["schema", "key", "frame_count", "references", "locked_base_reference", "coordinate_convention", "logical_canvases", "groups", "runtime_mirrors", "pose_profiles", "palette"],
+  "properties": {
+    "schema": {"const": "voidscape-paperdoll-template/v2"},
+    "key": {"const": "rsc-player-v1"},
+    "frame_count": {"const": 18},
+    "references": {
+      "type": "object",
+      "required": ["head4", "head1", "fhead1", "head3", "body", "legs"],
+      "properties": {
+        "head4": {"$ref": "#/$defs/reference"},
+        "head1": {"$ref": "#/$defs/reference"},
+        "fhead1": {"$ref": "#/$defs/reference"},
+        "head3": {"$ref": "#/$defs/reference"},
+        "body": {"$ref": "#/$defs/reference"},
+        "legs": {"$ref": "#/$defs/reference"}
+      },
+      "additionalProperties": false
+    },
+    "locked_base_reference": {"const": "head4"},
+    "coordinate_convention": {
+      "type": "object",
+      "required": ["landmarks", "fractional_center_rounding", "masks", "phase_translation"],
+      "properties": {
+        "landmarks": {"const": "crown-relative"},
+        "fractional_center_rounding": {"const": "floor"},
+        "masks": {"const": "logical-canvas"},
+        "phase_translation": {"const": "crown-delta"}
+      },
+      "additionalProperties": false
+    },
+    "logical_canvases": {
+      "type": "object",
+      "required": ["walk", "combat"],
+      "properties": {
+        "walk": {"const": [64, 102]},
+        "combat": {"const": [84, 102]}
+      },
+      "additionalProperties": false
+    },
+    "groups": {
+      "type": "array", "minItems": 6, "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["master", "offsets", "canvas", "crowns"],
+        "properties": {
+          "master": {"enum": ["north", "north-west", "west", "south-west", "south", "combat-west"]},
+          "offsets": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}},
+          "canvas": {"enum": ["walk", "combat"]},
+          "crowns": {
+            "type": "array", "minItems": 3, "maxItems": 3,
+            "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer"}}
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "runtime_mirrors": {
+      "type": "object",
+      "required": ["south-east", "east", "north-east", "combat-b"],
+      "properties": {
+        "south-east": {"const": "south-west"},
+        "east": {"const": "west"},
+        "north-east": {"const": "north-west"},
+        "combat-b": {"const": "combat-west"}
+      },
+      "additionalProperties": false
+    },
+    "pose_profiles": {
+      "type": "object",
+      "required": ["north", "north-west", "west", "south-west", "south", "combat-west"],
+      "properties": {
+        "north": {"$ref": "#/$defs/pose_profile"},
+        "north-west": {"$ref": "#/$defs/pose_profile"},
+        "west": {"$ref": "#/$defs/pose_profile"},
+        "south-west": {"$ref": "#/$defs/pose_profile"},
+        "south": {"$ref": "#/$defs/pose_profile"},
+        "combat-west": {"$ref": "#/$defs/pose_profile"}
+      },
+      "additionalProperties": false
+    },
+    "palette": {"type": "object"}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "voidscape-paperdoll-v2-catalog/v1",
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "repo_path": {"type": "string", "pattern": "^[A-Za-z0-9_./-]+$"},
+    "source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "reference"],
+          "properties": {
+            "type": {"const": "template-reference"},
+            "reference": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "spriteBase", "entrySha256"],
+          "properties": {
+            "type": {"const": "authentic-archive"},
+            "spriteBase": {"type": "integer", "minimum": 0},
+            "entrySha256": {
+              "type": "array", "minItems": 18, "maxItems": 18,
+              "items": {"$ref": "#/$defs/sha256"}
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "eligibility": {
+      "type": "object",
+      "required": ["state", "baseProfiles", "platforms", "reasons"],
+      "properties": {
+        "state": {"enum": ["proof-only", "qa-ready", "shipping"]},
+        "baseProfiles": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/id"}
+        },
+        "platforms": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["pc", "android", "teavm"]}
+        },
+        "reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      },
+      "additionalProperties": false
+    },
+    "mask_rule": {
+      "type": "object",
+      "required": ["asset", "allowedMask", "requiredAttachment", "connectivity", "maxComponents"],
+      "properties": {
+        "asset": {"$ref": "#/$defs/id"},
+        "allowedMask": {"enum": ["hair_allowed", "facial_hair_allowed"]},
+        "requiredAttachment": {"enum": ["scalp_attachment", "upper_lip_attachment"]},
+        "connectivity": {"const": 4},
+        "maxComponents": {"type": "integer", "minimum": 1, "maximum": 2}
+      },
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "required": [
+    "schema", "shipping", "defaultEnabled", "template", "selectorNamespace",
+    "authenticArchives", "baseProfiles", "hairstyles", "stackGeneration",
+    "qaCases", "hatOcclusionPolicy"
+  ],
+  "properties": {
+    "schema": {"const": "voidscape-paperdoll-v2-catalog/v1"},
+    "shipping": {"const": false},
+    "defaultEnabled": {"const": false},
+    "template": {
+      "type": "object", "required": ["path", "sha256"],
+      "properties": {
+        "path": {"const": "content/appearance/templates/rsc-player-2x-v1/template.yaml"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "selectorNamespace": {
+      "type": "object",
+      "required": ["field", "classicId", "minimum", "maximum", "stabilityPolicy"],
+      "properties": {
+        "field": {"const": "hairStyle"},
+        "classicId": {"const": 0},
+        "minimum": {"const": 0},
+        "maximum": {"const": 255},
+        "stabilityPolicy": {"const": "never-reuse"}
+      },
+      "additionalProperties": false
+    },
+    "authenticArchives": {
+      "type": "object", "required": ["client", "server"],
+      "properties": {
+        "client": {"$ref": "#/$defs/repo_path"},
+        "server": {"$ref": "#/$defs/repo_path"}
+      },
+      "additionalProperties": false
+    },
+    "baseProfiles": {
+      "type": "array", "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "gender", "legacyIdentity", "sources", "eligibility"],
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "label": {"type": "string", "minLength": 1},
+          "gender": {"enum": ["male", "female"]},
+          "legacyIdentity": {
+            "type": "object",
+            "required": ["headAppearanceId", "bodyAppearanceId", "legsAppearanceId"],
+            "properties": {
+              "headAppearanceId": {"type": "integer", "minimum": 1, "maximum": 256},
+              "bodyAppearanceId": {"type": "integer", "minimum": 1, "maximum": 256},
+              "legsAppearanceId": {"type": "integer", "minimum": 1, "maximum": 256}
+            },
+            "additionalProperties": false
+          },
+          "sources": {
+            "type": "object", "required": ["head", "body", "legs"],
+            "properties": {
+              "head": {"$ref": "#/$defs/source"},
+              "body": {"$ref": "#/$defs/source"},
+              "legs": {"$ref": "#/$defs/source"}
+            },
+            "additionalProperties": false
+          },
+          "eligibility": {
+            "type": "object", "required": ["state", "platforms", "reasons"],
+            "properties": {
+              "state": {"enum": ["proof-only", "qa-ready", "shipping"]},
+              "platforms": {
+                "type": "array", "minItems": 1, "uniqueItems": true,
+                "items": {"enum": ["pc", "android", "teavm"]}
+              },
+              "reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "hairstyles": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "selectorId", "assetId", "source", "tintRole", "validation", "eligibility"],
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "label": {"type": "string", "minLength": 1},
+          "selectorId": {"type": "integer", "minimum": 1, "maximum": 255},
+          "assetId": {"$ref": "#/$defs/id"},
+          "source": {
+            "type": "object", "required": ["directory", "masterSha256"],
+            "properties": {
+              "directory": {"$ref": "#/$defs/repo_path"},
+              "masterSha256": {
+                "type": "object",
+                "required": ["north", "north-west", "west", "south-west", "south", "combat-west"],
+                "properties": {
+                  "north": {"$ref": "#/$defs/sha256"},
+                  "north-west": {"$ref": "#/$defs/sha256"},
+                  "west": {"$ref": "#/$defs/sha256"},
+                  "south-west": {"$ref": "#/$defs/sha256"},
+                  "south": {"$ref": "#/$defs/sha256"},
+                  "combat-west": {"$ref": "#/$defs/sha256"}
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "tintRole": {"const": "hair"},
+          "validation": {
+            "type": "object",
+            "required": ["allowedMask", "requiredAttachment", "connectivity", "maxComponents"],
+            "properties": {
+              "allowedMask": {"const": "hair_allowed"},
+              "requiredAttachment": {"const": "scalp_attachment"},
+              "connectivity": {"const": 4},
+              "maxComponents": {"const": 1}
+            },
+            "additionalProperties": false
+          },
+          "eligibility": {"$ref": "#/$defs/eligibility"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "stackGeneration": {
+      "const": {
+        "controlPattern": "{base}_control",
+        "nativeBasePattern": "{base}_native_base",
+        "hairstylePattern": "{base}_{style}"
+      }
+    },
+    "qaCases": {
+      "type": "array", "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["id", "baseProfile", "stack", "selectorId", "requiredAssets", "maskRules", "comparisonStack", "tintDiagnostics", "oracleScope"],
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "baseProfile": {"$ref": "#/$defs/id"},
+          "stack": {"$ref": "#/$defs/id"},
+          "selectorId": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 255}]},
+          "requiredAssets": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+          "maskRules": {"type": "array", "items": {"$ref": "#/$defs/mask_rule"}},
+          "comparisonStack": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/id"}]},
+          "tintDiagnostics": {"type": "boolean"},
+          "oracleScope": {"enum": ["pack-only-full", "slot0-slot5-only", "native-slots-0-1-2", "native-slots-0-1-2-5"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "hatOcclusionPolicy": {
+      "type": "object", "required": ["strategy", "rules"],
+      "properties": {
+        "strategy": {"const": "explicit-first-match"},
+        "rules": {
+          "type": "array", "minItems": 2,
+          "items": {
+            "type": "object", "required": ["id", "match", "action", "reason"],
+            "properties": {
+              "id": {"$ref": "#/$defs/id"},
+              "match": {
+                "oneOf": [
+                  {"type": "object", "required": ["hatAppearanceIds"], "properties": {"hatAppearanceIds": {"const": [0]}}, "additionalProperties": false},
+                  {"type": "object", "required": ["anyNonzeroHat"], "properties": {"anyNonzeroHat": {"const": true}}, "additionalProperties": false}
+                ]
+              },
+              "action": {"enum": ["allow-v2", "fallback-legacy"]},
+              "reason": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

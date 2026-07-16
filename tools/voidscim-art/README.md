@@ -84,6 +84,64 @@ ARGB pixels, such as the elemental Blast projectiles.
 per-image header sidecar. Falls back to `--sidecar PATH` for shared metadata,
 or zeros if neither is provided.
 
+### `cowboy_sheet.py`
+
+Build and import the Cowboy Hat's strict 18-frame, 6x3 wearable sheet. Image
+generation supplies directional design material; this tool turns the approved
+grid into deterministic RSC production sprites by reusing one source view per
+three-frame direction, fitting the authentic wizard-hat dimensions, copying
+its exact sidecars, applying the approved eight-colour palette, and removing
+green-screen or disconnected debris.
+
+Run these commands from the repository root:
+
+```bash
+python3 tools/voidscim-art/cowboy_sheet.py reference \
+  --frames-dir content/custom/cowboy_hat/art/source/references/wizardshat \
+  --out content/custom/cowboy_hat/art/source/references/wizardshat_ai_grid.png
+
+python3 tools/voidscim-art/cowboy_sheet.py import \
+  --grid content/custom/cowboy_hat/art/source/generated/cowboy_worn_grid.png \
+  --reference-dir content/custom/cowboy_hat/art/source/references/wizardshat \
+  --out-dir content/custom/cowboy_hat/art/final/worn \
+  --proof content/custom/cowboy_hat/proof/cowboy_worn_frames.png
+
+python3 tools/voidscim-art/cowboy_sheet.py icon \
+  --grid content/custom/cowboy_hat/art/source/generated/cowboy_worn_grid.png \
+  --out content/custom/cowboy_hat/art/final/icon/cowboy_hat.png
+
+python3 tools/voidscim-art/cowboy_sheet.py validate \
+  --reference-dir content/custom/cowboy_hat/art/source/references/wizardshat \
+  --frames-dir content/custom/cowboy_hat/art/final/worn
+```
+
+### `validate-wielded`
+
+Resolve a wearable's real zero-based client AnimationDef index, its one-based
+server `appearanceID`, and the archive base assigned by the runtime loader.
+Then decode and inspect every expected frame without modifying the archive:
+
+```bash
+PYTHONPATH=tools/voidscim-art python3 -m voidscim validate-wielded \
+  --animation cowboyhat \
+  --item-id 1609 \
+  --archive Client_Base/Cache/video/Authentic_Sprites.orsc \
+  --expect-runtime-index 244 \
+  --expect-appearance-id 245 \
+  --expect-base 1890
+```
+
+Before frame art is packed, add `--layout-only` to verify just the numbering
+contract. Full validation also checks frame presence/decoding, stored and
+logical dimensions, sidecar bounds, nonempty pixels, legacy hard-mask encoding,
+and chroma-key residue.
+
+For new player-paperdoll content, `voidscim` is now the low-level sprite codec
+and diagnostic layer beneath Appearance Studio. Do not use its single-archive
+commit paths as the release transaction: `scripts/content.sh appearance
+publish-plan` owns registry identity, both worn archives, client-only inventory
+icons, MD5, generated definitions, validation, rollback, and undo as one unit.
+
 ## Sprite binary format
 
 See `Client_Base/src/com/openrsc/client/model/Sprite.java`. Big-endian:

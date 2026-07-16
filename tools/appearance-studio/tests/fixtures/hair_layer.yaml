@@ -1,0 +1,17 @@
+schema: voidscape-authoring-layer/v2
+key: future_mullet
+kind: hair
+status: draft
+template: rsc-player-v1
+masters:
+  - north
+  - north-west
+  - west
+  - south-west
+  - south
+  - combat-west
+propagation: rigid-head
+semantic_profile: mullet
+required_masks: [scalp_attachment, nape_tail]
+palette_policy: hair-mask
+art: null
