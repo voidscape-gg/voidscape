@@ -9,7 +9,7 @@ public class osConfig {
 	public static final String CACHE_URL = ""; // Optional future cache endpoint; bundled cache is used first.
 	public static final String MD5_TABLENAME = "MD5.SUM";
 	public static final int ANDROID_CLIENT_VERSION = 1; // Important! Depends on web server android_version.txt to check for an updated version
-	public static final String VOIDSCAPE_PUBLIC_HOST = "5.161.114.251";
+	public static final String VOIDSCAPE_PUBLIC_HOST = "voidscape.gg";
 	public static final String VOIDSCAPE_EMULATOR_HOST = "10.0.2.2";
 	public static final String VOIDSCAPE_LAN_HOST = "192.168.1.100";
 	public static final String VOIDSCAPE_DEFAULT_PORT = "43596";

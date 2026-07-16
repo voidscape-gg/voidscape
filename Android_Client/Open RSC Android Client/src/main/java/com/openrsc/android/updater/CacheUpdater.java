@@ -59,8 +59,12 @@ public class CacheUpdater extends Activity {
 	private static final String ENDPOINT_PORT = "endpoint.port";
 	private static final String HOST_MIRROR_FILE = "ip.txt";
 	private static final String PORT_MIRROR_FILE = "port.txt";
+	private static final String LEGACY_PUBLIC_HOST = "5.161.114.251";
+	private static final String LEGACY_PUBLIC_PORT = "43596";
 	private static final String EXTRA_SMOKE_ENDPOINT_HOST = "voidscape.smoke.endpoint_host";
 	private static final String EXTRA_SMOKE_ENDPOINT_PORT = "voidscape.smoke.endpoint_port";
+	private static final String EXTRA_SMOKE_RELEASE_ENDPOINT_POLICY =
+		"voidscape.smoke.release_endpoint_policy";
 	private static final String EXTRA_SMOKE_CLEAR_CREDENTIALS = "voidscape.smoke.clear_credentials";
 	private static final String EXTRA_SMOKE_CACHE_FAIL_AFTER_FILES =
 		"voidscape.smoke.cache_fail_after_files";
@@ -76,6 +80,7 @@ public class CacheUpdater extends Activity {
 	private boolean completed = false;
 	private boolean launching = false;
 	private int smokeCacheFailAfterFiles = -1;
+	private boolean smokeReleaseEndpointPolicy = false;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -130,6 +135,12 @@ public class CacheUpdater extends Activity {
 
 		String host = trimmedOrNull(intent.getStringExtra(EXTRA_SMOKE_ENDPOINT_HOST));
 		String port = trimmedOrNull(intent.getStringExtra(EXTRA_SMOKE_ENDPOINT_PORT));
+		smokeReleaseEndpointPolicy = intent.getBooleanExtra(
+			EXTRA_SMOKE_RELEASE_ENDPOINT_POLICY,
+			false);
+		if (smokeReleaseEndpointPolicy) {
+			Log.i("Voidscape", "ENDPOINT_BOOTSTRAP smoke-release-policy=true");
+		}
 		smokeCacheFailAfterFiles = Math.max(
 			-1,
 			intent.getIntExtra(EXTRA_SMOKE_CACHE_FAIL_AFTER_FILES, -1));
@@ -287,7 +298,7 @@ public class CacheUpdater extends Activity {
 	}
 
 	private String getDefaultServerHost() {
-		return isDebuggable() && isProbablyEmulator()
+		return !usesReleaseEndpointPolicy() && isProbablyEmulator()
 			? osConfig.VOIDSCAPE_EMULATOR_HOST
 			: osConfig.VOIDSCAPE_PUBLIC_HOST;
 	}
@@ -689,6 +700,11 @@ public class CacheUpdater extends Activity {
 		if (endpoint == null) {
 			endpoint = getDefaultEndpoint();
 		}
+		Endpoint migratedEndpoint = migratedLegacyPublicEndpoint(endpoint);
+		if (!migratedEndpoint.equals(endpoint)) {
+			endpoint = migratedEndpoint;
+			rewriteCanonicalPair = true;
+		}
 		Endpoint acceptedEndpoint = acceptedEndpointForBuild(endpoint);
 		if (!acceptedEndpoint.equals(endpoint)) {
 			Log.i("Voidscape", "ENDPOINT_BOOTSTRAP developer-host-reset-to-defaults");
@@ -704,10 +720,29 @@ public class CacheUpdater extends Activity {
 	}
 
 	private Endpoint acceptedEndpointForBuild(Endpoint endpoint) {
-		if (!isDebuggable() && isDeveloperServerHost(endpoint.host)) {
+		if (usesReleaseEndpointPolicy() && isDeveloperServerHost(endpoint.host)) {
 			return new Endpoint(osConfig.VOIDSCAPE_PUBLIC_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
 		}
 		return endpoint;
+	}
+
+	private Endpoint migratedLegacyPublicEndpoint(Endpoint endpoint) {
+		if (usesReleaseEndpointPolicy()
+			&& LEGACY_PUBLIC_HOST.equals(endpoint.host)
+			&& LEGACY_PUBLIC_PORT.equals(endpoint.port)) {
+			Log.i(
+				"Voidscape",
+				"ENDPOINT_BOOTSTRAP legacy-public-migrated endpoint="
+					+ osConfig.VOIDSCAPE_PUBLIC_HOST
+					+ ":"
+					+ osConfig.VOIDSCAPE_DEFAULT_PORT);
+			return new Endpoint(osConfig.VOIDSCAPE_PUBLIC_HOST, osConfig.VOIDSCAPE_DEFAULT_PORT);
+		}
+		return endpoint;
+	}
+
+	private boolean usesReleaseEndpointPolicy() {
+		return !isDebuggable() || smokeReleaseEndpointPolicy;
 	}
 
 	private Endpoint getDefaultEndpoint() {
