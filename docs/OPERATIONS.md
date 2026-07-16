@@ -62,6 +62,7 @@ Runtime paths:
 | Game jars | `/opt/voidscape/server/core.jar`, `/opt/voidscape/server/plugins.jar` |
 | Portal password helper | `/opt/voidscape/server/portal-password-helper.jar` |
 | Game SQLite DB | `/opt/voidscape/server/inc/sqlite/voidscape.db` |
+| Generated player avatars | `/opt/voidscape/server/avatars/` |
 | Portal root | `/opt/voidscape/web/portal` |
 | Portal env | `/etc/voidscape/portal.env` |
 | Headless credentials/receipts | `/etc/voidscape/headless-players` (encrypted off-host backup only) |
@@ -89,8 +90,9 @@ Services and ports:
 
 Deploy notes:
 
-- Back up `/opt/voidscape/server/local.conf`, active jars, `/opt/voidscape/server/inc/sqlite/voidscape.db`, `/etc/voidscape/portal.env`, `/opt/voidscape/web/portal`, `/var/www/html/play`, and `/var/www/html/voidscape` before replacing files. Back up `/etc/voidscape/headless-players` as a separate encrypted off-host artifact paired with the same database snapshot; never put its plaintext files in the ordinary server tarball.
+- Back up `/opt/voidscape/server/local.conf`, active jars, `/opt/voidscape/server/inc/sqlite/voidscape.db`, `/opt/voidscape/server/avatars/`, `/etc/voidscape/portal.env`, `/opt/voidscape/web/portal`, `/var/www/html/play`, and `/var/www/html/voidscape` before replacing files. Back up `/etc/voidscape/headless-players` as a separate encrypted off-host artifact paired with the same database snapshot; never put its plaintext files in the ordinary server tarball.
 - Preserve the live DB and env secrets. Patch only launch-critical config keys unless intentionally replacing the whole runtime config.
+- When `avatar_generator:true`, keep `/opt/voidscape/server/avatars/` owned and writable by the `voidscape` service identity (`install -d -o voidscape -g voidscape -m 0750 /opt/voidscape/server/avatars`). The server creates the directory on a writable fresh install, but a root-owned production tree must be prepared explicitly.
 - `/` proxies to the Node portal; `/play/` serves static TeaVM files from `/var/www/html/play`; `/play/ws/` proxies to the game WebSocket port.
 - For launch mode, keep `PORTAL_PUBLIC_MODE=1`, `PORTAL_LAUNCH_SIGNUP_MODE=1`, durable `PORTAL_DATA_DIR=/var/lib/voidscape-portal`, and `PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db`.
 - Restart with `systemctl restart voidscape voidscape-portal`, reload nginx only after config changes with `nginx -t && systemctl reload nginx`, then verify with `scripts/verify-launch-staging.mjs`.

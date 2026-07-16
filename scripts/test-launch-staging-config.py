@@ -21,7 +21,73 @@ GENERATOR = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GENERATOR)
 
 
+REVIEWED_VOIDSCAPE_PROFILE = {
+    "aggro_range": "4",
+    "avatar_generator": "true",
+    "batch_progression": "true",
+    "combat_exp_rate": "10",
+    "custom_landscape": "true",
+    "db_name": "voidscape",
+    "enforce_custom_client_version": "true",
+    "experience_drops_toggle": "true",
+    "fog_toggle": "true",
+    "game_tick": "640",
+    "idle_timer": "600000",
+    "idle_timer_subscriber": "900000",
+    "inventory_count_toggle": "true",
+    "melee_gives_xp_hit": "true",
+    "member_world": "true",
+    "milliseconds_between_casts": "1900",
+    "more_shafts_per_better_log": "true",
+    "perf_telemetry": "true",
+    "perf_telemetry_interval_seconds": "30",
+    "perf_telemetry_window_ticks": "512",
+    "production_command_lockdown": "true",
+    "ranged_gives_xp_hit": "true",
+    "restrict_item_id": "9999",
+    "right_click_bank": "true",
+    "right_click_trade": "true",
+    "server_name": "Voidscape",
+    "server_name_welcome": "Voidscape",
+    "show_roof_toggle": "true",
+    "skilling_exp_rate": "1.5",
+    "spawn_auction_npcs": "true",
+    "void_arena_allow_ambiguous_proxy_ranked": "false",
+    "want_bank_notes": "true",
+    "want_bank_presets": "true",
+    "want_beta_onboarding_guide": "false",
+    "want_cert_as_notes": "true",
+    "want_custom_banks": "false",
+    "want_custom_ui": "true",
+    "want_drop_x": "true",
+    "want_email": "false",
+    "want_fatigue": "false",
+    "want_feature_websockets": "true",
+    "want_global_chat": "true",
+    "want_global_chat_country_flags": "true",
+    "want_global_friend": "false",
+    "want_keyboard_shortcuts": "2",
+    "want_leftclick_webs": "true",
+    "want_packet_register": "true",
+    "want_pcap_logging": "false",
+    "want_void_colossus": "false",
+    "want_void_dungeon": "false",
+    "want_void_enclave": "true",
+    "want_world_announcements": "true",
+    "want_world_milestone_announcements": "true",
+    "want_world_new_player_announcements": "true",
+    "want_world_skulled_pk_announcements": "true",
+    "welcome_text": "Welcome to Voidscape.",
+    "wilderness_npc_blocking": "0",
+    "wilderness_spawn_multiplier": "1.5",
+}
+
+
 class LaunchStagingConfigTest(unittest.TestCase):
+    def test_contract_freezes_reviewed_voidscape_profile(self):
+        contract = GENERATOR.load_contract()
+        self.assertEqual(REVIEWED_VOIDSCAPE_PROFILE, contract)
+
     def test_preservation_base_renders_exact_launch_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "local.launch-staging.conf"
@@ -134,6 +200,10 @@ class LaunchStagingConfigTest(unittest.TestCase):
         self.assertIn("VOIDSCAPE_DEPLOYED_SERVER_CONFIG", package)
         self.assertIn("VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG", package)
         self.assertIn("VOIDSCAPE_VERIFY_RUN_SIGNUP", package)
+        self.assertIn(
+            "install -d -o voidscape -g voidscape -m 0750 /opt/voidscape/server/avatars",
+            package,
+        )
         self.assertIn("SIGNUP_MODE=(--skip-signup)", package)
         self.assertNotIn("VOIDSCAPE_REPO_ROOT", package)
         self.assertIn(

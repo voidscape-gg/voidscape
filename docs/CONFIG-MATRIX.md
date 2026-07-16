@@ -2,9 +2,11 @@
 
 This file records the intended shape of Voidscape configs so `server/local.conf` does not become tribal knowledge. `server/local.conf` is ignored, but its important values should not be mysterious.
 
-The machine-checked launch subset lives in `scripts/launch-config-contract.json`.
+The machine-checked launch profile lives in `scripts/launch-config-contract.json`.
 `scripts/package-launch-staging.sh` applies it to a secret-free base preset, and
-the hosted verifier rejects missing, changed, or duplicate contract keys.
+the hosted verifier rejects missing, changed, or duplicate contract keys. Every
+intentional player-facing difference from the preservation base belongs in that
+contract; it must not rely on an ignored `server/local.conf` value.
 
 ## Current decision points
 
@@ -17,9 +19,9 @@ the hosted verifier rejects missing, changed, or duplicate contract keys.
 | WebSocket port | `43496` | TBD | Needed only if serving a WS/web client path. |
 | DB backend | Usually SQLite locally | MariaDB recommended for public | See `docs/OPERATIONS.md`. |
 | Game DB writer topology | One local game-server JVM | Exactly one live game-server JVM per game DB | Ranked admission/settlement and startup reconciliation assume a single game-server writer. Never overlap old/new or blue/green game-server processes on the same DB. |
-| Custom content gate | `want_void_enclave: true` | likely `true` | Many Voidscape systems are loaded under this gate. |
+| Custom content gate | `want_void_enclave: true` | `true` | Many Voidscape systems are loaded under this gate. |
 | Release-disabled Void boss/dungeon gates | `want_void_colossus: false`, `want_void_dungeon: false` | `false` until deliberately launched | Public traversal should not expose Colossus or Void Dungeon content before their release pass. |
-| Custom landscape | expected `true` | likely `true` | Required for Void Island, Enclave, arenas, and map edits. |
+| Custom landscape | expected `true` | `true` | Required for Void Island, Enclave, arenas, and map edits. |
 | Item cap | `restrict_item_id: 9999` | `9999` | Required for custom item ids in the 1500+ range. |
 | Packet capture | `want_pcap_logging: false` | `false` | Enable only for targeted networking debug. |
 | Production command lockdown | `true` for prelaunch/public rehearsal | `true` for public launch | Makes high-risk staff/dev commands owner-only without tying launch safety to the beta guide flag. |
@@ -81,8 +83,8 @@ the hosted verifier rejects missing, changed, or duplicate contract keys.
 | `game_tick` | `640` | `640` | `640` | Authentic RSC combat/movement feel. |
 | `milliseconds_between_casts` | `1900` | `1900` | `1900` | Explicit three-tick spell cadence used by players and Sir Charles; older presets' `milliseconds_between_spells` spelling is not the runtime key. |
 | `combat_exp_rate` / `skilling_exp_rate` | `10` / `1.5` | `10` / `1.5` | `10` / `1.5` | Subscription adds +1x to each, normally 11x combat / 2.5x skills while active. |
-| `melee_gives_xp_hit` | `true` locally per divergence | Decide | Decide | This is a gameplay divergence from authentic death-time melee XP. |
-| `ranged_gives_xp_hit` | `true` locally per divergence | Decide | Decide | Keep paired with melee decision if desired. |
+| `melee_gives_xp_hit` | `true` | `true` | `true` | Voidscape keeps the tested successful-hit XP timing instead of silently reverting to authentic death-time payout. |
+| `ranged_gives_xp_hit` | `true` | `true` | `true` | Kept paired with melee hit XP for the launch profile. |
 | `launch_subscription_card_until` | unset unless testing packet registration | launch + 24h UTC | `2026-07-19T18:00:00Z` for July 18 launch | Optional server-side cutoff for desktop packet-created accounts to receive a `launch_24h_card` vendor marker. Env `VOIDSCAPE_LAUNCH_SUBSCRIPTION_CARD_UNTIL` overrides it. |
 | `idle_timer` | `600000` | `600000` | `600000` | Regular players get a 10-minute movement-idle warning window; authentic presets keep their own/default value. |
 | `idle_timer_subscriber` | `900000` | `900000` | `900000` | Active Void subscribers get a 15-minute movement-idle warning window; omitted configs fall back to `idle_timer`. |
@@ -97,6 +99,25 @@ the hosted verifier rejects missing, changed, or duplicate contract keys.
 | `want_email` | `false` for launch preset and staging bundle | `false` | `false` | Keeps desktop packet character creation email-free; native Android and web use portal accounts. |
 | `want_packet_register` | `true` for launch preset and staging bundle; Java default remains `false` when omitted | `true` | `true` | Enables desktop in-client character creation while native Android and web `/play` use portal signup. |
 
+## Player-facing Voidscape profile
+
+These values freeze the game tested before launch. They are server settings sent to
+all official clients where applicable, so changing them does not require rebuilding
+desktop, Android, or TeaVM artifacts.
+
+| Keys | Launch value | Player-facing effect |
+|---|---:|---|
+| `fog_toggle`, `experience_drops_toggle`, `show_roof_toggle`, `inventory_count_toggle` | `true` | Keeps the established graphics/XP/inventory controls and defaults available. |
+| `batch_progression`, `want_drop_x` | `true` | Keeps repeat skilling/progress UI and Drop-X QoL. |
+| `want_keyboard_shortcuts` | `2` | Keeps number-key menu selection with visible numeric labels. |
+| `right_click_bank`, `right_click_trade` | `true` | Keeps direct Banker and Shopkeeper shortcuts. |
+| `want_global_chat`, `want_global_friend` | `true`, `false` | Uses Voidscape's direct global channel rather than the legacy `Global$` pseudo-friend path. |
+| `want_global_chat_country_flags` | `true` | Keeps the current country-flag privacy/display flow in global chat. |
+| `spawn_auction_npcs` | `true` | Keeps the tested Auction House available. |
+| `want_world_announcements`, `want_world_milestone_announcements`, `want_world_new_player_announcements`, `want_world_skulled_pk_announcements` | `true` | Keeps the established social broadcasts. |
+| `more_shafts_per_better_log` | `true` | Keeps the tested player-made arrow economy. |
+| `avatar_generator` | `true` | Keeps real saved-character avatar renders available to the account portal after logout. |
+
 ## Content gates
 
 | Key | Expected value | Why it matters |
@@ -107,11 +128,12 @@ the hosted verifier rejects missing, changed, or duplicate contract keys.
 | `want_beta_onboarding_guide` | `false` for launch | Beta-only tester toolkit for teleports, stat presets, item kits, and FarmSim shortcuts. Keep enabled only during trusted beta windows. |
 | `production_command_lockdown` | `true` for launch | Owner-only guard for item/NPC spawning, stat/account mutation, forced teleport/movement, server lifecycle, bot/load-test, event/world reset, and QA fixture commands. |
 | `custom_landscape` | `true` | Enables custom patched terrain used by multiple systems. |
-| `spawn_auction_npcs` | `true` if Auction House is live | Spawns the Void Auctioneer and gates marketplace access. |
-| `want_world_announcements` | `true` if Void Herald social broadcasts are live | Master switch for milestone and skulled-Wilderness PK world messages. |
-| `want_world_milestone_announcements` | `true` if milestones should be public | Announces selected skill and total-level milestones. |
-| `want_world_skulled_pk_announcements` | `true` if Wilderness kills should be public | Announces PKs only when the defeated player is skulled. |
-| `want_global_chat_country_flags` | `true` if global chat is live | Shows player-chosen country flags in global chat and lets players hide their own flag in settings. |
+| `spawn_auction_npcs` | `true` | Spawns the Void Auctioneer and gates marketplace access. |
+| `want_world_announcements` | `true` | Master switch for milestone, new-player, and skulled-Wilderness PK world messages. |
+| `want_world_milestone_announcements` | `true` | Announces selected skill and total-level milestones. |
+| `want_world_new_player_announcements` | `true` | Announces when a brand-new player first joins. |
+| `want_world_skulled_pk_announcements` | `true` | Announces PKs only when the defeated player was skulled. |
+| `want_global_chat_country_flags` | `true` | Shows player-chosen country flags in global chat and lets players hide their own flag in settings. |
 | `more_shafts_per_better_log` | `true` | Lets higher-tier logs feed the player-made arrow economy instead of every log producing the same 10 shafts. |
 | Subscription cards | Always available in Voidscape | Tradable cards add 7 account-wide days and the small XP bump; they do not unlock P2P areas because `member_world` is already global. Lumbridge vendor grants one starter card reserved by the portal account flow. |
 | `want_custom_banks` | `false` for Void Glass launch on desktop, `/play`, and Android | Leave off for the shipped Void Glass bank. `true` is only for older legacy custom-bank presets when custom UI is off; loadouts do not require it. |
@@ -153,7 +175,9 @@ These are positional in many loaders. Keep server and client append order aligne
 - [x] F2P vs members default decided: hybrid/P2P-enabled world with F2P-feeling early progression.
 - [x] XP rates decided: 10x combat / 1.5x skills, subscription adds +1x to each.
 - [ ] PvP/safe-zone policy decided.
-- [ ] Economy-affecting QoL toggles decided: notes, auction house, bank presets, batch skilling.
+- [x] Economy-affecting QoL toggles decided: notes, Auction House, bank presets, and batch skilling stay enabled as tested.
+- [x] Combat XP timing decided: melee and ranged successful-hit XP stay enabled as tested.
+- [x] Social profile decided: direct global chat, country flags, and the four world-announcement gates stay enabled.
 - [x] Rift travel policy decided: ordinary Void Rifts form a five-hub network (Void Enclave, Edgeville, Varrock, Falador, Ardougne), with Lumbridge left to Home teleport and world-map autowalk/saved walks as the broad traversal QoL.
 - [x] Launch command policy decided: enable `production_command_lockdown: true`; keep moderation/read-only staff support available and make high-risk staff/dev commands owner-only.
 - [ ] Production database selected.

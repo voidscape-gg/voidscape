@@ -1081,6 +1081,7 @@ Suggested single-host layout:
 /opt/voidscape/server/database/
 /opt/voidscape/server/conf/
 /opt/voidscape/server/inc/sqlite/voidscape.db
+/opt/voidscape/server/avatars/
 /opt/voidscape/server/local.conf
 /opt/voidscape/client/Open_RSC_Client.jar
 /opt/voidscape/client/Cache/
@@ -1110,6 +1111,13 @@ rejects a missing, changed, or duplicate contract key.
 Copy the bundle's \`scripts/\`, \`tools/\`, \`docs/\`, \`server/conf/\`,
 \`server/database/\`, \`client/\`, and \`launcher/\` trees to the same paths
 below \`/opt/voidscape\`.
+Create the writable runtime directory used by the launch profile's
+\`avatar_generator:true\` before the game service starts:
+
+\`\`\`bash
+install -d -o voidscape -g voidscape -m 0750 /opt/voidscape/server/avatars
+\`\`\`
+
 Before installing or starting the fleet, create its ten static nologin service users
 with primary group \`voidscape\` (the unit does not use \`DynamicUser=\`):
 
@@ -1218,6 +1226,9 @@ front of people. Fill the blanks with the actual deployed paths from the host.
 - Keep \`PORTAL_GOOGLE_CLIENT_ID\` unset unless Google sign-in is intentionally enabled and tested.
 - Confirm \`PORTAL_EMAIL_VERIFICATION_REQUIRED=1\`, \`PORTAL_REQUIRE_EMAIL=1\`, \`PORTAL_EMAIL_PROVIDER=resend\`, \`PORTAL_RESEND_API_KEY\`, and \`PORTAL_PUBLIC_ORIGIN\` are set, then check \`/api/health.config.email.configured\` and \`.verificationRequired\`.
 - Confirm \`PORTAL_GAME_PASSWORD_HELPER_CLASSPATH=/opt/voidscape/server/portal-password-helper.jar\` and that the packaged helper jar passes its stdin check before enabling Character Manager password changes or older native-account claims.
+- Confirm \`/opt/voidscape/server/avatars\` is mode 0750, owned by
+  \`voidscape:voidscape\`, and writable by the game service while
+  \`avatar_generator:true\` is active.
 - Simulated world activity is out of scope for this no-player candidate: leave all
   \`voidscape-headless-*\` identities and units uninstalled or disabled. The bundled
   fleet remains QA tooling only. If it is ever approved as a launch feature, treat
@@ -1248,7 +1259,8 @@ tar -czf "/opt/voidscape/backups/portal-prelaunch-\$stamp.tgz" -C /opt/voidscape
 install -m 600 /etc/voidscape/portal.env "/opt/voidscape/backups/portal.env-prelaunch-\$stamp"
 tar -czf "/opt/voidscape/backups/portal-state-prelaunch-\$stamp.tgz" -C /var/lib voidscape-portal
 tar -czf "/opt/voidscape/backups/public-web-prelaunch-\$stamp.tgz" -C /var/www/html play voidscape
-tar -czf "/opt/voidscape/backups/server-prelaunch-\$stamp.tgz" -C /opt/voidscape server/core.jar server/plugins.jar server/portal-password-helper.jar server/conf server/database server/local.conf client launcher
+install -d -o voidscape -g voidscape -m 0750 /opt/voidscape/server/avatars
+tar -czf "/opt/voidscape/backups/server-prelaunch-\$stamp.tgz" -C /opt/voidscape server/core.jar server/plugins.jar server/portal-password-helper.jar server/conf server/database server/avatars server/local.conf client launcher
 sqlite3 /opt/voidscape/server/inc/sqlite/voidscape.db ".backup '/opt/voidscape/backups/voidscape-\$stamp.sqlite'"
 \`\`\`
 
@@ -1258,6 +1270,12 @@ If production is MariaDB, use the matching dump/restore commands from
 ## Deploy
 
 - Copy \`server/core.jar\`, \`server/plugins.jar\`, \`server/portal-password-helper.jar\`, and the release-critical config values into the live server path.
+- Create the avatar runtime directory before starting the server:
+
+\`\`\`bash
+install -d -o voidscape -g voidscape -m 0750 /opt/voidscape/server/avatars
+\`\`\`
+
 - Create the dedicated \`voidscape-db\` group, add only the shared game/portal
   service identity \`voidscape\`, and keep every simulated-player identity out.
 

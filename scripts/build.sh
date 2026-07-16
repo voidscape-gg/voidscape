@@ -73,6 +73,9 @@ echo "==> Testing earned skill batching limits"
 echo "==> Testing earned skill batching coverage"
 python3 "$SCRIPT_DIR/test-skill-batching-coverage.py"
 
+echo "==> Testing avatar runtime directory creation"
+"$SCRIPT_DIR/test-avatar-file-store-java.sh"
+
 echo "==> Testing gathering input buffer policy"
 "$SCRIPT_DIR/test-gather-repeat-buffer-java.sh"
 python3 "$SCRIPT_DIR/test-gather-input-buffer-contract.py"

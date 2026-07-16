@@ -786,7 +786,13 @@ public final class AvatarGenerator {
 					img.setRGB(i % Constants.AVATAR_WIDTH, i / Constants.AVATAR_WIDTH, pixels[i] | 0xFF000000);
 				}
 			}
-			ImageIO.write(img, "png", new File(getWorld().getServer().getConfig().AVATAR_DIR + getWorld().getServer().getConfig().DB_NAME + "+" + playerID + ".png"));
+			File avatarFile = AvatarFileStore.outputFile(
+				getWorld().getServer().getConfig().AVATAR_DIR,
+				getWorld().getServer().getConfig().DB_NAME,
+				playerID);
+			if (!ImageIO.write(img, "png", avatarFile)) {
+				throw new IOException("No PNG writer is available for avatar: " + avatarFile.getAbsolutePath());
+			}
 		}
 		/// A helper function for rendering
 		private void drawPlayer(int x, int y, int scaleX, int scaleY, int unknown) {

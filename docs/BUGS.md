@@ -27,6 +27,17 @@ to resume from these two files alone. Keep every entry self-contained.
 ## Loop state
 
 - **Active bug:** None.
+- **Session preflight 2026-07-16 (VS-088):** branch
+  `codex/release-10139-integration`; tracked worktree was clean at `5ac873d8`, and the
+  pre-change `scripts/build.sh` passed. Exact 10139 desktop/web/Android/Play/server
+  artifact inspection proves the custom landscape archive and Void Rift model are
+  present and byte-identical across surfaces. The failing local rehearsal instead ran
+  a preservation-derived `server/local.conf` with `custom_landscape:false` and no Void
+  Enclave gate, while the held launch config enables those two gates but inherits a
+  separate set of preservation defaults for established Voidscape UI, social,
+  economy, and progression options. Plan: make the reviewed launch profile explicit,
+  add regression coverage, regenerate the isolated local rehearsal, and verify it
+  without deploying any surface.
 - **Session preflight 2026-07-16 (VS-087):** branch
   `codex/release-10139-integration`; tracked worktree clean at `abb2f7ca` and the
   pre-change `scripts/build.sh` passes. Conclusive template evidence reproduces the
@@ -79,13 +90,14 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — VS-087 verified. The generated physical Android QA
-  report now requires the exact rules-gated registration route, Community Rules
-  acceptance, portal account/first-character creation, and a successful return to
-  Existing User login. Its validator rejects reports missing or changing the route,
-  so an older native-signup checklist cannot satisfy the release gate.
-- **Next action:** triage the public source-proof footer finding, then rebuild the exact
-  commit-bound release candidate.
+- **Last session:** 2026-07-16 — VS-088 verified. The release contract now freezes the
+  reviewed Voidscape game profile instead of silently inheriting preservation
+  defaults; an isolated loopback rehearsal loaded all 1,680 custom-landscape regions,
+  26 Enclave locs, seven Rift locs, the Auction NPC, and the intended client settings.
+  A fresh server tree also creates its avatar output directory on first logout.
+- **Next action:** commit and mirror the verified VS-088 fix into the public clean tree,
+  then regenerate and verify the exact commit-bound held release bundle without
+  deploying any surface.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -992,6 +1004,30 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-088 — Release rehearsal and launch config drift from intended Voidscape profile (FIXED)
+- Status: verified · Severity: P1 · Area: release-config / server-content / client QA
+- Root cause: the failed local rehearsal used a preservation-derived ignored config
+  with custom landscape disabled and no Enclave gate. The held launch contract enabled
+  those two gates but was still incomplete, so other established Voidscape gameplay,
+  UI, social, economy, and progression settings silently fell back to preservation
+  defaults. The disposable clean client also started with fresh personal preferences,
+  which made the same build appear to have changed Ryan's viewport and click markers.
+- Fix: the machine-checked contract now explicitly freezes every reviewed player-facing
+  Voidscape launch value, including the custom world, batching, Auction House, direct
+  global chat, announcements, client toggles, better-log shafts, and on-hit combat XP.
+  Regression coverage compares the complete reviewed profile. Fresh server installs
+  now create and validate the avatar output directory before writing PNGs, and the
+  deployment handoff installs that runtime directory with restricted ownership.
+- Verified 2026-07-16: exact 10139 desktop, TeaVM, APK, AAB, and held-server assets have
+  byte-identical landscape/model archives, proving no content was omitted. Six focused
+  launch-config tests, generated-config verification, the avatar file-store test, and
+  the full `scripts/build.sh` pass. An isolated loopback rehearsal loaded 1,680 custom
+  regions, 26 Enclave locs, seven Rift locs, one Auction NPC, and three Enclave NPCs;
+  the sanctioned workbench rendered the custom terrain and violet Rift and exposed the
+  intended settings. Starting from no avatar directory, a real login/logout produced a
+  valid 64x102 PNG with no server error. The Play AAB is unchanged, and no surface was
+  deployed or published.
 
 ### VS-087 — Physical Android release QA required retired native signup (FIXED)
 - Status: verified · Severity: P1 · Area: Android physical-device release QA
