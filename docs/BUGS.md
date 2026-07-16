@@ -26,7 +26,18 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-093 is verified; resume final release-candidate integration.
+- **Active bug:** none — VS-094 is verified; next triage the packaged-portal runtime
+  dependency finding as VS-095.
+- **Session preflight 2026-07-16 (VS-094):** branch
+  `codex/release-10139-integration`; worktree clean at `cbea2250`, and the pre-change
+  `scripts/build.sh` passes. Exact v12 closed-ingress startup reproduced the defect:
+  the generated config contains `launch_subscription_card_until:
+  2026-07-19T18:00:00Z`, but `YMLReader` splits on every colon, silently discards the
+  four-field row, and the server logs that the key is missing/defaulted. The empty
+  default disables packet-registration launch cards while the portal path remains
+  active. Scope is the first-colon parser correction plus exact generated-config and
+  strict-boundary regression coverage. V12 is held/non-promotable; no deployment,
+  upload, push, or source publication is authorized.
 - **Session preflight 2026-07-16 (VS-093):** branch
   `codex/release-10139-integration`; worktree clean at `83202ce9`, and the pre-change
   `scripts/build.sh` passes. Release audit reproduced one ignored
@@ -156,16 +167,15 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — completed and verified VS-093 locally. Android cache
-  sync excludes ignored runtime/scratch files, and both APK/AAB promotion gates reject
-  them independently. Focused regressions, a fresh debug build, the full build, and a
-  clean-provenance signed release APK check pass; the custom landscape/model/sprite
-  archives remain packaged. The preserved clean Play v11 AAB remains byte-identical
-  and was not rebuilt or uploaded. No deployment, push, or source publication occurred.
-- **Next action:** resume final release-candidate integration. Validate a protected
-  copy of the real portal store against the canonical shape before deployment, then
-  complete the paired restore rehearsal and final v12 bundle gates. Do not push,
-  publish source, or deploy any game/server/client artifact.
+- **Last session:** 2026-07-16 — completed and verified VS-094 locally. The config
+  reader now preserves an ISO launch timestamp and other colon-rich values while
+  retaining the legacy section, blank, comment, and duplicate-key behavior. The
+  focused generated-config regression, full build, and closed-ingress source-built
+  server startup pass with the exact launch cutoff active and no missing/default log.
+  No deployment, upload, push, or source publication occurred.
+- **Next action:** triage the exact packaged-portal missing-runtime-file finding into
+  VS-095, fix and rehearse it as one bug, then replace v12 with a fully tested held v13
+  candidate. Do not push, publish source, or deploy any game/server/client artifact.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -373,6 +383,13 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Intake — dump raw bug reports here
 
+- Exact v12 packaged portal omits
+  `server/src/com/openrsc/server/content/PlayerTitle.java`, but
+  `dev-server.mjs::loadTitleDefinitions()` reads that source path at runtime. Existing
+  character availability returns HTTP 500/ENOENT, and verified signup can create the
+  game player before the portal-store transaction aborts, risking an orphaned mismatch.
+  Web 538/538 and the broad 622-check portal gate passed without exercising this path.
+  Evidence: `tmp/release-10139-v12-local-web-portal/`.
 - Headless Karamja traveller death recovery can strand a session in
   `journey-funding-missing`: Ultraz respawned at `(120,648)` with only item ids
   466/473/476, no coins or sellable starter sword, and an empty bank. The controller
@@ -1072,6 +1089,28 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-094 — Launch server silently drops the 24-hour card cutoff timestamp (FIXED)
+- Status: verified · Severity: P1 · Area: server-config / launch rewards
+- Root cause: `YMLReader.loadFromYML()` split every config row on every colon and only
+  handled two- or three-field results. The generated ISO value
+  `2026-07-19T18:00:00Z` therefore produced four fields and was silently discarded;
+  the server defaulted `launch_subscription_card_until` to empty, disabling launch-card
+  eligibility for characters created through the native packet-registration path.
+- Fix: config rows split only at the first colon. Exact empty section headers remain
+  ignored, explicit blanks/comments retain their established handling, ordinary
+  duplicate keys remain first-wins, and later colon-valued duplicates retain the
+  legacy override behavior. A dependency-free Java regression loads the actual
+  generated launch config, checks colon-rich compatibility cases, and proves the
+  strict cutoff-minus-one/exact/plus-one boundary through the runtime parser; the
+  canonical build now runs it.
+- Verified 2026-07-16: the pre-fix regression fails on the discarded timestamp;
+  the corrected focused suite and `scripts/build.sh` pass. A closed-ingress server
+  built from the corrected source loaded the launch config, opened only the two
+  intended loopback listeners, and logged neither a missing cutoff nor a duplicate
+  config warning; the listeners were stopped and confirmed free afterward. Evidence
+  is under `tmp/vs094/`. V12 remains held/non-promotable. No deployment, upload, push,
+  source publication, protocol, client, schema, or live-data change occurred.
 
 ### VS-093 — Android packages admit ignored cache scratch files (FIXED)
 - Status: verified · Severity: P1 · Area: Android APK/AAB release packaging

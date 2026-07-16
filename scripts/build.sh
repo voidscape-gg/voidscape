@@ -80,6 +80,8 @@ echo "==> Testing portal public-static boundary"
 "$SCRIPT_DIR/test-portal-static-boundary.sh"
 python3 "$SCRIPT_DIR/test-package-portal-runtime.py"
 python3 "$SCRIPT_DIR/test-launch-staging-config.py"
+echo "==> Testing launch subscription config parsing"
+"$SCRIPT_DIR/test-launch-subscription-config-java.sh"
 echo "==> Testing portal store fail-closed safety"
 "$SCRIPT_DIR/test-portal-store-safety.sh"
 

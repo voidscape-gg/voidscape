@@ -47,13 +47,17 @@ public class YMLReader {
 				}
 			}
 
-			String[] elems = line.split(":");
+			// Values can contain colons (for example URLs and ISO-8601 timestamps).
+			String[] elems = line.split(":", 2);
+			if (elems.length == 2 && elems[1].isEmpty()) {
+				continue;
+			}
+			boolean colonValue = elems.length == 2 && elems[1].contains(":");
 
 			// Trim the whitespace
 			for (int i = 0; i < elems.length; ++i) {
 				elems[i] = elems[i].trim();
 			}
-
 			switch (elems.length) {
 				case 2:
 					// Handle keys that have null for their attribute
@@ -64,6 +68,11 @@ public class YMLReader {
 						settings.put(elems[0], elems[1]);
 					}
 					// Handle normal lines
+					else if (colonValue) {
+						// Preserve the legacy override behavior for host, URL, and
+						// other colon-valued settings loaded from a later file.
+						settings.put(elems[0], elems[1]);
+					}
 					else {
 						// Check if the key exists in the settings list
 						if (!(settings.containsKey(elems[0]))) {
@@ -73,10 +82,6 @@ public class YMLReader {
 							LOGGER.info(fileName + ": Duplicate key: " + elems[0]);
 						}
 					}
-					break;
-				case 3:
-					// Handles the line with the server port (it contains an extra colon)
-					settings.put(elems[0], (elems[1] + ":" + elems[2]));
 					break;
 			}
 		}
@@ -98,4 +103,3 @@ public class YMLReader {
 		return settings.containsKey(key);
 	}
 }
-
