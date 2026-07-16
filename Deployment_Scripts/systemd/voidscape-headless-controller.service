@@ -1,0 +1,42 @@
+[Unit]
+Description=Voidscape headless player fleet controller
+After=network-online.target
+Wants=network-online.target
+PartOf=voidscape-headless.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=voidscape
+Group=voidscape
+WorkingDirectory=/opt/voidscape
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=HEADLESS_PYTHON=/usr/bin/python3
+Environment=HEADLESS_PLAYERS_ROSTER=/opt/voidscape/tools/headless_players/roster.json
+Environment=HEADLESS_SERVER_CONFIG=/opt/voidscape/server/local.conf
+Environment=HEADLESS_CONTROL_HOST=127.0.0.1
+Environment=HEADLESS_CONTROL_PORT_BASE=19020
+EnvironmentFile=-/etc/voidscape/headless.env
+ExecStartPre=/usr/bin/python3 /opt/voidscape/scripts/headless-player-helper.py check-fleet-runtime-config --path ${HEADLESS_SERVER_CONFIG}
+ExecStart=/opt/voidscape/scripts/run-headless-controller.sh
+Restart=always
+RestartSec=10s
+TimeoutStopSec=15s
+LimitCORE=0
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=voidscape-headless.target

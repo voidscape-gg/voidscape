@@ -1,0 +1,16 @@
+[Unit]
+Description=Voidscape ten-player headless fleet
+Wants=voidscape-headless@fireee.service
+Wants=voidscape-headless@ch0p.service
+Wants=voidscape-headless@ultraz.service
+Wants=voidscape-headless@vinny.service
+Wants=voidscape-headless@six-seven.service
+Wants=voidscape-headless@college.service
+Wants=voidscape-headless@pknskate.service
+Wants=voidscape-headless@p-h-i-s-h.service
+Wants=voidscape-headless@fulani.service
+Wants=voidscape-headless@az.service
+Wants=voidscape-headless-controller.service
+
+[Install]
+WantedBy=multi-user.target
