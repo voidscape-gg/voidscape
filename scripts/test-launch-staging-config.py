@@ -196,6 +196,9 @@ class LaunchStagingConfigTest(unittest.TestCase):
         package = (ROOT / "scripts" / "package-launch-staging.sh").read_text(
             encoding="utf-8"
         )
+        verifier = (ROOT / "scripts" / "verify-launch-staging.mjs").read_text(
+            encoding="utf-8"
+        )
         database = "/opt/voidscape/server/inc/sqlite/voidscape.db"
         self.assertGreaterEqual(package.count(database), 4)
         self.assertNotIn("/opt/voidscape/server/inc/sqlite/preservation.db", package)
@@ -215,6 +218,16 @@ class LaunchStagingConfigTest(unittest.TestCase):
         self.assertIn('"\\$BUNDLE_DIR/scripts/verify-launch-staging.mjs"', package)
         self.assertNotIn("VOIDSCAPE_SKIP_DEPLOYED_BYTE_CHECK", package)
         self.assertIn("\\`VOIDSCAPE_VERIFY_RUN_SIGNUP=1\\`", package)
+        self.assertIn("dev-server.mjs --initialize-store", package)
+        self.assertIn("runuser -u voidscape -- env PORTAL_DATA_DIR", package)
+        self.assertIn("portal-state-prelaunch-\\$stamp.json", package)
+        self.assertIn("state-pair-prelaunch-\\$stamp.sha256", package)
+        self.assertIn("sqlite3 /opt/voidscape/server/inc/sqlite/voidscape.db", package)
+        self.assertNotIn(
+            "install -m 600 /opt/voidscape/server/inc/sqlite/voidscape.db",
+            package,
+        )
+        self.assertIn('assertCheck("portal store ready"', verifier)
         self.assertNotIn(
             '--server-config "\\$BUNDLE_DIR/server/local.launch-staging.conf"',
             package,

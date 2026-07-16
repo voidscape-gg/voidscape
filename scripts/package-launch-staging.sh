@@ -1300,6 +1300,7 @@ front of people. Fill the blanks with the actual deployed paths from the host.
 - Keep \`PORTAL_GOOGLE_CLIENT_ID\` unset unless Google sign-in is intentionally enabled and tested.
 - Confirm \`PORTAL_EMAIL_VERIFICATION_REQUIRED=1\`, \`PORTAL_REQUIRE_EMAIL=1\`, \`PORTAL_EMAIL_PROVIDER=resend\`, \`PORTAL_RESEND_API_KEY\`, and \`PORTAL_PUBLIC_ORIGIN\` are set, then check \`/api/health.config.email.configured\` and \`.verificationRequired\`.
 - Confirm \`PORTAL_GAME_PASSWORD_HELPER_CLASSPATH=/opt/voidscape/server/portal-password-helper.jar\` and that the packaged helper jar passes its stdin check before enabling Character Manager password changes or older native-account claims.
+- Treat \`/var/lib/voidscape-portal/dev-store.json\` as the complete portal state, not a cache or CSV export. On an existing host, back it up before setting both the directory and store to \`voidscape:voidscape\`, then require directory mode \`0700\` and file mode \`0600\`. On a genuinely fresh host only, run \`install -d -o voidscape -g voidscape -m 0700 /var/lib/voidscape-portal\`, then \`runuser -u voidscape -- env PORTAL_DATA_DIR=/var/lib/voidscape-portal node /opt/voidscape/web/portal/dev-server.mjs --initialize-store\`; archive the \`portal_store_initialized\` line. Normal \`ExecStart\` must not include \`--initialize-store\`, and an unexpectedly missing store is a restore/recovery event, never a reason to initialize.
 - Confirm \`/opt/voidscape/server/avatars\` is mode 0750, owned by
   \`voidscape:voidscape\`, and writable by the game service while
   \`avatar_generator:true\` is active.
@@ -1316,9 +1317,10 @@ Record these before overwriting live files:
 
 \`\`\`text
 Portal backup:
+Portal state backup:
+Game DB backup:
 Play/web-client backup:
 Server jar/config backup:
-Database backup:
 Headless credential/receipt backup: N/A unless simulated activity is separately approved
 Launcher/APK public-download backup:
 \`\`\`
@@ -1329,13 +1331,16 @@ Suggested single-host backup commands:
 set -euo pipefail
 stamp="\$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p /opt/voidscape/backups
+systemctl stop voidscape-portal voidscape
 tar -czf "/opt/voidscape/backups/portal-prelaunch-\$stamp.tgz" -C /opt/voidscape/web portal
 install -m 600 /etc/voidscape/portal.env "/opt/voidscape/backups/portal.env-prelaunch-\$stamp"
-tar -czf "/opt/voidscape/backups/portal-state-prelaunch-\$stamp.tgz" -C /var/lib voidscape-portal
+install -m 600 /var/lib/voidscape-portal/dev-store.json "/opt/voidscape/backups/portal-state-prelaunch-\$stamp.json"
+sqlite3 /opt/voidscape/server/inc/sqlite/voidscape.db ".backup '/opt/voidscape/backups/game-db-prelaunch-\$stamp.db'"
+chmod 600 "/opt/voidscape/backups/game-db-prelaunch-\$stamp.db"
+shasum -a 256 "/opt/voidscape/backups/portal-state-prelaunch-\$stamp.json" "/opt/voidscape/backups/game-db-prelaunch-\$stamp.db" > "/opt/voidscape/backups/state-pair-prelaunch-\$stamp.sha256"
 tar -czf "/opt/voidscape/backups/public-web-prelaunch-\$stamp.tgz" -C /var/www/html play voidscape
 install -d -o voidscape -g voidscape -m 0750 /opt/voidscape/server/avatars
 tar -czf "/opt/voidscape/backups/server-prelaunch-\$stamp.tgz" -C /opt/voidscape server/core.jar server/plugins.jar server/portal-password-helper.jar server/conf server/database server/avatars server/local.conf client launcher
-sqlite3 /opt/voidscape/server/inc/sqlite/voidscape.db ".backup '/opt/voidscape/backups/voidscape-\$stamp.sqlite'"
 \`\`\`
 
 If production is MariaDB, use the matching dump/restore commands from
@@ -1370,6 +1375,27 @@ membership so both game and portal receive the dedicated supplemental group.
   those accounts and units only when simulated players are an explicit launch
   feature; the bundled fleet remains available as QA tooling.
 - Copy \`portal/web-portal/\` to \`/opt/voidscape/web/portal/\`.
+- Before the first portal restart, choose exactly one store path. On an existing
+  host, require the expected backed-up store and correct only its owner/mode:
+
+\`\`\`bash
+test -f /var/lib/voidscape-portal/dev-store.json
+chown voidscape:voidscape /var/lib/voidscape-portal /var/lib/voidscape-portal/dev-store.json
+chmod 0700 /var/lib/voidscape-portal
+chmod 0600 /var/lib/voidscape-portal/dev-store.json
+\`\`\`
+
+  On a genuinely fresh host only, initialize the absent store after the portal
+  runtime has been copied:
+
+\`\`\`bash
+install -d -o voidscape -g voidscape -m 0700 /var/lib/voidscape-portal
+runuser -u voidscape -- env PORTAL_DATA_DIR=/var/lib/voidscape-portal \
+  node /opt/voidscape/web/portal/dev-server.mjs --initialize-store
+\`\`\`
+
+  Archive the \`portal_store_initialized\` line. If an expected store is missing,
+  stop and restore it; do not use initialization as recovery.
 - Install the private portal environment and public Nginx boundary exactly:
 
 \`\`\`bash
@@ -1413,8 +1439,8 @@ Use rollback only after stopping or draining player traffic.
 2. Restore the previous portal directory from the portal backup.
 3. Restore the previous \`/play/\` directory from the web-client backup.
 4. Restore previous server jars and config from the server backup.
-5. Restore the database backup only if the failed release changed persistent state or corrupted accounts.
-6. Restart the game/portal services and rerun the non-mutating health checks:
+5. If the failed release changed portal/game account state, restore the matching portal JSON and game DB from the same hashed backup set while both writers are stopped; never mix backup timestamps.
+6. Restart the game/portal services, require \`/api/health.storage.storeReady=true\`, and rerun the non-mutating health checks:
    - \`curl -fsS $PORTAL_URL/api/health\`
    - \`curl -fsS $PORTAL_URL/api/public\`
    - \`scripts/verify-web-teavm-deployment.sh $WEB_URL --expected-build-manifest <previous-manifest> --deep-manifest\`

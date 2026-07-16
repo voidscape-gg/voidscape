@@ -90,11 +90,12 @@ Services and ports:
 
 Deploy notes:
 
-- Back up `/opt/voidscape/server/local.conf`, active jars, `/opt/voidscape/server/inc/sqlite/voidscape.db`, `/opt/voidscape/server/avatars/`, `/etc/voidscape/portal.env`, `/opt/voidscape/web/portal`, `/var/www/html/play`, and `/var/www/html/voidscape` before replacing files. Back up `/etc/voidscape/headless-players` as a separate encrypted off-host artifact paired with the same database snapshot; never put its plaintext files in the ordinary server tarball.
+- Back up `/opt/voidscape/server/local.conf`, active jars, `/opt/voidscape/server/inc/sqlite/voidscape.db`, `/var/lib/voidscape-portal/dev-store.json`, `/opt/voidscape/server/avatars/`, `/etc/voidscape/portal.env`, `/opt/voidscape/web/portal`, `/var/www/html/play`, and `/var/www/html/voidscape` before replacing files. Back up `/etc/voidscape/headless-players` as a separate encrypted off-host artifact paired with the same database snapshot; never put its plaintext files in the ordinary server tarball.
+- Stop or drain portal/game writers before backing up portal state and the game DB. Use SQLite `.backup` (or a consistent MariaDB dump), not a bare copy of the WAL-mode SQLite main file. Hash, retain off-host, and restore-test the two snapshots as one matched backup; the founder CSV is not a substitute for `dev-store.json`.
 - Preserve the live DB and env secrets. Patch only launch-critical config keys unless intentionally replacing the whole runtime config.
 - When `avatar_generator:true`, keep `/opt/voidscape/server/avatars/` owned and writable by the `voidscape` service identity (`install -d -o voidscape -g voidscape -m 0750 /opt/voidscape/server/avatars`). The server creates the directory on a writable fresh install, but a root-owned production tree must be prepared explicitly.
 - `/` proxies to the Node portal; `/play/` serves static TeaVM files from `/var/www/html/play`; `/play/ws/` proxies to the game WebSocket port.
-- For launch mode, keep `PORTAL_PUBLIC_MODE=1`, `PORTAL_LAUNCH_SIGNUP_MODE=1`, durable `PORTAL_DATA_DIR=/var/lib/voidscape-portal`, and `PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db`.
+- For launch mode, keep `PORTAL_PUBLIC_MODE=1`, `PORTAL_LAUNCH_SIGNUP_MODE=1`, durable `PORTAL_DATA_DIR=/var/lib/voidscape-portal`, and `PORTAL_OPENRSC_DB=/opt/voidscape/server/inc/sqlite/voidscape.db`. Normal startup requires the real service-writable data directory at mode `0700` and canonical `dev-store.json` at mode `0600`. On a genuinely fresh host only, root runs `install -d -o voidscape -g voidscape -m 0700 /var/lib/voidscape-portal`, then runs `runuser -u voidscape -- env PORTAL_DATA_DIR=/var/lib/voidscape-portal node /opt/voidscape/web/portal/dev-server.mjs --initialize-store`; never initialize over an unexplained missing production store. Back up an existing store before correcting both paths with `chown voidscape:voidscape`, directory mode `0700`, and file mode `0600`.
 - Restart with `systemctl restart voidscape voidscape-portal`, reload nginx only after config changes with `nginx -t && systemctl reload nginx`, then verify with `scripts/verify-launch-staging.mjs`.
 
 ## Build and run
@@ -830,7 +831,7 @@ scripts/post-voidbot-discord.py --channel bug-feed --edit-message-id <message-id
 1. Finish and commit the code/content slice.
 2. Run `docs/RELEASE-CHECKLIST.md`.
 3. Build with `scripts/build.sh`.
-4. Back up the database and, when the headless fleet is provisioned, create its paired encrypted off-host credential/receipt backup.
+4. Quiesce portal/game writers, then create and hash one matched backup of the game database and `/var/lib/voidscape-portal/dev-store.json`; restore-test the pair in isolation. When the headless fleet is provisioned, also create its paired encrypted off-host credential/receipt backup.
 5. Deploy server/client/cache artifacts.
 6. Boot server and watch logs.
 7. Smoke-test with a real client.
@@ -840,9 +841,9 @@ scripts/post-voidbot-discord.py --channel bug-feed --edit-message-id <message-id
 
 1. Stop `voidscape-headless.target` when provisioned, then stop the server.
 2. Restore the previous known-good code/cache/client artifacts.
-3. Restore the DB backup if the failed release applied migrations or corrupted state.
+3. Restore the game DB backup when required. If the failed release changed cross-store account/character state, restore the matching portal JSON and game DB backup together while both writers are stopped; never mix timestamps from different backup sets.
 4. If the rollback changed fleet account rows or credentials, restore the paired encrypted headless credential backup while the target is stopped, pass the explicit SQLite offline gate, and rerun its fail-closed provisioning verification. A legacy snapshot with stale online flags must use the game-server-only reconciliation sequence above; never edit the flags directly.
-5. Boot the server; only after its health checks pass may the headless target start.
+5. Boot the server and portal; require portal health `storage.storeReady=true`. Only after health checks pass may the headless target start.
 6. Log in with a test account.
 7. Announce status if players were affected.
 

@@ -186,7 +186,17 @@ If avatar rendering is not ready, the API should still return exact appearance/e
 
 ## Local Prototype API
 
-`web/portal/dev-server.mjs` is the current API scaffold. It is intentionally local-only and uses a JSON store under `/tmp/voidscape-portal-api` by default, or `PORTAL_DATA_DIR` when provided.
+`web/portal/dev-server.mjs` is the current portal API. Non-public development uses a JSON store under `/tmp/voidscape-portal-api` by default; public operation requires an explicit durable `PORTAL_DATA_DIR`.
+
+Public operation treats `PORTAL_DATA_DIR/dev-store.json` as protected account state,
+not an optional cache. Before listening, the portal requires the complete canonical
+shape, a regular non-symlink file, and exact private directory/file permissions;
+missing, unreadable, malformed, partial, or unexpected fields fail closed without
+rewriting the file.
+`--initialize-store` is an absent-only, service-user first-run command that writes a
+canonical `0600` store and exits. Normal mutations retain temp-file-plus-rename atomic
+writes with a private temp file, and health rechecks the store so runtime damage removes
+readiness instead of becoming an empty roster.
 
 It currently proves:
 

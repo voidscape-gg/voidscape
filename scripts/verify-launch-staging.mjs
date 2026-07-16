@@ -194,6 +194,7 @@ async function verifyPortalHealth() {
 	assertCheck("portal health launch signup mode", body.launchSignupMode === true, JSON.stringify(body));
 	assertCheck("portal durable storage", body.storage && body.storage.durable === true, JSON.stringify(body.storage || null));
 	assertCheck("portal temp storage override off", !(body.storage && body.storage.tempDirOverride), JSON.stringify(body.storage || null));
+	assertCheck("portal store ready", body.storage && body.storage.storeReady === true, JSON.stringify(body.storage || null));
 	assertCheck("portal OpenRSC DB bridge configured", body.openRscDb && body.openRscDb.configured === true, JSON.stringify(body.openRscDb || null));
 	assertCheck("portal public config ready", body.config && body.config.publicReady === true, JSON.stringify(body.config || null));
 	assertCheck("portal abuse salt configured", body.config && body.config.abuseHashSaltConfigured === true, JSON.stringify(body.config || null));
@@ -889,7 +890,7 @@ function usage() {
 	console.log(`Usage: scripts/verify-launch-staging.mjs --portal-url URL --web-url URL --server-config FILE --connections-config FILE (--run-signup|--pending-email-rehearsal|--skip-signup) [options]
 
 Verifies the production-like launch gate for a staged Voidscape deployment:
-  - portal health uses public launch-signup mode, durable storage, and an OpenRSC DB bridge
+  - portal health uses public launch-signup mode, a durable ready store, and an OpenRSC DB bridge
   - /api/public exposes the desktop-packet / web-and-Android-portal registration split, current Community Rules, hybrid member world, and Google hidden by default
   - /api/launcher/manifest.properties is a well-formed update channel (required keys,
     64-hex sha256 values, https URLs, clientVersion matching the server config) and its

@@ -131,8 +131,10 @@ physical card.
   frozen founder manifest; overlap grants only one card.
 - [ ] Stop portal/game writes, then back up and restore-test the production portal JSON
   store and game database as one coordinated, hash-matched set.
-- [ ] Make production portal startup fail closed if an existing store is missing or
-  malformed; never silently replace a damaged production roster with an empty store.
+- [x] Make the final portal candidate fail closed if its protected store is missing,
+  malformed, partial, unreadable, symlinked, non-`0700` directory, or non-`0600` file;
+  runtime damage returns `503`, and only the explicit absent-only initializer can
+  create a new empty store.
 
 Freeze evidence:
 
@@ -173,7 +175,7 @@ Freeze evidence:
 
 | Workstream | Owner | Status | Completion evidence |
 |---|---|---|---|
-| Clean source and canonical build | Codex | IN PROGRESS | Private source is clean at `e2b24ece` and `scripts/build.sh` exits `0`; repeat against the final post-reward-fix commit and sanitized public tree. |
+| Clean source and canonical build | Codex | IN PROGRESS | VS-090 is committed at `7ea4d4af`; the VS-091 candidate and canonical `scripts/build.sh` pass locally. Repeat against the final v12 bundle commit and sanitized public tree. |
 | Final v12 server/client release bundle | Codex | PENDING | Manifest names exact final commit, `source_dirty=false`, exact hashes, protocol `10139`, corrected launch contract, and no blockers. |
 | Bundle hygiene | Codex | PENDING | No personal absolute paths, credentials/keys, backups/archives, `.gitsave`, runtime state, private history, or unexpected files; populated `portal.env` install mode is `0600`. |
 | Correct launch profile and custom content | Codex | PENDING | Complete launch-contract verification; archived boot log shows expected custom region/Enclave/Rift/Auction counts. |
@@ -181,7 +183,7 @@ Freeze evidence:
 | Portal account flows | Codex + human | PENDING | Signup, rules acceptance, verification, login, recovery, character create/delete, logout, data-deletion link, and email delivery pass against final candidate. |
 | Pre-signed-player cohort | Owner + Codex + operator | BLOCKED | Every protected-cohort checkbox and count/hash reconciliation above passes. |
 | Reward/reset safety | Codex + owner | BLOCKED | VS-090 is locally verified: exact founder composites, a separate launch-24h route, one-card overlap handling, reset reruns, and focused/full-build checks pass. The final frozen roster plus real final-candidate vendor, full-inventory, and repeat-claim evidence are still required. |
-| Portal roster durability | Codex | BLOCKED | VS-091: damaged or unexpectedly missing production portal JSON must fail startup/readiness without replacing the protected roster; explicit first-run initialization remains possible. |
+| Portal roster durability | Codex | PASS | VS-091: strict canonical startup, exact private/writable directory and file modes, absent-only service-user initialization, runtime `503`, mutation refusal, atomic writes, and preservation fixtures pass. Validating a copy of the real store and the paired restore rehearsal remain separate operator gates below. |
 | Database choice and permissions | Owner + operator | PENDING | Explicit SQLite/MariaDB decision; integrity/foreign keys, permissions, capacity, and exactly-one-writer proof. |
 | Coordinated backup and rollback | Operator + owner | PENDING | Portal/game writes quiesced; paired hashed off-host backup restored successfully in isolation; objective rollback triggers recorded. |
 | Desktop and launcher | Human + Codex | PENDING | Exact candidate fresh install, update, repair, offline behavior, login, gameplay, save, logout, and relogin. |
@@ -299,3 +301,8 @@ or physical-device requirements.
   canonical hosted verifier, and full build pass. The game ingress stayed intentionally
   closed, and no portal bundle, database, client, Play change, or source publication
   was deployed.
+- 2026-07-16: completed and locally verified VS-091. The final portal candidate now
+  fails closed on invalid protected state, has an explicit service-user first-run path,
+  reports runtime store damage as unready, and packages WAL-safe paired backup/restore
+  instructions. No production portal state was read or changed; real-store copy
+  validation and the coordinated restore rehearsal remain pending.

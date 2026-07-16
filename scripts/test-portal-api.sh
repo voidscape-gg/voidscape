@@ -71,6 +71,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
+initialize_public_store() {
+	PORTAL_DATA_DIR="$1" node web/portal/dev-server.mjs --initialize-store >/dev/null
+}
+
 expect_invalid_android_play_url() {
 	local url="$1"
 	local slug="$2"
@@ -521,6 +525,7 @@ fi
 
 # ---- CAPTCHA-gated public signup ----
 captcha_port=$((PORT + 4))
+initialize_public_store "$tmp_dir/captcha-store"
 PORT="$captcha_port" \
 	PORTAL_DATA_DIR="$tmp_dir/captcha-store" \
 	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
@@ -585,6 +590,7 @@ launch_window_port=$((PORT + 8))
 launch_window_db="$tmp_dir/openrsc-launch-window-fixture.db"
 launch_window_at="$(node -e 'process.stdout.write(new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString())')"
 cp "$base_fixture_db" "$launch_window_db"
+initialize_public_store "$tmp_dir/launch-window-store"
 PORT="$launch_window_port" \
 	PORTAL_DATA_DIR="$tmp_dir/launch-window-store" \
 	PORTAL_OPENRSC_DB="$launch_window_db" \
@@ -648,6 +654,7 @@ launch_window_pid=""
 post_cutoff_port=$((PORT + 7))
 post_cutoff_db="$tmp_dir/openrsc-post-cutoff-fixture.db"
 cp "$base_fixture_db" "$post_cutoff_db"
+initialize_public_store "$tmp_dir/post-cutoff-store"
 PORT="$post_cutoff_port" \
 	PORTAL_DATA_DIR="$tmp_dir/post-cutoff-store" \
 	PORTAL_OPENRSC_DB="$post_cutoff_db" \
@@ -712,6 +719,7 @@ post_cutoff_pid=""
 
 # ---- PORTAL_PUBLIC_MODE lockdown ----
 public_port=$((PORT + 1))
+initialize_public_store "$tmp_dir/public-store"
 private_build_commit="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 cat >"$tmp_dir/public-build-meta.json" <<JSON
 {
@@ -817,6 +825,7 @@ drain_status_file="$tmp_dir/drain-signup-status"
 drain_log="$tmp_dir/drain-server.log"
 drain_port=$((PORT + 12))
 cp "$base_fixture_db" "$drain_db"
+initialize_public_store "$drain_store"
 PORT="$drain_port" \
 	PORTAL_DATA_DIR="$drain_store" \
 	PORTAL_OPENRSC_DB="$drain_db" \
@@ -1112,6 +1121,7 @@ trap cleanup EXIT
 
 # Public Android APK downloads can also be pointed at an explicit artifact path.
 android_public_port=$((PORT + 3))
+initialize_public_store "$tmp_dir/android-public-store"
 android_release_apk="$tmp_dir/voidscape-release.apk"
 dd if=/dev/zero of="$android_release_apk" bs=2048 count=1 >/dev/null 2>&1
 android_release_sha="$(shasum -a 256 "$android_release_apk" | awk '{print $1}')"
@@ -1169,6 +1179,7 @@ trap cleanup EXIT
 # ---- PORTAL_LAUNCH_SIGNUP_MODE public account flow ----
 cp "$base_fixture_db" "$launch_fixture_db"
 launch_port=$((PORT + 2))
+initialize_public_store "$tmp_dir/launch-store"
 PORT="$launch_port" \
 	PORTAL_DATA_DIR="$tmp_dir/launch-store" \
 	PORTAL_OPENRSC_DB="$launch_fixture_db" \
@@ -1716,7 +1727,7 @@ expect_status 409 -X DELETE "http://127.0.0.1:${launch_port}/api/characters/${la
 	-H "authorization: Bearer ${launch_token}"
 sqlite3 "$launch_fixture_db" "UPDATE player_cache SET value='1' WHERE key='web_account_id' AND playerID=(SELECT id FROM players WHERE username='LaunchAlt');"
 no_db_port=$((PORT + 5))
-mkdir -p "$tmp_dir/launch-no-db-store"
+mkdir -m 0700 "$tmp_dir/launch-no-db-store"
 cp "$tmp_dir/launch-store/dev-store.json" "$tmp_dir/launch-no-db-store/dev-store.json"
 PORT="$no_db_port" \
 	PORTAL_DATA_DIR="$tmp_dir/launch-no-db-store" \
@@ -1939,6 +1950,7 @@ process.exit(Number.isInteger(child.status) ? child.status : 1);
 NODE
 chmod 0755 "$verify_sqlite_shim_dir/sqlite3"
 verify_port=$((PORT + 6))
+initialize_public_store "$tmp_dir/verify-store"
 PORT="$verify_port" \
 	PORTAL_DATA_DIR="$tmp_dir/verify-store" \
 	PORTAL_OPENRSC_DB="$verify_db" \
@@ -2622,7 +2634,7 @@ if (!claim) throw new Error("pending expiry fixture claim not found");
 claim.expiresAtMs = Date.now() - 1000;
 claim.expiresAt = new Date(claim.expiresAtMs).toISOString();
 const temporary = path + ".expiry-test.tmp";
-fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + "\n");
+fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + "\n", { mode: 0o600 });
 fs.renameSync(temporary, path);
 NODE
 expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/complete" \
@@ -2685,7 +2697,7 @@ if (!event) throw new Error("legacy claim email fixture not found");
 event.status = "sending";
 event.updatedAt = new Date(Date.now() - 20 * 60 * 1000).toISOString();
 const temporary = path + ".interrupted-email-test.tmp";
-fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + "\n");
+fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + "\n", { mode: 0o600 });
 fs.renameSync(temporary, path);
 NODE
 expect_status 401 -X POST "http://127.0.0.1:${verify_port}/api/accounts/legacy-claim/request" \

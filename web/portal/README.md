@@ -121,7 +121,15 @@ systemctl list-timers 'voidscape-integrity-export.timer'
 journalctl -u voidscape-integrity-export.service -n 20 --no-pager
 ```
 
-- Back up the signup list: it is one file, `$PORTAL_DATA_DIR/dev-store.json` (atomic writes). A cron copy or the CSV export both work as backups.
+- `$PORTAL_DATA_DIR/dev-store.json` is the complete portal state: accounts, character links, founder records, sessions, recovery state, and email queues. The founder CSV is an audit/export view, not a restorable backup. Quiesce portal/game writers and back up this file together with the matching game database; hash and restore-test the pair before launch.
+- Normal public startup requires an existing canonical store at mode `0600` inside a real private/writable data directory at mode `0700`. Missing, unreadable, malformed, partial, symlinked, or incorrectly permissioned state stops startup before listen; runtime damage makes `/api/health` return `503` and prevents mutations from replacing the bytes. For a genuinely fresh host only, prepare the durable directory as root, then initialize as the portal service user:
+
+```bash
+sudo install -d -o voidscape -g voidscape -m 0700 /var/lib/voidscape-portal
+sudo runuser -u voidscape -- env PORTAL_DATA_DIR=/var/lib/voidscape-portal node /opt/voidscape/web/portal/dev-server.mjs --initialize-store
+```
+
+  The initializer creates the absent store at `0600`, logs `portal_store_initialized`, refuses any existing path without changing it, and exits without starting the server. Never run it to recover an unexpectedly missing production store. For an existing store, back it up first, then use `sudo chown voidscape:voidscape /var/lib/voidscape-portal /var/lib/voidscape-portal/dev-store.json`, `sudo chmod 0700 /var/lib/voidscape-portal`, and `sudo chmod 0600 /var/lib/voidscape-portal/dev-store.json`; do not initialize it.
 - Pull the list any time: `curl -H "x-portal-admin-token: $TOKEN" "https://yourdomain.com/api/admin/signups?format=csv"`.
 - Google sign-in is optional. Set `PORTAL_GOOGLE_CLIENT_ID` to a Google Identity Services web client id to show the button; leave it unset to keep the email/password path only. The redirect-style `/api/oauth/google/start` and `/api/oauth/google/callback` endpoints are still placeholders.
 - Email delivery supports Resend. Verified signup, older native-account claim, and self-service website-password recovery use the same durable email queue; durable rows keep hashed one-use tokens and only the email event carries a temporarily sealed delivery copy. Staff can also backfill confirmations, send/retry pending events, and send launch campaigns through the token-gated admin API. Use `PORTAL_EMAIL_DRY_RUN=1` only for staging/smoke tests. Turnstile can gate founder reservations, password signup, Google signup, and optionally authenticated character creation when the `PORTAL_CAPTCHA_*` settings below are enabled. Checkout remains a plug-in-later provider slot until that handler is implemented and tested.
@@ -139,9 +147,9 @@ scripts/verify-launch-staging.mjs \
   --run-signup
 ```
 
-The verifier reads `/api/health` and `/api/public`, so those endpoints expose only public-safe booleans for durable storage, OpenRSC DB bridge status, and launch config readiness, not filesystem paths or credentials. In public mode, `/api/health.config.publicReady` requires a non-placeholder `PORTAL_ABUSE_HASH_SALT`; `adminTokenConfigured` reports only whether the admin token looks configured, never its value.
+The verifier reads `/api/health` and `/api/public`, so those endpoints expose only public-safe booleans for durable storage, store readiness, OpenRSC DB bridge status, and launch config readiness, not filesystem paths or credentials. In public mode, `/api/health.storage.storeReady` must be true and `/api/health.config.publicReady` requires a non-placeholder `PORTAL_ABUSE_HASH_SALT`; `adminTokenConfigured` reports only whether the admin token looks configured, never its value.
 
-Binding non-loopback without `PORTAL_DATA_DIR` refuses to start (the signup list would live in $TMPDIR); `PORTAL_ALLOW_TMPDIR=1` overrides. `x-forwarded-for` is only trusted from loopback peers (same-host reverse proxy) or with `PORTAL_TRUST_PROXY=1` — only set that when the origin is reachable exclusively through the proxy, and configure the proxy to overwrite rather than append client-supplied `X-Forwarded-For`. Launch mode defaults completed signup velocity to 3/hour and 5/day per non-local IP plus 20/hour and 50/day per IPv4 `/24`. Verification sends use independent 3/hour per-IP and per-email limits, so sends and resends do not consume completed-signup velocity. Additional characters default to account 5/hour and 10/day, IP 10/hour and 20/day, and subnet 50/hour and 100/day; the signup's initial character bypasses those repeat-character limits while retaining the exact-IP block, name, DB, and max-10 checks.
+Public mode always requires explicit durable `PORTAL_DATA_DIR`; it never falls back to $TMPDIR. Non-public non-loopback development also refuses the temp directory unless `PORTAL_ALLOW_TMPDIR=1`. `x-forwarded-for` is only trusted from loopback peers (same-host reverse proxy) or with `PORTAL_TRUST_PROXY=1` — only set that when the origin is reachable exclusively through the proxy, and configure the proxy to overwrite rather than append client-supplied `X-Forwarded-For`. Launch mode defaults completed signup velocity to 3/hour and 5/day per non-local IP plus 20/hour and 50/day per IPv4 `/24`. Verification sends use independent 3/hour per-IP and per-email limits, so sends and resends do not consume completed-signup velocity. Additional characters default to account 5/hour and 10/day, IP 10/hour and 20/day, and subnet 50/hour and 100/day; the signup's initial character bypasses those repeat-character limits while retaining the exact-IP block, name, DB, and max-10 checks.
 
 Open directly in a browser:
 
@@ -230,7 +238,7 @@ scripts/smoke-portal-prelaunch-visual.sh --portal-url http://127.0.0.1:8788/ --s
 
 The first command screenshots desktop/mobile landing, creates one real launch-signup account when `PORTAL_OPENRSC_DB` is configured, and verifies dashboard, roster, subscription, security, and mobile account navigation. The second command is for a portal started with `PORTAL_LAUNCH_AT` in the past; it verifies the countdown takeover, launch proof panel, and client chooser copy.
 
-The data store defaults to `/tmp/voidscape-portal-api/dev-store.json`. Set `PORTAL_DATA_DIR=/path/to/data` if you want a persistent local store.
+Non-public local development defaults to `/tmp/voidscape-portal-api/dev-store.json`. Public mode requires an explicitly initialized persistent `PORTAL_DATA_DIR`.
 
 Useful local API environment variables:
 

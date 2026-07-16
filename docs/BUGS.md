@@ -26,7 +26,16 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** VS-091 — invalid production portal store silently becomes an empty roster.
+- **Active bug:** none — VS-091 is verified; resume final release-candidate integration.
+- **Session preflight 2026-07-16 (VS-091):** branch
+  `codex/release-10139-integration`; VS-090 is committed and verified at `7ea4d4af`,
+  the worktree is clean, and the pre-change `scripts/build.sh` plus portal API suite
+  pass. Conclusive code evidence reproduces the defect: `loadStore()` catches every
+  read/parse failure and normalizes it to an empty roster, so a later mutation can
+  replace protected data. Scope is a fail-closed public startup/load path, one explicit
+  empty-store initialization command, restricted initial file permissions, and focused
+  valid/missing/malformed/wrong-shape/unreadable tests. No production access or
+  deployment is authorized.
 - **Session preflight 2026-07-16 (VS-090 implementation):** branch
   `codex/release-10139-integration`; worktree clean at `96ccf15a`; pre-change
   `scripts/build.sh` passes with JDK 25 compatibility warnings only. Ryan approved the
@@ -138,16 +147,18 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — completed and verified VS-090 locally. The founder
-  cohort freezes strictly at `2026-07-18T18:00:00Z`; each frozen character has its own
-  durable founder route, and every character created before
-  `2026-07-19T18:00:00Z` has a launch route. Overlap resolves to one physical card,
-  referral codes remain independent, and portal/native character creation plus reset
-  reruns are atomic and idempotent. Focused portal, reset, policy, packaging, and
-  boundary suites plus `scripts/build.sh` pass. No production data, deployment, push,
-  or source publication occurred.
-- **Next action:** implement and verify VS-091's fail-closed production store loading.
-  Do not push, publish source, or deploy any game/server/client artifact.
+- **Last session:** 2026-07-16 — completed and verified VS-091 locally. Public portal
+  startup now rejects missing, malformed, partial, symlinked, unreadable, or
+  non-`0700`/`0600` protected paths before listen; runtime damage removes readiness. The
+  absent-only initializer is explicit, service-owned, and audited, and launch
+  operations use a quiesced portal-state plus SQLite `.backup` pair. Focused portal,
+  package, schema, API, syntax, and full-build gates pass. The VS-090 founder/launch
+  card policy remains unchanged and green. No production data, deployment, push, or
+  source publication occurred.
+- **Next action:** resume final release-candidate integration. Validate a protected
+  copy of the real portal store against the canonical shape before deployment, then
+  complete the paired restore rehearsal and final v12 bundle gates. Do not push,
+  publish source, or deploy any game/server/client artifact.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -430,27 +441,6 @@ half-remembered is fine, triage will chase it down.)_
 ---
 
 ## Open bugs
-
-### VS-091 — Invalid production portal store silently becomes an empty roster
-- Status: confirmed · Severity: P1 · Area: web-portal / account-data durability
-- Evidence: `loadStore()` catches a missing, unreadable, or malformed
-  `$PORTAL_DATA_DIR/dev-store.json` and returns a newly normalized empty store. A later
-  portal mutation can atomically rename that empty state over the intended production
-  path, losing the protected founder/account/character/entitlement roster. The
-  temp-file-plus-rename write path is sound, but startup does not distinguish an
-  intentional first run from damaged production state.
-- Repro: point a fixture portal at an existing malformed JSON store and start it; the
-  process accepts an empty in-memory store instead of refusing startup. Exercise any
-  persistent mutation and the replacement store is valid JSON but lacks the original
-  records.
-- Verify: an existing malformed, unreadable, wrong-shape, or unexpectedly missing
-  production store prevents readiness/startup and preserves the original bytes. A
-  deliberately enabled first-run initialization path can create an empty store only
-  when no store exists, with restricted permissions and an audit message. Valid stores
-  still load and temp-file/rename writes pass; focused corrupt/missing/valid fixtures,
-  portal API/schema tests, and `scripts/build.sh` pass.
-- Log: 2026-07-16 triaged from the protected 190-player cohort audit. Queue behind the
-  active per-character reward contract; do not test against the production roster.
 
 ### VS-072 — Website character manager cannot delete characters
 - Status: fixed · Severity: P1 · Area: web-portal / launch surface
@@ -1075,6 +1065,29 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-091 — Invalid production portal store silently becomes an empty roster (FIXED)
+- Status: verified · Severity: P1 · Area: web-portal / account-data durability
+- Root cause: `loadStore()` caught missing, unreadable, and malformed state and
+  normalized it to a new empty store. A later valid mutation could therefore replace
+  the intended founder/account/character/entitlement roster without distinguishing
+  damage from an intentional first run.
+- Fix: public startup strictly requires a real private/writable `0700` data directory
+  and the complete canonical JSON shape in a regular, non-symlink `0600` file before
+  listening. An explicit `--initialize-store` command
+  requires a durable data directory, tightens it to `0700`, creates only an absent
+  canonical `0600` store, logs the event, refuses existing state, and exits. Health
+  rechecks the store, mutations fail during runtime damage, and valid writes keep
+  exclusive atomic `0600` temp-file replacement. The release handoff initializes as
+  the `voidscape` service user and backs up portal state with a WAL-safe SQLite
+  `.backup` as one hashed restore unit.
+- Verified 2026-07-16: focused fixtures preserve bytes across missing, malformed,
+  wrong-shape, non-regular, symlink, insecure/non-writable modes, and runtime-damage
+  failures; absent-only initialization, pre-existing-directory tightening, valid
+  mutation, health readiness, and atomic permissions pass. Portal API/schema/static,
+  launch-config/package, shell/Node syntax, `git diff --check`, and full
+  `scripts/build.sh` pass. No production data, deployment, push, or source publication
+  occurred.
 
 ### VS-090 — Founder starter card is account-wide instead of per character (FIXED)
 - Status: verified · Severity: P1 · Area: subscriptions / web-portal / launch reset

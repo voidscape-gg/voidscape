@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { lstat, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { execFile as execFileCallback, spawn } from "node:child_process";
 import { createCipheriv, createDecipheriv, createHash, createPublicKey, randomBytes, scrypt as scryptCallback, timingSafeEqual, verify as verifySignature } from "node:crypto";
 import { promisify } from "node:util";
@@ -35,6 +35,20 @@ const betaSignupCounterStartedAtIso = configuredBetaSignupCounterStartedAt();
 const betaSignupCounterSeed = process.env.PORTAL_BETA_COUNTER_SEED || "voidscape-public-beta";
 const dataDir = process.env.PORTAL_DATA_DIR || join(tmpdir(), "voidscape-portal-api");
 const storePath = join(dataDir, "dev-store.json");
+const portalCliArgs = process.argv.slice(2);
+const initializeStoreOnly = portalCliArgs.length === 1 && portalCliArgs[0] === "--initialize-store";
+const portalStoreNextIdKeys = [
+	"account", "character", "founder", "referral", "session", "entitlement",
+	"linkChallenge", "recoveryCode", "identity", "audit", "abuseSignal",
+	"emailEvent", "emailVerification", "passwordResetToken", "legacyAccountClaim"
+];
+const portalStoreArrayKeys = [
+	"accounts", "identities", "sessions", "founders", "referrals", "characters",
+	"entitlements", "linkChallenges", "recoveryCodes", "oauthStates", "audit",
+	"abuseSignals", "emailEvents", "emailVerifications", "passwordResetTokens",
+	"legacyAccountClaims"
+];
+const portalStoreTopLevelKeys = new Set(["nextIds", ...portalStoreArrayKeys]);
 const testStoreFaultsEnabled = process.env.PORTAL_ENABLE_TEST_FAULTS === "1";
 const testStorePauseMarkerPath = String(process.env.PORTAL_TEST_STORE_PAUSE_MARKER || "").trim();
 const testStorePauseReleasePath = String(process.env.PORTAL_TEST_STORE_PAUSE_RELEASE || "").trim();
@@ -567,6 +581,13 @@ class HttpError extends Error {
 	}
 }
 
+class PortalStoreError extends Error {
+	constructor(reason) {
+		super(reason);
+		this.reason = reason;
+	}
+}
+
 const sqliteOperationLabels = new Set([
 	"create_openrsc_player",
 	"delete_openrsc_player",
@@ -614,6 +635,33 @@ function logSqliteChildFailure(error, operation) {
 function openRscDatabaseUnavailable(error, operation) {
 	logSqliteChildFailure(error, operation);
 	return new HttpError(503, "openrsc_db_unavailable");
+}
+
+let portalStoreReady = false;
+if (portalCliArgs.length && !initializeStoreOnly) {
+	console.error("portal_startup_failed", JSON.stringify({ reason: "invalid_arguments" }));
+	process.exit(1);
+}
+if (initializeStoreOnly) {
+	try {
+		await initializePortalStore();
+		console.log("portal_store_initialized", JSON.stringify({ mode: "empty", permissions: "0600" }));
+		process.exit(0);
+	} catch (error) {
+		console.error("portal_store_initialization_failed", JSON.stringify({
+			reason: portalStoreFailureReason(error)
+		}));
+		process.exit(1);
+	}
+}
+try {
+	await loadStore({ requireCanonical: publicMode });
+	portalStoreReady = true;
+} catch (error) {
+	console.error("portal_store_startup_failed", JSON.stringify({
+		reason: portalStoreFailureReason(error)
+	}));
+	process.exit(1);
 }
 
 const server = createServer((request, response) => {
@@ -824,6 +872,37 @@ async function handleApi(request, response, url) {
 	}
 
 	if (method === "GET" && url.pathname === "/api/health") {
+		try {
+			await loadStore({ requireCanonical: publicMode });
+			portalStoreReady = true;
+		} catch (error) {
+			portalStoreReady = false;
+			console.error("portal_store_health_failed", JSON.stringify({
+				reason: portalStoreFailureReason(error)
+			}));
+			const config = portalConfigHealth();
+			json(response, 503, {
+				ok: false,
+				error: "portal_store_unavailable",
+				service: "voidscape-portal-dev",
+				publicMode,
+				launchSignupMode,
+				storage: {
+					durable: Boolean(process.env.PORTAL_DATA_DIR),
+					tempDirOverride: process.env.PORTAL_ALLOW_TMPDIR === "1",
+					storeReady: false
+				},
+				openRscDb: {
+					configured: Boolean(openRscDbPath)
+				},
+				config: {
+					...config,
+					publicReady: false,
+					issues: Array.from(new Set([...config.issues, "portal_store_unavailable"]))
+				}
+			});
+			return;
+		}
 		json(response, 200, {
 			ok: true,
 			service: "voidscape-portal-dev",
@@ -831,7 +910,8 @@ async function handleApi(request, response, url) {
 			launchSignupMode,
 			storage: {
 				durable: Boolean(process.env.PORTAL_DATA_DIR),
-				tempDirOverride: process.env.PORTAL_ALLOW_TMPDIR === "1"
+				tempDirOverride: process.env.PORTAL_ALLOW_TMPDIR === "1",
+				storeReady: portalStoreReady
 			},
 			openRscDb: {
 				configured: Boolean(openRscDbPath)
@@ -8693,20 +8773,156 @@ function recoverInterruptedEmailEvents(store) {
 	}
 }
 
-async function loadStore() {
+async function loadStore({ requireCanonical = publicMode } = {}) {
+	if (requireCanonical && !process.env.PORTAL_DATA_DIR) {
+		throw new PortalStoreError("data_dir_required");
+	}
+	if (requireCanonical) {
+		try {
+			const dataDirStat = await lstat(dataDir);
+			if (!dataDirStat.isDirectory() || dataDirStat.isSymbolicLink()) {
+				throw new PortalStoreError("data_dir_not_regular");
+			}
+			if ((dataDirStat.mode & 0o777) !== 0o700) {
+				throw new PortalStoreError("data_dir_permissions_insecure");
+			}
+		} catch (error) {
+			if (error instanceof PortalStoreError) throw error;
+			throw new PortalStoreError(error && error.code === "ENOENT"
+				? "store_missing"
+				: "store_unreadable");
+		}
+	}
 	try {
-		const raw = await readFile(storePath, "utf8");
-		return normalizeStore(JSON.parse(raw));
+		const storeStat = await lstat(storePath);
+		if (!storeStat.isFile() || storeStat.isSymbolicLink()) {
+			throw new PortalStoreError("store_not_regular");
+		}
+		if (requireCanonical && (storeStat.mode & 0o777) !== 0o600) {
+			throw new PortalStoreError("store_permissions_insecure");
+		}
 	} catch (error) {
-		return normalizeStore({});
+		if (error instanceof PortalStoreError) throw error;
+		if (error && error.code === "ENOENT" && !requireCanonical) {
+			return normalizeStore({});
+		}
+		throw new PortalStoreError(error && error.code === "ENOENT"
+			? "store_missing"
+			: "store_unreadable");
+	}
+	let raw;
+	try {
+		raw = await readFile(storePath, "utf8");
+	} catch (error) {
+		throw new PortalStoreError(error && error.code === "ENOENT"
+			? "store_missing"
+			: "store_unreadable");
+	}
+	let parsed;
+	try {
+		parsed = JSON.parse(raw);
+	} catch (_error) {
+		throw new PortalStoreError("store_invalid_json");
+	}
+	validateStoreShape(parsed, { requireCanonical });
+	return normalizeStore(parsed);
+}
+
+async function initializePortalStore() {
+	if (!process.env.PORTAL_DATA_DIR) {
+		throw new PortalStoreError("data_dir_required");
+	}
+	try {
+		await lstat(storePath);
+		throw new PortalStoreError("store_already_exists");
+	} catch (error) {
+		if (error instanceof PortalStoreError) throw error;
+		if (!error || error.code !== "ENOENT") {
+			throw new PortalStoreError("store_unwritable");
+		}
+	}
+	try {
+		await mkdir(dataDir, { recursive: true, mode: 0o700 });
+		await chmod(dataDir, 0o700);
+	} catch (_error) {
+		throw new PortalStoreError("data_dir_unwritable");
+	}
+	try {
+		await writeFile(storePath, `${JSON.stringify(normalizeStore({}), null, 2)}\n`, {
+			encoding: "utf8",
+			flag: "wx",
+			mode: 0o600
+		});
+	} catch (error) {
+		throw new PortalStoreError(error && error.code === "EEXIST"
+			? "store_already_exists"
+			: "store_unwritable");
+	}
+}
+
+function portalStoreFailureReason(error) {
+	return error instanceof PortalStoreError ? error.reason : "store_error";
+}
+
+function validateStoreShape(store, { requireCanonical = false } = {}) {
+	if (!store || typeof store !== "object" || Array.isArray(store)) {
+		throw new PortalStoreError("store_invalid_shape");
+	}
+	if (requireCanonical) {
+		for (const key of Object.keys(store)) {
+			if (!portalStoreTopLevelKeys.has(key)) {
+				throw new PortalStoreError("store_invalid_shape");
+			}
+		}
+	}
+	if (store.nextIds === undefined) {
+		if (requireCanonical) throw new PortalStoreError("store_invalid_shape");
+	} else {
+		if (!store.nextIds || typeof store.nextIds !== "object" || Array.isArray(store.nextIds)) {
+			throw new PortalStoreError("store_invalid_shape");
+		}
+		if (requireCanonical) {
+			for (const key of Object.keys(store.nextIds)) {
+				if (!portalStoreNextIdKeys.includes(key)) {
+					throw new PortalStoreError("store_invalid_shape");
+				}
+			}
+		}
+		for (const key of portalStoreNextIdKeys) {
+			const value = store.nextIds[key];
+			if (value === undefined) {
+				if (requireCanonical) throw new PortalStoreError("store_invalid_shape");
+				continue;
+			}
+			if (!Number.isSafeInteger(value) || value < 1) {
+				throw new PortalStoreError("store_invalid_shape");
+			}
+		}
+	}
+	for (const key of portalStoreArrayKeys) {
+		if (store[key] === undefined) {
+			if (requireCanonical) throw new PortalStoreError("store_invalid_shape");
+			continue;
+		}
+		if (!Array.isArray(store[key])
+			|| store[key].some((entry) => !entry || typeof entry !== "object" || Array.isArray(entry))) {
+			throw new PortalStoreError("store_invalid_shape");
+		}
 	}
 }
 
 async function saveStore(store) {
-	await mkdir(dataDir, { recursive: true });
+	validateStoreShape(store, { requireCanonical: true });
+	await mkdir(dataDir, { recursive: true, mode: 0o700 });
 	const tmpPath = `${storePath}.${process.pid}.tmp`;
-	await writeFile(tmpPath, `${JSON.stringify(normalizeStore(store), null, 2)}\n`);
+	await writeFile(tmpPath, `${JSON.stringify(normalizeStore(store), null, 2)}\n`, {
+		encoding: "utf8",
+		flag: "wx",
+		mode: 0o600
+	});
+	await chmod(tmpPath, 0o600);
 	await rename(tmpPath, storePath);
+	await chmod(storePath, 0o600);
 }
 
 function normalizeStore(store) {
