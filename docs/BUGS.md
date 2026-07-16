@@ -26,8 +26,19 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-094 is verified; next triage the packaged-portal runtime
-  dependency finding as VS-095.
+- **Active bug:** none — VS-095 is verified; next promote the general cross-store
+  signup collision finding from Intake to VS-096.
+- **Session preflight 2026-07-16 (VS-095):** branch
+  `codex/release-10139-integration`; VS-094 is committed and verified at `201fcd3e`,
+  the worktree is clean, and the pre-change `scripts/build.sh` passes. Exact v12
+  package rehearsal returns HTTP 500 for an existing character's availability because
+  `dev-server.mjs` reads `server/src/com/openrsc/server/content/PlayerTitle.java` at
+  runtime while the minimized release omits `server/src`. The same post-insert snapshot
+  runs after `createOpenRscPlayer()` commits, so the error can leave a game player and
+  `web_account_id` marker while the portal-store mutation aborts. Scope is a private,
+  source-free packaged title-data input, dependency preflight before the game write,
+  and exact-package availability/signup regression coverage. V12 remains held and
+  non-promotable; no deployment, upload, push, or source publication is authorized.
 - **Session preflight 2026-07-16 (VS-094):** branch
   `codex/release-10139-integration`; worktree clean at `cbea2250`, and the pre-change
   `scripts/build.sh` passes. Exact v12 closed-ingress startup reproduced the defect:
@@ -167,15 +178,15 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — completed and verified VS-094 locally. The config
-  reader now preserves an ISO launch timestamp and other colon-rich values while
-  retaining the legacy section, blank, comment, and duplicate-key behavior. The
-  focused generated-config regression, full build, and closed-ingress source-built
-  server startup pass with the exact launch cutoff active and no missing/default log.
-  No deployment, upload, push, or source publication occurred.
-- **Next action:** triage the exact packaged-portal missing-runtime-file finding into
-  VS-095, fix and rehearse it as one bug, then replace v12 with a fully tested held v13
-  candidate. Do not push, publish source, or deploy any game/server/client artifact.
+- **Last session:** 2026-07-16 — completed and verified VS-095 locally. The portal now
+  consumes a private source-free 65-title definition mirror, validates game definition
+  inputs before listening and again before a game write, and no longer reads Java source
+  at runtime. Bundle-shaped missing/complete cases, private-path containment, the full
+  verified-email portal API suite, and the canonical build pass. V12 remains rejected;
+  no live system changed.
+- **Next action:** promote and fix the separately reproduced cross-store signup ID
+  collision as VS-096 before building and fully rehearsing held v13. Do not push,
+  publish source, or deploy any game/server/client artifact.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -382,14 +393,13 @@ to resume from these two files alone. Keep every entry self-contained.
 ---
 
 ## Intake — dump raw bug reports here
-
-- Exact v12 packaged portal omits
-  `server/src/com/openrsc/server/content/PlayerTitle.java`, but
-  `dev-server.mjs::loadTitleDefinitions()` reads that source path at runtime. Existing
-  character availability returns HTTP 500/ENOENT, and verified signup can create the
-  game player before the portal-store transaction aborts, risking an orphaned mismatch.
-  Web 538/538 and the broad 622-check portal gate passed without exercising this path.
-  Evidence: `tmp/release-10139-v12-local-web-portal/`.
+- Portal account/character creation still has a general cross-store commit window after
+  the OpenRSC SQLite transaction commits and before the portal JSON temp file is renamed.
+  A built-in post-mutator store-pause timeout reproduced one game player plus
+  `web_account_id` with zero durable portal account/character/founder even when all
+  definition files were present. This is distinct from VS-095's deterministic missing
+  package input and needs durable intent/reconciliation or another bounded recovery
+  design; do not claim VS-095 makes arbitrary crashes/disk failures atomic.
 - Headless Karamja traveller death recovery can strand a session in
   `journey-funding-missing`: Ultraz respawned at `(120,648)` with only item ids
   466/473/476, no coins or sellable starter sword, and an empty bank. The controller
@@ -1089,6 +1099,31 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-095 — Minimized portal package breaks character lookup after game-side creation (FIXED)
+- Status: verified · Severity: P1 · Area: web-portal / release packaging / accounts
+- Root cause: the minimized release intentionally omitted `server/src`, but the portal
+  parsed `PlayerTitle.java` from that tree on every existing-character snapshot. Exact
+  v12 availability therefore returned HTTP 500. Worse, verified first-character signup
+  committed the OpenRSC player, stat rows, ownership marker, and launch-card marker
+  before the same missing-file snapshot failed; the portal mutation was not saved and
+  replay became stuck on `character_name_taken`.
+- Fix: a private `PlayerTitleDefs.json` beside the already packaged item-definition JSON
+  carries only all 65 title IDs/display names, with Java-enum parity enforced by the
+  canonical build. The portal no longer reads Java source. With a game DB configured,
+  startup validates item/title catalogs before listening, and character creation repeats
+  the cached readiness check before its independently committed game write. The tracked
+  definition follows the existing `server/conf` hash/exact-tree deployment contract.
+- Verified 2026-07-16: the bundle-shaped package contains no Java/source tree. Omitting
+  the private definition causes an explicit nonzero startup failure before a listener
+  and leaves both durable stores byte-identical; the complete package returns existing
+  availability, creates exactly one consistently linked portal/game character plus its
+  launch card, and returns HTTP 404 for private-definition and Java-source GET/HEAD
+  requests. Title parity, package/static boundaries, full production-style
+  verified-email portal API suite, and final `scripts/build.sh` pass; evidence is under
+  `tmp/vs095-*`. The separate arbitrary crash/disk-failure cross-store window remains in
+  Intake and is not covered by this claim. V12 remains rejected. No deployment, upload,
+  push, source publication, protocol, client, schema, or live-data change occurred.
 
 ### VS-094 — Launch server silently drops the 24-hour card cutoff timestamp (FIXED)
 - Status: verified · Severity: P1 · Area: server-config / launch rewards

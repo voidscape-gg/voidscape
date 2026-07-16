@@ -107,6 +107,8 @@ for path in \
 	/dev-server.mjs /%64ev-server.mjs /%2564ev-server.mjs /DEV-SERVER.MJS \
 	'/dev-server.mjs?probe=1' /% /api-smoke.mjs /commerce-smoke.mjs /README.md \
 	/schema /schema/sqlite/001_web_accounts.sql /build-meta.json \
+	/server/conf/server/defs/PlayerTitleDefs.json \
+	/server/src/com/openrsc/server/content/PlayerTitle.java \
 	/public-static-contract.json /.env /.git/config /unknown.js /unknown.sql \
 	/unknown.json /assets/private.mjs /assets/private.json /assets/ \
 	/schema%2fsqlite%2f001_web_accounts.sql /assets/%2e%2e/dev-server.mjs \

@@ -663,6 +663,16 @@ try {
 	}));
 	process.exit(1);
 }
+if (openRscDbPath) {
+	try {
+		await Promise.all([loadItemDefinitions(), loadTitleDefinitions()]);
+	} catch (_error) {
+		console.error("portal_runtime_dependency_failed", JSON.stringify({
+			reason: "game_definitions_unavailable"
+		}));
+		process.exit(1);
+	}
+}
 
 const server = createServer((request, response) => {
 	if (shuttingDown) {
@@ -4817,6 +4827,11 @@ async function createAccountCharacter(store, account, payload, request, options 
 		await assertCharacterCreationAllowed(store, account, request);
 	}
 
+	// A new OpenRSC player commits independently of the portal JSON store. Load the
+	// definition data needed by the post-create snapshot before making that write so
+	// a missing or malformed release dependency cannot strand a game-only player.
+	await Promise.all([loadItemDefinitions(), loadTitleDefinitions()]);
+
 	const createdPlayer = await createOpenRscPlayer({
 		accountId: account.id,
 		username,
@@ -7709,12 +7724,20 @@ async function loadItemDefinitions() {
 async function loadTitleDefinitions() {
 	if (!titleDefinitionsPromise) {
 		titleDefinitionsPromise = (async () => {
-			const raw = await readFile(join(repoRoot, "server/src/com/openrsc/server/content/PlayerTitle.java"), "utf8");
+			const raw = await readFile(join(repoRoot, "server/conf/server/defs/PlayerTitleDefs.json"), "utf8");
+			const parsed = JSON.parse(raw);
+			const rows = parsed && parsed.titles;
+			if (!Array.isArray(rows) || !rows.length) {
+				throw new Error("invalid PlayerTitleDefs.json");
+			}
 			const map = new Map();
-			const pattern = /^\s*[A-Z0-9_]+\("([^"]+)",\s*"([^"]+)"/gm;
-			let match;
-			while ((match = pattern.exec(raw)) !== null) {
-				map.set(match[1], match[2]);
+			for (const row of rows) {
+				const id = row && typeof row.id === "string" ? row.id.trim() : "";
+				const displayName = row && typeof row.displayName === "string" ? row.displayName.trim() : "";
+				if (!id || !displayName || map.has(id)) {
+					throw new Error("invalid PlayerTitleDefs.json");
+				}
+				map.set(id, displayName);
 			}
 			return map;
 		})();
