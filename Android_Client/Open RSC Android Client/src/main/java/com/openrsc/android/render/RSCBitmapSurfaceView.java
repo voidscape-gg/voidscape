@@ -31,7 +31,6 @@ import com.openrsc.client.android.GameActivity;
 import com.openrsc.client.model.Sprite;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.HashMap;
 import java.util.Locale;
@@ -677,11 +676,13 @@ public abstract class RSCBitmapSurfaceView extends SurfaceView implements Surfac
 		Drawable drawable = getResources().getDrawable(drawableId, getContext().getTheme());
 		BitmapDrawable bitmapDrawable = ((BitmapDrawable) drawable);
 		Bitmap bitmap = bitmapDrawable.getBitmap();
-		ByteArrayOutputStream stream = new ByteArrayOutputStream();
-		bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream); //use the compression format of your need
-		ByteArrayInputStream is = new ByteArrayInputStream(stream.toByteArray());
-
-		return getSpriteFromByteArray(is);
+		int width = bitmap.getWidth();
+		int height = bitmap.getHeight();
+		int[] pixels = new int[width * height];
+		bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+		Sprite sprite = new Sprite(pixels, width, height);
+		sprite.setSomething(width, height);
+		return sprite;
 	}
 
 	@Override

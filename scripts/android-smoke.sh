@@ -9915,30 +9915,43 @@ cache_file_mtime() {
 assert_endpoint_state() {
 	local expected_host="$1"
 	local expected_port="$2"
-	local mirrored_host mirrored_port preferences
-	mirrored_host="$("$ADB" shell run-as "$APP_ID" cat files/ip.txt 2>/dev/null | tr -d '\r')"
-	mirrored_port="$("$ADB" shell run-as "$APP_ID" cat files/port.txt 2>/dev/null | tr -d '\r')"
-	preferences="$("$ADB" shell run-as "$APP_ID" cat shared_prefs/voidscape.bootstrap.xml 2>/dev/null | tr -d '\r')"
-	if [[ "$mirrored_host" != "$expected_host" || "$mirrored_port" != "$expected_port" \
-		|| "$preferences" != *"name=\"endpoint.host\">$expected_host</string>"* \
-		|| "$preferences" != *"name=\"endpoint.port\">$expected_port</string>"* ]]; then
-		echo "ERROR: endpoint transaction mismatch; expected $expected_host:$expected_port" >&2
-		echo "  mirrors: $mirrored_host:$mirrored_port" >&2
-		printf '%s\n' "$preferences" >&2
-		return 1
-	fi
-	echo "Verified canonical endpoint and mirrors: $expected_host:$expected_port"
+	local timeout="${3:-10}"
+	local deadline=$((SECONDS + timeout))
+	local mirrored_host=""
+	local mirrored_port=""
+	local preferences=""
+	while (( SECONDS < deadline )); do
+		mirrored_host="$("$ADB" shell run-as "$APP_ID" cat files/ip.txt 2>/dev/null | tr -d '\r' || true)"
+		mirrored_port="$("$ADB" shell run-as "$APP_ID" cat files/port.txt 2>/dev/null | tr -d '\r' || true)"
+		preferences="$("$ADB" shell run-as "$APP_ID" cat shared_prefs/voidscape.bootstrap.xml 2>/dev/null | tr -d '\r' || true)"
+		if [[ "$mirrored_host" == "$expected_host" && "$mirrored_port" == "$expected_port" \
+			&& "$preferences" == *"name=\"endpoint.host\">$expected_host</string>"* \
+			&& "$preferences" == *"name=\"endpoint.port\">$expected_port</string>"* ]]; then
+			echo "Verified canonical endpoint and mirrors: $expected_host:$expected_port"
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: endpoint transaction mismatch; expected $expected_host:$expected_port" >&2
+	echo "  mirrors: $mirrored_host:$mirrored_port" >&2
+	printf '%s\n' "$preferences" >&2
+	return 1
 }
 
 start_bootstrap_wrapper() {
 	local fail_after="${1:--1}"
+	local release_endpoint_policy="${2:-0}"
 	"$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+	local args=(
+		-n "$APP_ID/com.openrsc.android.updater.ApplicationUpdater"
+	)
 	if [[ "$fail_after" -ge 0 ]]; then
-		"$ADB" shell am start -n "$APP_ID/com.openrsc.android.updater.ApplicationUpdater" \
-			--ei voidscape.smoke.cache_fail_after_files "$fail_after" >/dev/null
-	else
-		"$ADB" shell am start -n "$APP_ID/com.openrsc.android.updater.ApplicationUpdater" >/dev/null
+		args+=(--ei voidscape.smoke.cache_fail_after_files "$fail_after")
 	fi
+	if [[ "$release_endpoint_policy" == "1" ]]; then
+		args+=(--ez voidscape.smoke.release_endpoint_policy true)
+	fi
+	"$ADB" shell am start "${args[@]}" >/dev/null
 }
 
 run_bootstrap_smoke() {
@@ -9950,12 +9963,13 @@ run_bootstrap_smoke() {
 	disable_android_network_for_bootstrap
 	"$ADB" shell pm clear "$APP_ID" >/dev/null
 	"$ADB" logcat -c || true
-	start_bootstrap_wrapper 3
+	start_bootstrap_wrapper 3 1
 	wait_for_text "Game data unavailable" 90 || {
 		echo "ERROR: injected cache failure did not reach the retry/close state" >&2
 		return 1
 	}
 	wait_for_log_pattern 'CACHE_BOOTSTRAP injected-failure copied=3' 10
+	assert_endpoint_state "voidscape.gg" "43596"
 	assert_cache_marker_absent
 	assert_no_cache_temp_files
 	screenshot 00-bootstrap-injected-failure
@@ -10017,6 +10031,34 @@ run_bootstrap_smoke() {
 	wait_for_wrapper_ready
 	wait_for_log_pattern 'Ignoring incomplete smoke server endpoint' 30
 	assert_endpoint_state "$endpoint_host" "$endpoint_port"
+
+	# Seed the exact endpoint shipped by the prior Play build, then restart under
+	# the release endpoint policy to prove an in-place upgrade reaches DNS.
+	"$ADB" logcat -c || true
+	"$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+	"$ADB" shell am start -n "$APP_ID/com.openrsc.android.updater.ApplicationUpdater" \
+		-e voidscape.smoke.endpoint_host 5.161.114.251 \
+		-e voidscape.smoke.endpoint_port 43596 >/dev/null
+	wait_for_wrapper_ready
+	assert_endpoint_state "5.161.114.251" "43596"
+	"$ADB" logcat -c || true
+	start_bootstrap_wrapper -1 1
+	wait_for_wrapper_ready
+	wait_for_log_pattern 'ENDPOINT_BOOTSTRAP legacy-public-migrated endpoint=voidscape\.gg:43596' 30
+	assert_endpoint_state "voidscape.gg" "43596"
+
+	# A non-legacy pair remains a custom endpoint under the same release policy.
+	"$ADB" logcat -c || true
+	"$ADB" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+	"$ADB" shell am start -n "$APP_ID/com.openrsc.android.updater.ApplicationUpdater" \
+		-e voidscape.smoke.endpoint_host qa.custom.voidscape.invalid \
+		-e voidscape.smoke.endpoint_port 45679 >/dev/null
+	wait_for_wrapper_ready
+	assert_endpoint_state "qa.custom.voidscape.invalid" "45679"
+	"$ADB" logcat -c || true
+	start_bootstrap_wrapper -1 1
+	wait_for_wrapper_ready
+	assert_endpoint_state "qa.custom.voidscape.invalid" "45679"
 	screenshot 03-bootstrap-endpoint-repaired
 
 	restore_android_network_state
@@ -10385,7 +10427,7 @@ tap_play_button
 sleep 45
 screenshot 114-bad-server-loading-error
 
-write_server_endpoint 5.161.114.251 43596 || true
+write_server_endpoint voidscape.gg 43596 || true
 "$ADB" shell am force-stop $APP_ID || true
 
 echo "Android smoke screenshots written to $OUT_DIR"
