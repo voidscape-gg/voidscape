@@ -626,9 +626,10 @@ assert(adminGrant.account.subscription.active === true, "admin subscription gran
 const adminStarterGrant = await api("/api/admin/accounts/1/starter-card", {
 	method: "POST",
 	headers: { "x-portal-admin-token": adminToken },
-	body: { action: "grant" }
+	body: { action: "grant" },
+	expectStatus: 409
 });
-assert(adminStarterGrant.rewards.starterSubscriptionCards >= 1, "admin starter-card grant should preserve or restore the starter card");
+assert(adminStarterGrant.error === "founder_freeze_reset_required", "admin must not create or expand the founder freeze");
 
 const abuseIp = "198.51.100.77";
 const abuseOne = await api("/api/accounts/register", {

@@ -64,17 +64,22 @@ const gamePasswordJavaBin = process.env.PORTAL_JAVA_BIN || "java";
 const legacyClaimDummyPasswordHash = "$2y$10$hwWyOlWjtLF2.3WvF64jl.RFQxNGz2k/iwGXJkhZJcbI187bacx46";
 const portalSessionStorageKey = "voidscape.portal.sessionToken";
 const maxCharacters = 10;
+const openRscIntMax = 2147483647;
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 14;
 const oauthStateTtlMs = 1000 * 60 * 10;
 const linkChallengeTtlMs = 1000 * 60 * 15;
 const scryptParams = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const openRscAccountIdCacheKey = "web_account_id";
-const starterCardCachePrefix = "starter_card:";
+const starterCardCachePrefix = "starter:";
+const legacyStarterCardCachePrefix = "starter_card:";
 const starterCardAvailable = 1;
 const starterCardClaimed = 2;
 const accountSubscriptionCachePrefix = "acct_sub:";
 const playerSubscriptionCachePrefix = "char_sub:";
 const signupCodeCachePrefix = "signup_code:";
+const signupCodeBaseTagCachePrefix = "base_tag:";
+const signupCodeBaseAccountCachePrefix = "base_acct:";
+const founderFreezeCacheKey = "founder_freeze_at";
 const signupCodeAvailable = 1;
 const signupCodeRedeemed = 2;
 const starterFreeSubscriptionType = "starter_free_subscription";
@@ -926,6 +931,9 @@ async function handleApi(request, response, url) {
 		if (betaMode) {
 			throw new HttpError(404, "discord_beta_required");
 		}
+		if (!founderReservationWindowOpen()) {
+			throw new HttpError(410, "founder_program_closed");
+		}
 		const payload = await readJson(request);
 		await requireCaptcha(request, payload, "signup");
 		const ip = clientIp(request);
@@ -951,7 +959,7 @@ async function handleApi(request, response, url) {
 				});
 			}
 			try {
-				if (await syncSignupCodeToOpenRsc(founder) && !founder.signupCodeSyncedAt) {
+				if (await syncSignupCodeToOpenRsc(store, founder) && !founder.signupCodeSyncedAt) {
 					founder.signupCodeSyncedAt = now();
 				}
 			} catch (error) {
@@ -2007,26 +2015,44 @@ async function handleApi(request, response, url) {
 			let skippedRedeemed = 0;
 			let failed = 0;
 			let noCode = 0;
+			let referralSynced = 0;
+			let referralFailed = 0;
 			const gameValues = await signupCodeGameValues();
 			for (const founder of store.founders) {
-				if (!founder.signupCode) {
+				if (founder.signupCode) {
+					const alreadyRedeemed = gameValues.get(signupCodeCacheKey(founder.signupCode)) === signupCodeRedeemed;
+					try {
+						const baseSynced = await syncSignupCodeToOpenRsc(store, founder);
+						if (!baseSynced) throw new Error("signup_code_state_invalid");
+						if (!founder.signupCodeSyncedAt) founder.signupCodeSyncedAt = now();
+						if (alreadyRedeemed) skippedRedeemed += 1;
+						else synced += 1;
+					} catch (error) {
+						failed += 1;
+					}
+				} else {
 					noCode += 1;
-					continue;
-				}
-				if (gameValues.get(signupCodeCacheKey(founder.signupCode)) === signupCodeRedeemed) {
-					skippedRedeemed += 1;
-					continue;
 				}
 				try {
-					await syncSignupCodeToOpenRsc(founder);
-					if (!founder.signupCodeSyncedAt) founder.signupCodeSyncedAt = now();
-					synced += 1;
+					const referralResult = await syncReferralRewardCodesToOpenRsc(founder, {
+						force: true,
+						continueOnError: true
+					});
+					referralSynced += referralResult.synced;
+					referralFailed += referralResult.failed;
 				} catch (error) {
-					failed += 1;
+					referralFailed += 1;
 				}
 			}
-			audit(store, "signup_codes_resynced", { synced, skippedRedeemed, failed, noCode });
-			return { synced, skippedRedeemed, failed, noCode };
+			audit(store, "signup_codes_resynced", {
+				synced,
+				skippedRedeemed,
+				failed,
+				noCode,
+				referralSynced,
+				referralFailed
+			});
+			return { synced, skippedRedeemed, failed, noCode, referralSynced, referralFailed };
 		});
 		json(response, 200, result);
 		return;
@@ -2132,7 +2158,9 @@ async function handleApi(request, response, url) {
 		requireAdmin(request);
 		const payload = await readJson(request);
 		const dryRun = payload.dryRun === true || payload.apply === false;
-		const grantMissingStarterCard = payload.grantMissingStarterCard !== false;
+		// The launch reset owns the immutable founder-card freeze manifest. Native
+		// account reconciliation must never expand it after the freeze.
+		const grantMissingStarterCard = false;
 		if (dryRun) {
 			const store = await loadStore();
 			const result = await backfillNativePortalAccounts(cloneJson(store), {
@@ -2236,14 +2264,12 @@ async function handleApi(request, response, url) {
 					grantStarterCardEntitlement(store, founder, "admin_grant");
 					await syncStarterCardToOpenRsc(account);
 					account.starterCardReview = null;
+					account.starterCardLegacySuppressedAt = null;
 				} else if (actionName === "revoke") {
-					store.entitlements
-						.filter((entry) => entry.accountId === account.id && entry.type === starterFreeSubscriptionType && entry.status === "granted")
-						.forEach((entry) => {
-							entry.status = "revoked";
-							entry.revokedAt = now();
-						});
-					await revokeStarterCardFromOpenRsc(account);
+					// The 1/2 launch ledger has no honest "revoked but never issued"
+					// terminal value. Deleting a row would let a base code or a later
+					// reset recreate it, violating the immutable lifetime freeze.
+					throw new HttpError(409, "founder_freeze_revoke_unsupported");
 				} else {
 					throw new HttpError(400, "invalid_starter_card_action");
 				}
@@ -3356,6 +3382,9 @@ function buildEmailMessage(event, account, founder) {
 	const androidUrl = joinUrl(origin, "/downloads/android-apk");
 	const username = founder && founder.username || account.displayName || account.emailDisplay || "your character";
 	const reservedName = founder && founder.username ? founder.username : "your Voidscape character";
+	const starterCardReserved = Boolean(account && account.launchCardQualifiedAt) || Boolean(founder && (
+		founder.starterCardUnlocked || Number(founder.creditedReferrals || 0) >= 2
+	));
 	if (event.type === launchReminderEmailType) {
 		return emailMessage({
 			event,
@@ -3391,7 +3420,7 @@ function buildEmailMessage(event, account, founder) {
 				`Reserved username: ${reservedName}`,
 				"Desktop players should use the launcher from the website.",
 				"Mobile players can use the web client from the play page.",
-				"Your starter subscription card is waiting for eligible prelaunch accounts."
+				"Your starter subscription card is waiting for accounts eligible before the founder cutoff."
 			],
 			primaryUrl: manageUrl,
 			primaryLabel: "Open Voidscape",
@@ -3403,14 +3432,22 @@ function buildEmailMessage(event, account, founder) {
 		event,
 		account,
 		subject: "Your Voidscape name is reserved",
-		heading: "Your Voidscape prelaunch account is ready",
-		intro: `Your account is set up and ${reservedName} is reserved for launch.`,
-		bullets: [
-			`Reserved username: ${reservedName}`,
-			"Your free 1-week subscription card is reserved on your account.",
-			"When the world opens, talk to the Void Subscription Vendor in Lumbridge to claim it.",
-			"We never include your password in email."
-		],
+		heading: starterCardReserved
+			? "Your Voidscape prelaunch account is ready"
+			: "Your Voidscape account is ready",
+		intro: `Your account is set up and ${reservedName} is ready.`,
+		bullets: starterCardReserved
+			? [
+				`Reserved username: ${reservedName}`,
+				"Your free 1-week subscription card is reserved on your account.",
+				"When the world opens, talk to the Void Subscription Vendor in Lumbridge to claim it.",
+				"We never include your password in email."
+			]
+			: [
+				`Username: ${reservedName}`,
+				"Your account and first character are ready.",
+				"We never include your password in email."
+			],
 		primaryUrl: manageUrl,
 		primaryLabel: "Manage account",
 		secondaryUrl: discordInviteUrl,
@@ -3423,6 +3460,7 @@ function buildEmailVerificationMessage(event, pending) {
 	const token = unsealText(event.metadata && event.metadata.verificationTokenSealed || "");
 	const verifyUrl = `${joinUrl(origin, "/portal?auth=verify")}#verify=${encodeURIComponent(token)}`;
 	const username = pending.username || "your character";
+	const starterCardEndsAt = launchFreeCardWindowState().endsAt;
 	return emailMessage({
 		event,
 		account: {
@@ -3434,7 +3472,10 @@ function buildEmailVerificationMessage(event, pending) {
 		intro: `Confirm this email address to create your Voidscape account and first character, ${username}.`,
 		bullets: [
 			`Requested username: ${username}`,
-			"Your account, first character, and starter subscription card are not created until you verify.",
+			"Your account and first character are not created until you verify.",
+			...(launchFreeCardWindowOpen()
+				? [`Finish verification and character creation before ${starterCardEndsAt} to qualify for the free 1-week subscription card.`]
+				: []),
 			"On the verification page, press Verify email to finish creating your account.",
 			`This link expires in ${emailVerificationTtlHours} hours.`,
 			"If you did not request this, ignore this email."
@@ -3697,7 +3738,7 @@ async function completeDiscordOAuth(request, response, url) {
 			if (founder) {
 				ensureFounderSignupCode(store, founder);
 				try {
-					if (await syncSignupCodeToOpenRsc(founder) && !founder.signupCodeSyncedAt) {
+					if (await syncSignupCodeToOpenRsc(store, founder) && !founder.signupCodeSyncedAt) {
 						founder.signupCodeSyncedAt = now();
 					}
 				} catch (syncError) {
@@ -4696,13 +4737,17 @@ async function createAccountCharacter(store, account, payload, request, options 
 		await assertCharacterCreationAllowed(store, account, request);
 	}
 
-	const playerId = await createOpenRscPlayer({
+	const createdPlayer = await createOpenRscPlayer({
 		accountId: account.id,
 		username,
 		email: account.emailDisplay || account.emailCanonical || "",
 		password,
 		ip: clientIp(request)
 	});
+	const playerId = createdPlayer.playerId;
+	if (createdPlayer.launchCardReserved && !account.launchCardQualifiedAt) {
+		account.launchCardQualifiedAt = new Date(createdPlayer.createdAtMs).toISOString();
+	}
 	const snapshot = await openRscCharacterSnapshot(username);
 	const character = {
 		id: reservedForAccount ? existingCharacter.id : nextId(store, "character"),
@@ -4960,9 +5005,9 @@ function launchScheduleState() {
 }
 
 function launchFreeCardWindowState() {
-	if (!launchOpenAtIso || launchFreeCardHours <= 0) {
+	if (!launchOpenAtIso) {
 		return {
-			open: !launchOpenAtIso,
+			open: true,
 			endsAt: null,
 			remainingMs: null
 		};
@@ -4983,64 +5028,113 @@ function launchFreeCardWindowOpen() {
 	return launchFreeCardWindowState().open;
 }
 
+function founderReservationWindowOpen() {
+	if (!launchOpenAtIso) return true;
+	return Date.now() < Date.parse(launchOpenAtIso);
+}
+
 async function rewardState(store, account) {
-	const starterCards = store.entitlements.filter((entry) =>
+	const starterEntitlements = store.entitlements.filter((entry) =>
 		entry.accountId === account.id &&
-		entry.type === starterFreeSubscriptionType &&
-		entry.status === "granted"
+		entry.type === starterFreeSubscriptionType
 	);
-	const ledger = await starterCardLedgerState(account);
+	const ledger = await starterCardLedgerState(account, store);
 	const hasGameLedger = Boolean(ledger.configured);
-	let starterSubscriptionCards = starterCards.length;
-	let starterSubscriptionCardsClaimed = 0;
-	let starterCardStatus = starterSubscriptionCards > 0 ? "waiting" : "none";
-
+	let visibleCards = [];
 	if (hasGameLedger) {
-		if (ledger.status === "claimed") {
-			starterSubscriptionCards = 0;
-			starterSubscriptionCardsClaimed = 1;
-			starterCardStatus = "claimed";
-		} else if (ledger.status === "waiting") {
-			starterSubscriptionCards = Math.max(1, starterCards.length);
-			starterCardStatus = "waiting";
-		} else if (ledger.status === "unknown") {
-			starterSubscriptionCards = 0;
-			starterCardStatus = "unknown";
-		} else {
-			starterSubscriptionCards = 0;
-			starterCardStatus = "none";
-		}
-	}
-
-	const visibleCards = starterCards.length > 0
-		? starterCards
-		: (starterSubscriptionCards > 0 || starterSubscriptionCardsClaimed > 0)
-			? [{
+		visibleCards = ledger.cards.slice();
+		const legacySuppressedByAdminRevoke = Boolean(account.starterCardLegacySuppressedAt)
+			|| (starterEntitlements.length > 0
+				&& !starterEntitlements.some((entry) => entry.status === "granted" || entry.status === "consumed"));
+		const showLegacyFallback = ledger.legacy.status === "claimed" || !legacySuppressedByAdminRevoke;
+		if (!visibleCards.length && ledger.legacy.status !== "none" && showLegacyFallback) {
+			// Legacy account-wide rows are display-only. They are intentionally never
+			// claimed, expanded, or used to infer which sibling owns the reward.
+			visibleCards = [{
 				id: null,
 				type: starterFreeSubscriptionType,
-				status: starterCardStatus === "claimed" ? "claimed" : "granted",
-				source: "openrsc_ledger",
-				createdAt: null
-			}]
-			: [];
+				status: ledger.legacy.status,
+				source: "openrsc_legacy_account_ledger",
+				createdAt: null,
+				playerId: null,
+				characterName: null,
+				ledgerKey: ledger.legacy.key,
+				legacy: true
+			}];
+		}
+		if (!visibleCards.length) {
+			const pendingQualification = starterEntitlements.find((entry) => entry.status === "granted");
+			if (pendingQualification) {
+				visibleCards = [{
+					id: pendingQualification.id,
+					type: starterFreeSubscriptionType,
+					status: "waiting",
+					source: "founder_freeze_pending",
+					createdAt: pendingQualification.createdAt || null,
+					playerId: null,
+					characterName: null,
+					ledgerKey: null,
+					legacy: false,
+					freezePending: true
+				}];
+			}
+		}
+	} else {
+		visibleCards = starterEntitlements
+			.filter((entry) => entry.status === "granted" || entry.status === "consumed")
+			.map((entry) => ({
+				...entry,
+				status: entry.status === "consumed" ? "claimed" : "waiting",
+				playerId: Number(entry.playerId || 0) || null,
+				characterName: entry.characterName || null,
+				ledgerKey: null,
+				legacy: false
+			}));
+	}
+
+	const starterSubscriptionCards = visibleCards.filter((entry) => entry.status === "waiting").length;
+	const starterSubscriptionCardsClaimed = visibleCards.filter((entry) => entry.status === "claimed").length;
+	const unknownCards = visibleCards.filter((entry) => entry.status === "unknown").length;
+	const starterCardStatus = starterSubscriptionCards > 0
+		? "waiting"
+		: starterSubscriptionCardsClaimed > 0
+			? "claimed"
+			: unknownCards > 0 ? "unknown" : "none";
 
 	return {
 		starterSubscriptionCards,
 		starterSubscriptionCardsClaimed,
 		starterCardStatus,
 		starterCardLedger: {
-			synced: hasGameLedger,
-			status: ledger.status
+			synced: ledger.cards.length > 0 || ledger.legacy.status !== "none",
+			status: starterCardStatus,
+			waiting: starterSubscriptionCards,
+			claimed: starterSubscriptionCardsClaimed,
+			unknown: unknownCards,
+			total: visibleCards.length,
+			legacyFallback: visibleCards.some((entry) => entry.legacy === true),
+			legacyStatus: ledger.legacy.status,
+			legacyValue: ledger.legacy.value,
+			legacyKey: ledger.legacy.key
 		},
 		cards: visibleCards.map((entry) => ({
-			id: entry.id,
-			type: entry.type,
-			status: starterCardStatus === "claimed" ? "claimed" : entry.status,
+			id: entry.id == null ? null : entry.id,
+			type: entry.type || starterFreeSubscriptionType,
+			status: entry.status === "waiting" ? "granted" : entry.status,
 			source: entry.source,
-			label: starterCardStatus === "claimed"
-				? "Starter subscription card claimed in game"
-				: "Starter subscription card reserved in Lumbridge",
-			createdAt: entry.createdAt
+			label: entry.freezePending === true
+				? "Founder starter card qualified; pending launch freeze"
+				: entry.status === "claimed"
+					? "Starter subscription card claimed in game"
+					: entry.status === "waiting"
+						? "Starter subscription card reserved in Lumbridge"
+						: "Starter subscription card ledger needs review",
+			createdAt: entry.createdAt || null,
+			playerId: entry.playerId || null,
+			characterName: entry.characterName || null,
+			ledgerKey: entry.ledgerKey || null,
+			legacy: entry.legacy === true,
+			freezePending: entry.freezePending === true
 		}))
 	};
 }
@@ -6182,7 +6276,9 @@ async function openRscPlayerOwnerEmail(normalizedName) {
 async function backfillNativePortalAccounts(store, options = {}) {
 	if (!openRscDbPath) throw new HttpError(503, "openrsc_db_not_configured");
 	const dryRun = options.dryRun === true;
-	const grantMissingStarterCard = options.grantMissingStarterCard !== false;
+	// Native-account backfill is ownership/subscription reconciliation only. The
+	// reset-generated starter:<account>:<player> manifest is immutable here.
+	const grantMissingStarterCard = false;
 	const players = await sqliteJson(`
 		SELECT id, username, email, combat, skill_total, quest_points, kills, npc_kills, deaths,
 		       login_date, male, haircolour, topcolour, trousercolour, skincolour, headsprite, bodysprite
@@ -6195,15 +6291,13 @@ async function backfillNativePortalAccounts(store, options = {}) {
 		WHERE key = ${sqlString(openRscAccountIdCacheKey)}
 		   OR key = 'launch_24h_card'
 		   OR (playerID = 0 AND (
-			key LIKE ${sqlString(`${starterCardCachePrefix}%`)}
-			OR key LIKE ${sqlString(`${playerSubscriptionCachePrefix}%`)}
+			key LIKE ${sqlString(`${playerSubscriptionCachePrefix}%`)}
 			OR key LIKE ${sqlString(`${accountSubscriptionCachePrefix}%`)}
 		   ))
 		ORDER BY dbid
 	`);
 	const webLinks = new Map();
 	const launchCardMarkers = new Map();
-	const starterCardMarkers = new Map();
 	const playerSubscriptionMarkers = new Map();
 	const accountSubscriptionMarkers = new Map();
 	for (const row of cacheRows) {
@@ -6216,8 +6310,6 @@ async function backfillNativePortalAccounts(store, options = {}) {
 			}
 		} else if (key === "launch_24h_card" && playerId > 0) {
 			launchCardMarkers.set(playerId, Number(row.value));
-		} else if (playerId === 0 && key.startsWith(starterCardCachePrefix)) {
-			starterCardMarkers.set(key, Number(row.value));
 		} else if (playerId === 0 && key.startsWith(playerSubscriptionCachePrefix)) {
 			const nativePlayerId = Number(key.slice(playerSubscriptionCachePrefix.length));
 			if (nativePlayerId > 0) playerSubscriptionMarkers.set(nativePlayerId, Number(row.value || 0));
@@ -6237,7 +6329,6 @@ async function backfillNativePortalAccounts(store, options = {}) {
 	}
 
 	const linkInserts = [];
-	const starterInserts = [];
 	const subscriptionUpserts = new Map();
 	const subscriptionMigrationAccounts = new Set();
 	const result = {
@@ -6377,25 +6468,13 @@ async function backfillNativePortalAccounts(store, options = {}) {
 			result.createdCharacters += 1;
 		}
 
-		if (grantMissingStarterCard) {
-			const starterKey = starterCardCacheKey(accountId);
-			const hasLaunchCard = launchCardMarkers.has(playerId);
-			const hasStarterCard = starterKey && starterCardMarkers.has(starterKey);
-			if (starterKey && !hasLaunchCard && !hasStarterCard) {
-				starterCardMarkers.set(starterKey, starterCardAvailable);
-				starterInserts.push({ accountId, key: starterKey });
-				ensureStarterEntitlement(store, accountId, "native_client_backfill");
-				result.starterCardsGranted += 1;
-			}
-		}
-
 		if (result.samples.length < 12 && (linkInserts.some((row) => row.playerId === playerId) || !character)) {
 			result.samples.push({
 				playerId,
 				username,
 				accountId,
 				email: account.emailCanonical,
-				cardSource: launchCardMarkers.has(playerId) ? "launch_24h_card" : starterCardCacheKey(accountId)
+				cardSource: launchCardMarkers.has(playerId) ? "launch_24h_card" : null
 			});
 		}
 	}
@@ -6407,7 +6486,6 @@ async function backfillNativePortalAccounts(store, options = {}) {
 
 	const pendingGameWrites = {
 		linkInserts,
-		starterInserts,
 		subscriptionUpserts: Array.from(subscriptionUpserts.values())
 	};
 	if (!dryRun && !options.deferGameWrites) {
@@ -6417,7 +6495,7 @@ async function backfillNativePortalAccounts(store, options = {}) {
 
 	result.gameWrites = {
 		webAccountLinksInserted: linkInserts.length,
-		starterCardsInserted: starterInserts.length,
+		starterCardsInserted: 0,
 		accountSubscriptionsUpserted: subscriptionUpserts.size
 	};
 	return result;
@@ -6425,9 +6503,8 @@ async function backfillNativePortalAccounts(store, options = {}) {
 
 async function applyNativeBackfillGameWrites(writes = {}) {
 	const linkInserts = Array.isArray(writes.linkInserts) ? writes.linkInserts : [];
-	const starterInserts = Array.isArray(writes.starterInserts) ? writes.starterInserts : [];
 	const subscriptionUpserts = Array.isArray(writes.subscriptionUpserts) ? writes.subscriptionUpserts : [];
-	if (!linkInserts.length && !starterInserts.length && !subscriptionUpserts.length) return;
+	if (!linkInserts.length && !subscriptionUpserts.length) return;
 	const sql = ["BEGIN IMMEDIATE;"];
 	for (const link of linkInserts) {
 		sql.push(`
@@ -6436,14 +6513,6 @@ async function applyNativeBackfillGameWrites(writes = {}) {
 			WHERE NOT EXISTS (
 				SELECT 1 FROM player_cache
 				WHERE playerID = ${Number(link.playerId)} AND key = ${sqlString(openRscAccountIdCacheKey)}
-			);`);
-	}
-	for (const starter of starterInserts) {
-		sql.push(`
-			INSERT INTO player_cache (playerID, type, key, value)
-			SELECT 0, 0, ${sqlString(starter.key)}, ${sqlString(starterCardAvailable)}
-			WHERE NOT EXISTS (
-				SELECT 1 FROM player_cache WHERE playerID = 0 AND key = ${sqlString(starter.key)}
 			);`);
 	}
 	for (const subscription of subscriptionUpserts) {
@@ -6529,142 +6598,359 @@ function syntheticNativeEmail(playerId) {
 	return `native-player-${Number(playerId)}@native.voidscape.invalid`;
 }
 
-function ensureStarterEntitlement(store, accountId, source) {
-	const existing = store.entitlements.find((entry) =>
-		Number(entry.accountId) === Number(accountId) &&
-		entry.type === starterFreeSubscriptionType &&
-		(entry.status === "granted" || entry.status === "consumed")
-	);
-	if (existing) return existing;
-	const entitlement = {
-		id: nextId(store, "entitlement"),
-		accountId,
-		type: starterFreeSubscriptionType,
-		status: "granted",
-		source,
-		codeHint: null,
-		startsAt: null,
-		expiresAt: null,
-		createdAt: now(),
-		consumedAt: null
-	};
-	store.entitlements.push(entitlement);
-	return entitlement;
-}
-
 async function syncStarterCardToOpenRsc(account) {
-	if (!openRscDbPath || !account) return;
-	const key = starterCardCacheKey(account.id);
-	if (!key) return;
-
-	const current = await starterCardLedgerState(account);
-	if (current.status === "claimed") {
-		return;
+	if (!openRscDbPath || !account) return starterCardLedgerState(account);
+	if (account.starterCardLegacySuppressedAt) {
+		throw new HttpError(409, "starter_card_suppression_requires_review");
 	}
-
-	await sqliteWriteJson(`
-		BEGIN IMMEDIATE;
-		DELETE FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)};
-		INSERT INTO player_cache (playerID, type, key, value)
-			VALUES (0, 0, ${sqlString(key)}, ${sqlString(starterCardAvailable)});
-		COMMIT;
-		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
-	`, "sync_starter_card");
+	const current = await starterCardLedgerState(account);
+	if (current.unknown > 0 || current.cards.length > maxCharacters) {
+		throw new HttpError(409, "starter_card_manifest_invalid");
+	}
+	if (current.legacy.status !== "none") {
+		throw new HttpError(409, "starter_card_legacy_migration_required");
+	}
+	// Once any exact issuance exists, the freeze is immutable. In particular,
+	// deletion/recreation followed by an admin reconciliation cannot add the
+	// replacement character or replenish a deleted slot.
+	if (current.cards.some((card) => String(card.ledgerKey || "").startsWith(starterCardCachePrefix))) {
+		return current;
+	}
+	throw new HttpError(409, "founder_freeze_reset_required");
 }
 
-async function starterCardLedgerState(account) {
+async function starterCardLedgerState(account, store = null) {
 	const state = {
 		configured: Boolean(openRscDbPath),
 		status: "none",
-		value: null
+		value: null,
+		waiting: 0,
+		claimed: 0,
+		unknown: 0,
+		cards: [],
+		legacy: {
+			key: null,
+			status: "none",
+			value: null
+		}
 	};
 	if (!openRscDbPath || !account) {
 		state.configured = false;
 		return state;
 	}
-	const key = starterCardCacheKey(account.id);
-	if (!key) return state;
-	const current = await sqliteJson(`
-		SELECT value
-		FROM player_cache
-		WHERE playerID = 0 AND key = ${sqlString(key)}
-		ORDER BY dbid DESC
-		LIMIT 1
-	`);
-	if (!current.length) return state;
-	const value = Number(current[0].value);
-	state.value = Number.isFinite(value) ? value : current[0].value;
-	if (value === starterCardClaimed) {
-		state.status = "claimed";
-	} else if (value === starterCardAvailable) {
-		state.status = "waiting";
-	} else {
-		state.status = "unknown";
+	const accountId = Number(account.id);
+	const keyPrefix = starterCardAccountPrefix(accountId);
+	const legacyKey = legacyStarterCardCacheKey(accountId);
+	if (!keyPrefix || !legacyKey) return state;
+	const charactersByPlayerId = new Map();
+	if (store && Array.isArray(store.characters)) {
+		for (const character of store.characters) {
+			if (Number(character.accountId) !== accountId) continue;
+			const playerId = Number(character.playerId);
+			if (Number.isInteger(playerId) && playerId > 0) {
+				charactersByPlayerId.set(playerId, String(character.name || ""));
+			}
+		}
 	}
+	const linkedPlayerIds = Array.from(charactersByPlayerId.keys());
+	const launchRowsClause = linkedPlayerIds.length
+		? ` OR (key = 'launch_24h_card' AND playerID IN (${linkedPlayerIds.join(",")}))`
+		: "";
+	const rows = await sqliteJson(`
+			SELECT playerID, key, value, dbid
+			FROM player_cache
+			WHERE (playerID = 0
+			  AND (key LIKE ${sqlString(`${keyPrefix}%`)} OR key = ${sqlString(legacyKey)}))
+			  ${launchRowsClause}
+			ORDER BY dbid
+		`);
+	const latestByKey = new Map();
+	const launchRowsByPlayerId = new Map();
+	for (const row of rows) {
+		const playerId = Number(row.playerID || 0);
+		if (playerId > 0 && row.key === "launch_24h_card") {
+			launchRowsByPlayerId.set(playerId, row);
+		} else if (playerId === 0) {
+			latestByKey.set(String(row.key || ""), row);
+		}
+	}
+
+	const legacyRow = latestByKey.get(legacyKey);
+	if (legacyRow) {
+		const legacyValue = Number(legacyRow.value);
+		state.legacy = {
+			key: legacyKey,
+			status: legacyValue === starterCardAvailable
+				? "waiting"
+				: legacyValue === starterCardClaimed ? "claimed" : "unknown",
+			value: Number.isFinite(legacyValue) ? legacyValue : legacyRow.value
+		};
+	}
+
+	for (const [key, row] of latestByKey) {
+		const parsed = parseStarterCardCacheKey(key);
+		if (!parsed || parsed.accountId !== accountId) continue;
+		const value = Number(row.value);
+		const status = value === starterCardAvailable
+			? "waiting"
+			: value === starterCardClaimed ? "claimed" : "unknown";
+		state.cards.push({
+			id: null,
+			type: starterFreeSubscriptionType,
+			status,
+			source: "openrsc_freeze_manifest",
+			createdAt: null,
+			playerId: parsed.playerId,
+			characterName: charactersByPlayerId.get(parsed.playerId) || null,
+			ledgerKey: key,
+			legacy: false,
+			value: Number.isFinite(value) ? value : row.value
+		});
+	}
+	const cardsByPlayerId = new Map(state.cards.map((card) => [card.playerId, card]));
+	for (const [playerId, row] of launchRowsByPlayerId) {
+		const value = Number(row.value);
+		const status = value === starterCardAvailable
+			? "waiting"
+			: value === starterCardClaimed ? "claimed" : "unknown";
+		const existing = cardsByPlayerId.get(playerId);
+		if (existing) {
+			if (status === "claimed") existing.status = "claimed";
+			else if (status === "unknown" && existing.status !== "claimed") existing.status = "unknown";
+			existing.source = "founder_and_launch_card";
+			existing.launchLedger = true;
+			continue;
+		}
+		const card = {
+			id: null,
+			type: starterFreeSubscriptionType,
+			status,
+			source: "launch_24h_card",
+			createdAt: null,
+			playerId,
+			characterName: charactersByPlayerId.get(playerId) || null,
+			ledgerKey: "launch_24h_card",
+			legacy: false,
+			launchLedger: true,
+			value: Number.isFinite(value) ? value : row.value
+		};
+		state.cards.push(card);
+		cardsByPlayerId.set(playerId, card);
+	}
+	state.cards.sort((a, b) => a.playerId - b.playerId);
+	state.waiting = state.cards.filter((card) => card.status === "waiting").length;
+	state.claimed = state.cards.filter((card) => card.status === "claimed").length;
+	state.unknown = state.cards.filter((card) => card.status === "unknown").length;
+	state.status = state.waiting > 0
+		? "waiting"
+		: state.claimed > 0
+			? "claimed"
+			: state.unknown > 0 ? "unknown" : "none";
 	return state;
 }
 
-async function revokeStarterCardFromOpenRsc(account) {
-	if (!openRscDbPath || !account) return starterCardLedgerState(account);
-	const key = starterCardCacheKey(account.id);
-	if (!key) return starterCardLedgerState(account);
-	const current = await starterCardLedgerState(account);
-	if (current.status === "claimed") return current;
-	await sqliteWriteJson(`
-		BEGIN IMMEDIATE;
-		DELETE FROM player_cache
-		WHERE playerID = 0
-		  AND key = ${sqlString(key)}
-		  AND value = ${sqlString(starterCardAvailable)};
-		COMMIT;
-		SELECT 1 AS ok;
-	`, "revoke_starter_card");
-	return starterCardLedgerState(account);
-}
-
-async function syncSignupCodeToOpenRsc(founder) {
+async function syncSignupCodeToOpenRsc(store, founder) {
 	if (!openRscDbPath || !founder || !founder.signupCode) return false;
-	return syncSignupCodeValueToOpenRsc(founder.signupCode);
-}
-
-async function syncSignupCodeValueToOpenRsc(code) {
-	if (!openRscDbPath || !code) return false;
-	const key = signupCodeCacheKey(code);
-	if (!key) return false;
-
-	const current = await sqliteJson(`
-		SELECT value
-		FROM player_cache
-		WHERE playerID = 0 AND key = ${sqlString(key)}
-		ORDER BY dbid DESC
-		LIMIT 1
-	`);
-	if (current.length && Number(current[0].value) === signupCodeRedeemed) {
-		return true;
-	}
-
-	await sqliteWriteJson(`
+	const signupKey = signupCodeCacheKey(founder.signupCode);
+	const tagKey = signupCodeBaseTagCacheKey(founder.signupCode);
+	const accountKey = signupCodeBaseAccountCacheKey(founder.signupCode);
+	if (!signupKey || !tagKey || !accountKey) return false;
+	const founderAccount = store.accounts.find((entry) => entry.emailCanonical === founder.emailCanonical);
+	const founderAccountId = canonicalOpenRscInt(founderAccount && founderAccount.id) || 0;
+	const claimantPlayerId = await founderBaseSignupCodePlayerId(store, founder);
+	const expectedFreezeAt = new Date(Date.parse(launchOpenAtIso)).toISOString();
+	const freezeAbsent = `(SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key=${sqlString(founderFreezeCacheKey)}) = 0`;
+	const compatibleExistingTag = `
+		(
+			(SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key=${sqlString(tagKey)}) = 0
+			OR (
+				(SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key=${sqlString(tagKey)}) = 1
+				AND CAST((SELECT value FROM player_cache WHERE playerID=0 AND key=${sqlString(tagKey)} LIMIT 1) AS TEXT)
+					IN ('0', ${sqlString(claimantPlayerId)})
+			)
+		)`;
+	const compatibleExistingAccount = `
+		(
+			(SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key=${sqlString(accountKey)}) = 0
+			OR (
+				(SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key=${sqlString(accountKey)}) = 1
+				AND (SELECT CAST(value AS TEXT) FROM player_cache WHERE playerID=0 AND key=${sqlString(accountKey)} LIMIT 1)
+					IN ('0', ${sqlString(founderAccountId)})
+			)
+		)`;
+	const rows = await sqliteWriteJson(`
 		BEGIN IMMEDIATE;
-		DELETE FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)};
 		INSERT INTO player_cache (playerID, type, key, value)
-			VALUES (0, 0, ${sqlString(key)}, ${sqlString(signupCodeAvailable)});
+		SELECT 0, 0, ${sqlString(signupKey)}, ${sqlString(signupCodeAvailable)}
+		WHERE NOT EXISTS (
+			SELECT 1 FROM player_cache WHERE playerID=0 AND key=${sqlString(signupKey)}
+		)
+		  AND ${freezeAbsent}
+		  AND ${compatibleExistingTag}
+		  AND ${compatibleExistingAccount};
+		INSERT INTO player_cache (playerID, type, key, value)
+		SELECT 0, 0, ${sqlString(tagKey)}, 0
+		FROM player_cache code
+		WHERE code.playerID=0 AND code.key=${sqlString(signupKey)}
+		  AND CAST(code.value AS INTEGER) IN (${signupCodeAvailable}, ${signupCodeRedeemed})
+		  AND (SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key=${sqlString(signupKey)}) = 1
+		  AND ${freezeAbsent}
+		  AND NOT EXISTS (
+			SELECT 1 FROM player_cache WHERE playerID=0 AND key=${sqlString(tagKey)}
+		  );
+		INSERT INTO player_cache (playerID, type, key, value)
+		SELECT 0, 0, ${sqlString(accountKey)}, 0
+		FROM player_cache code
+		WHERE code.playerID=0 AND code.key=${sqlString(signupKey)}
+		  AND CAST(code.value AS INTEGER) IN (${signupCodeAvailable}, ${signupCodeRedeemed})
+		  AND (SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key=${sqlString(signupKey)}) = 1
+		  AND ${freezeAbsent}
+		  AND NOT EXISTS (
+			SELECT 1 FROM player_cache WHERE playerID=0 AND key=${sqlString(accountKey)}
+		  );
 		COMMIT;
-		SELECT value FROM player_cache WHERE playerID = 0 AND key = ${sqlString(key)} LIMIT 1;
-	`, "sync_signup_code");
+		SELECT 'signup' AS kind, value, dbid FROM player_cache
+		WHERE playerID=0 AND key=${sqlString(signupKey)}
+		UNION ALL
+		SELECT 'base_tag' AS kind, value, dbid FROM player_cache
+		WHERE playerID=0 AND key=${sqlString(tagKey)}
+		UNION ALL
+		SELECT 'base_acct' AS kind, value, dbid FROM player_cache
+		WHERE playerID=0 AND key=${sqlString(accountKey)}
+		UNION ALL
+		SELECT 'freeze' AS kind, value, dbid FROM player_cache
+		WHERE playerID=0 AND key=${sqlString(founderFreezeCacheKey)}
+		ORDER BY kind, dbid;
+	`, "sync_founder_signup_code");
+	const signupRows = rows.filter((row) => row.kind === "signup");
+	const tagRows = rows.filter((row) => row.kind === "base_tag");
+	const accountRows = rows.filter((row) => row.kind === "base_acct");
+	const freezeRows = rows.filter((row) => row.kind === "freeze");
+	if (freezeRows.length > 1
+		|| (freezeRows.length === 1 && freezeRows[0].value !== expectedFreezeAt)) {
+		throw new HttpError(409, "founder_freeze_marker_invalid");
+	}
+	const frozen = freezeRows.length === 1;
+	if (signupRows.length !== 1
+		|| ![signupCodeAvailable, signupCodeRedeemed].includes(canonicalOpenRscInt(signupRows[0].value))) {
+		throw new HttpError(409, "signup_code_ledger_invalid");
+	}
+	if (tagRows.length !== 1) {
+		throw new HttpError(409, "founder_base_code_tag_invalid");
+	}
+	const tagValue = canonicalOpenRscInt(tagRows[0].value, { allowZero: true });
+	if (tagValue == null) {
+		throw new HttpError(409, "founder_base_code_tag_invalid");
+	}
+	const validTagValues = frozen ? [claimantPlayerId] : [0, claimantPlayerId];
+	if (!validTagValues.includes(tagValue)) {
+		throw new HttpError(409, "founder_base_code_binding_mismatch");
+	}
+	const validAccountValues = frozen ? [founderAccountId] : [0, founderAccountId];
+	if (accountRows.length !== 1
+		|| !validAccountValues.includes(canonicalOpenRscInt(accountRows[0].value, { allowZero: true }))) {
+		throw new HttpError(409, "founder_base_code_account_mismatch");
+	}
 	return true;
 }
 
-async function syncReferralRewardCodesToOpenRsc(founder) {
-	if (!openRscDbPath || !founder || !Array.isArray(founder.referralRewardCodes)) return 0;
+async function founderBaseSignupCodePlayerId(store, founder) {
+	if (!openRscDbPath || !store || !founder) return 0;
+	const account = store.accounts.find((entry) => entry.emailCanonical === founder.emailCanonical);
+	const accountId = Number(account && account.id || 0);
+	const normalizedName = normalizeUsername(founder.username || "");
+	if (!accountId || !normalizedName) return 0;
+	const rows = await sqliteJson(`
+		SELECT p.id AS playerId
+		FROM players p
+		JOIN player_cache link
+		  ON link.playerID = p.id
+		 AND link.key = ${sqlString(openRscAccountIdCacheKey)}
+		WHERE link.dbid = (
+			SELECT MAX(latest.dbid)
+			FROM player_cache latest
+			WHERE latest.playerID = p.id
+			  AND latest.key = ${sqlString(openRscAccountIdCacheKey)}
+		)
+		  AND CAST(link.value AS TEXT) = ${sqlString(accountId)}
+		  AND lower(p.username) = ${sqlString(normalizedName)}
+		ORDER BY p.id
+		LIMIT 2
+	`);
+	if (rows.length !== 1) return 0;
+	const playerId = Number(rows[0].playerId);
+	return Number.isInteger(playerId) && playerId > 0 && playerId <= openRscIntMax ? playerId : 0;
+}
+
+async function syncReferralSignupCodeToOpenRsc(code) {
+	if (!openRscDbPath || !code) return null;
+	const key = signupCodeCacheKey(code);
+	const tagKey = signupCodeBaseTagCacheKey(code);
+	const accountKey = signupCodeBaseAccountCacheKey(code);
+	if (!key || !tagKey || !accountKey) return null;
+
+	const rows = await sqliteWriteJson(`
+		BEGIN IMMEDIATE;
+		INSERT INTO player_cache (playerID, type, key, value)
+		SELECT 0, 0, ${sqlString(key)}, ${sqlString(signupCodeAvailable)}
+		WHERE NOT EXISTS (
+			SELECT 1 FROM player_cache
+			WHERE playerID = 0 AND key = ${sqlString(key)}
+		)
+		AND NOT EXISTS (
+			SELECT 1 FROM player_cache
+			WHERE playerID = 0 AND key = ${sqlString(tagKey)}
+		)
+		AND NOT EXISTS (
+			SELECT 1 FROM player_cache
+			WHERE playerID = 0 AND key = ${sqlString(accountKey)}
+		);
+		COMMIT;
+		SELECT 'signup' AS kind, value, dbid FROM player_cache
+		WHERE playerID = 0 AND key = ${sqlString(key)}
+		UNION ALL
+		SELECT 'base_tag' AS kind, value, dbid FROM player_cache
+		WHERE playerID = 0 AND key = ${sqlString(tagKey)}
+		UNION ALL
+		SELECT 'base_acct' AS kind, value, dbid FROM player_cache
+		WHERE playerID = 0 AND key = ${sqlString(accountKey)}
+		ORDER BY kind, dbid;
+	`, "sync_referral_signup_code");
+	if (rows.some((row) => row.kind === "base_tag" || row.kind === "base_acct")) {
+		throw new HttpError(409, "referral_signup_code_has_founder_classifier");
+	}
+	const signupRows = rows.filter((row) => row.kind === "signup");
+	if (signupRows.length !== 1) {
+		throw new HttpError(409, "referral_signup_code_ledger_invalid");
+	}
+	const value = canonicalOpenRscInt(signupRows[0].value);
+	if (value !== signupCodeAvailable && value !== signupCodeRedeemed) {
+		throw new HttpError(409, "referral_signup_code_ledger_invalid");
+	}
+	return value;
+}
+
+async function syncReferralRewardCodesToOpenRsc(founder, { force = false, continueOnError = false } = {}) {
+	if (!openRscDbPath || !founder || !Array.isArray(founder.referralRewardCodes)) {
+		return { synced: 0, failed: 0 };
+	}
 	let synced = 0;
+	let failed = 0;
 	for (const reward of founder.referralRewardCodes) {
-		if (!reward || reward.syncedAt) continue;
-		if (await syncSignupCodeValueToOpenRsc(reward.code)) {
+		if (!reward || (!force && reward.syncedAt)) continue;
+		try {
+			const gameValue = await syncReferralSignupCodeToOpenRsc(reward.code);
+			if (gameValue !== signupCodeAvailable && gameValue !== signupCodeRedeemed) {
+				throw new Error("referral_signup_code_state_invalid");
+			}
 			reward.syncedAt = now();
 			synced += 1;
+		} catch (error) {
+			failed += 1;
+			if (!continueOnError) throw error;
 		}
 	}
-	return synced;
+	return { synced, failed };
 }
 
 async function signupCodeGameValues() {
@@ -6706,9 +6992,40 @@ function jsonScript(value) {
 	}[character]));
 }
 
-function starterCardCacheKey(accountId) {
+function canonicalOpenRscInt(value, { allowZero = false } = {}) {
+	const text = String(value == null ? "" : value);
+	if (!/^(0|[1-9]\d*)$/.test(text)) return null;
+	const parsed = Number(text);
+	if (!Number.isInteger(parsed) || parsed > openRscIntMax) return null;
+	if (allowZero ? parsed < 0 : parsed <= 0) return null;
+	return parsed;
+}
+
+function starterCardAccountPrefix(accountId) {
 	const id = Number(accountId);
-	return Number.isInteger(id) && id > 0 ? `${starterCardCachePrefix}${id}` : "";
+	return Number.isInteger(id) && id > 0 && id <= openRscIntMax ? `${starterCardCachePrefix}${id}:` : "";
+}
+
+function starterCardCacheKey(accountId, playerId) {
+	const prefix = starterCardAccountPrefix(accountId);
+	const id = Number(playerId);
+	if (!prefix || !Number.isInteger(id) || id <= 0 || id > openRscIntMax) return "";
+	const key = `${prefix}${id}`;
+	return key.length <= 32 ? key : "";
+}
+
+function parseStarterCardCacheKey(key) {
+	const match = /^starter:(\d+):(\d+)$/.exec(String(key || ""));
+	if (!match) return null;
+	const accountId = Number(match[1]);
+	const playerId = Number(match[2]);
+	if (starterCardCacheKey(accountId, playerId) !== key) return null;
+	return { accountId, playerId };
+}
+
+function legacyStarterCardCacheKey(accountId) {
+	const id = Number(accountId);
+	return Number.isInteger(id) && id > 0 && id <= openRscIntMax ? `${legacyStarterCardCachePrefix}${id}` : "";
 }
 
 function accountSubscriptionCacheKey(accountId) {
@@ -7003,7 +7320,10 @@ async function updateOpenRscPlayerPassword(character, accountId, password, ip) {
 async function createOpenRscPlayer({ accountId, username, email, password, ip }) {
 	const passwordSalt = randomBytes(15).toString("base64url").slice(0, 20);
 	const passwordHash = await canonicalGamePasswordHash(password, passwordSalt);
-	const createdAt = Math.floor(Date.now() / 1000);
+	const createdAtMs = Date.now();
+	const createdAt = Math.floor(createdAtMs / 1000);
+	const launchCardEndsAtMs = Date.parse(launchFreeCardWindowState().endsAt || "");
+	const reserveLaunchCard = Number.isFinite(launchCardEndsAtMs) && createdAtMs < launchCardEndsAtMs;
 	const rows = await sqliteWriteJson(`
 		BEGIN IMMEDIATE;
 		INSERT INTO players (
@@ -7031,12 +7351,33 @@ async function createOpenRscPlayer({ accountId, username, email, password, ip })
 			FROM players
 			WHERE lower(username) = ${sqlString(normalizeUsername(username))}
 			LIMIT 1;
+		INSERT INTO player_cache (playerID, type, key, value)
+			SELECT id, 0, 'launch_24h_card', ${sqlString(starterCardAvailable)}
+			FROM players
+			WHERE lower(username) = ${sqlString(normalizeUsername(username))}
+			  AND ${reserveLaunchCard ? 1 : 0} = 1
+			  AND NOT EXISTS (
+				SELECT 1 FROM player_cache launch
+				WHERE launch.playerID = players.id AND launch.key = 'launch_24h_card'
+			  )
+			LIMIT 1;
 		COMMIT;
-		SELECT id FROM players WHERE lower(username) = ${sqlString(normalizeUsername(username))} LIMIT 1;
+		SELECT p.id,
+		       CASE WHEN EXISTS (
+			SELECT 1 FROM player_cache launch
+			WHERE launch.playerID = p.id AND launch.key = 'launch_24h_card'
+		       ) THEN 1 ELSE 0 END AS launchCardReserved
+		FROM players p
+		WHERE lower(p.username) = ${sqlString(normalizeUsername(username))}
+		LIMIT 1;
 	`, "create_openrsc_player");
 	const playerId = Number(rows[0] && rows[0].id);
 	if (!playerId) throw new HttpError(500, "openrsc_character_create_failed");
-	return playerId;
+	return {
+		playerId,
+		createdAtMs,
+		launchCardReserved: Number(rows[0] && rows[0].launchCardReserved || 0) === 1
+	};
 }
 
 async function openRscCharacterSnapshot(username) {
@@ -7491,10 +7832,10 @@ async function grantStarterCardIfEligible(store, account, founder, source, reque
 	if (!context || !context.signupSignalsRecorded) {
 		recordSignupSignals(store, account, request, context);
 	}
-	if (!launchFreeCardWindowOpen()) {
+	if (!founderReservationWindowOpen()) {
 		account.starterCardReview = {
 			status: "closed",
-			reasons: ["starter_card_launch_window_closed"],
+			reasons: ["founder_card_window_closed"],
 			createdAt: now()
 		};
 		audit(store, "starter_card_window_closed", {
@@ -7519,7 +7860,8 @@ async function grantStarterCardIfEligible(store, account, founder, source, reque
 
 	const entitlement = grantStarterCardEntitlement(store, founder, source);
 	recordStarterGrantSignals(store, account, request, context);
-	await syncStarterCardToOpenRsc(account);
+	// This records founder qualification only. The reset/admin freeze workflow is
+	// the sole authority allowed to materialize starter:<account>:<player> rows.
 	return entitlement;
 }
 
@@ -8858,6 +9200,18 @@ function normalizeSignupCode(code) {
 function signupCodeCacheKey(code) {
 	const normalized = normalizeSignupCode(code);
 	return normalized ? `${signupCodeCachePrefix}${normalized}` : "";
+}
+
+function signupCodeBaseTagCacheKey(code) {
+	const normalized = normalizeSignupCode(code);
+	const key = normalized ? `${signupCodeBaseTagCachePrefix}${normalized}` : "";
+	return key.length <= 32 ? key : "";
+}
+
+function signupCodeBaseAccountCacheKey(code) {
+	const normalized = normalizeSignupCode(code);
+	const key = normalized ? `${signupCodeBaseAccountCachePrefix}${normalized}` : "";
+	return key.length <= 32 ? key : "";
 }
 
 function signupCodeInUse(store, code) {

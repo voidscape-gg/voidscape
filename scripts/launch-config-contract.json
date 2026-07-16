@@ -52,6 +52,7 @@
   "want_bank_presets": "true",
   "want_leftclick_webs": "true",
   "want_packet_register": "true",
+  "launch_subscription_card_until": "2026-07-19T18:00:00Z",
   "right_click_bank": "true",
   "right_click_trade": "true",
   "want_custom_banks": "false",

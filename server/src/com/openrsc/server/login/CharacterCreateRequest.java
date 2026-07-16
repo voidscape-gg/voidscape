@@ -200,9 +200,9 @@ public class CharacterCreateRequest extends LoginExecutorProcess{
 				}
 
 				/* Create the game character */
-				final int playerId = getServer().getDatabase().createPlayer(getUsername(), getEmail(),
-					DataConversions.hashPassword(getPassword(), null),
-					System.currentTimeMillis() / 1000, getIpAddress());
+				final long createdAtMs = System.currentTimeMillis();
+				final int playerId = createPlayerWithLaunchSubscriptionCard(
+					DataConversions.hashPassword(getPassword(), null), createdAtMs);
 
 				if (playerId == -1) {
 					LOGGER.info(getIpAddress() + " - Registration failed: Player id not found.");
@@ -210,8 +210,6 @@ public class CharacterCreateRequest extends LoginExecutorProcess{
 					getChannel().close();
 					return;
 				}
-				reserveNativeLaunchSubscriptionCard(playerId);
-
 				LOGGER.info(getIpAddress() + " - Registration successful");
 				getChannel().writeAndFlush(new PacketBuilder().writeByte((byte) 0).toPacket());
 			} catch (Exception e) {
@@ -287,9 +285,9 @@ public class CharacterCreateRequest extends LoginExecutorProcess{
 			/* Create the game character */
 			int playerId;
 			if (!isSimRegister) {
-				playerId = getServer().getDatabase().createPlayer(getUsername(), getEmail(),
-					DataConversions.hashPassword(getPassword(), null),
-					System.currentTimeMillis() / 1000, getIpAddress());
+				final long createdAtMs = System.currentTimeMillis();
+				playerId = createPlayerWithLaunchSubscriptionCard(
+					DataConversions.hashPassword(getPassword(), null), createdAtMs);
 			} else {
 				playerId = 1;
 			}
@@ -298,7 +296,6 @@ public class CharacterCreateRequest extends LoginExecutorProcess{
 				LOGGER.info(getIpAddress() + " - Registration failed: Player id not found.");
 				return (byte) RegisterLoginResponse.UNSUCCESSFUL;
 			}
-			reserveNativeLaunchSubscriptionCard(playerId);
 		} catch (GameDatabaseException e) {
 			LOGGER.error("Database Exception during validateRegsiter()", e);
 			return (byte) RegisterLoginResponse.UNSUCCESSFUL;
@@ -310,21 +307,34 @@ public class CharacterCreateRequest extends LoginExecutorProcess{
 		return (byte) RegisterLoginResponse.REGISTER_SUCCESSFUL;
 	}
 
-	private void reserveNativeLaunchSubscriptionCard(final int playerId) {
-		if (playerId <= 0 || !getServer().getConfig().isLaunchSubscriptionCardActive()) {
-			return;
+	private int createPlayerWithLaunchSubscriptionCard(final String passwordHash,
+												 final long createdAtMs) {
+		final boolean reserveLaunchCard = getServer().getConfig()
+			.isLaunchSubscriptionCardActive(createdAtMs);
+		final int[] playerId = { -1 };
+		final boolean committed = getServer().getDatabase().atomically(() -> {
+			playerId[0] = getServer().getDatabase().createPlayer(getUsername(), getEmail(),
+				passwordHash, createdAtMs / 1000, getIpAddress());
+			if (playerId[0] <= 0) {
+				throw new GameDatabaseException(CharacterCreateRequest.class,
+					"Player id not found after registration");
+			}
+			if (reserveLaunchCard) {
+				getServer().getDatabase().querySavePlayerCacheValue(
+					playerId[0],
+					0,
+					VoidSubscription.LAUNCH_CARD_CACHE_KEY,
+					String.valueOf(VoidSubscription.LAUNCH_CARD_AVAILABLE)
+				);
+			}
+		});
+		if (!committed) {
+			return -1;
 		}
-		try {
-			getServer().getDatabase().querySavePlayerCacheValue(
-				playerId,
-				0,
-				VoidSubscription.LAUNCH_CARD_CACHE_KEY,
-				String.valueOf(VoidSubscription.LAUNCH_CARD_AVAILABLE)
-			);
+		if (reserveLaunchCard) {
 			LOGGER.info("{} - Reserved launch subscription card for {}", getIpAddress(), getUsername());
-		} catch (Exception ex) {
-			LOGGER.error("Unable to reserve launch subscription card for {}", getUsername(), ex);
 		}
+		return playerId[0];
 	}
 
 	private boolean isDisallowedUsername(String username) {

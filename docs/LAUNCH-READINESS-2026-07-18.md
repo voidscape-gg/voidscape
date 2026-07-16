@@ -45,6 +45,8 @@ database contents, signing material, or private source/history in this file.
 | 2026-07-16 | Apply an emergency Nginx-only boundary to all three public origins without replacing the portal bundle or touching the game, database, clients, Play Store, or public source. | Existing pre-signup visitors should not be able to retrieve packaged runtime/schema/support files, while normal portal, web-play, and launcher-update routes must remain available. |
 | 2026-07-16 | Preserve the complete eligible pre-signed-player cohort and grant exactly one free starter subscription card entitlement to every character under each qualifying account. | The owner reports 190 eligible pre-signups so far. The benefit is per character: a qualifying account with ten characters must receive ten cards, one on each character. |
 | 2026-07-16 | Treat 190 as a baseline count, not the final freeze count. | More eligible signups may arrive before the cutover. The freeze-time snapshot is authoritative. |
+| 2026-07-16 | Freeze the founder cohort and public reservations at launch, `2026-07-18T18:00:00Z`. | The founder promise is based on the launch-time snapshot. A password signup still awaiting email verification has not created an eligible linked founder character, while an already-completed code-only reservation keeps its controlled legacy route. |
+| 2026-07-16 | Separately give every character created before `2026-07-19T18:00:00Z` one `launch_24h_card` promotion, deduplicated against any founder issuance. | New launch-day characters still receive a card without changing the immutable founder cohort or allowing two cards where both routes apply. |
 | 2026-07-16 | Keep the optional ten-player headless fleet disabled and outside the launch critical path. | It adds accounts, credentials, persistence, and recovery complexity without being needed to open. |
 | 2026-07-16 | Keep the already-reviewed Play v11 AAB if its uploaded bytes and Android-input provenance are proven; do not rebuild it merely for server/portal-only changes. | A needless rebuild consumes a new versionCode and review cycle without changing Android behavior. |
 | 2026-07-16 | Verify the source corresponding to the already-live portal/downloads now, then publish the exact final sanitized Corresponding Source at or before the final public network/distribution cutover—not after declaring the launch successful. | The pre-signup portal already has remote users; an unopened game world is not a general AGPL grace period. Operational policy pending any contrary advice from qualified counsel. |
@@ -74,39 +76,45 @@ one independently claimable card marker on each character.
 
 There are currently three reward mechanisms and they must not be confused:
 
-1. An account-bound starter-card marker for a founder already linked to a portal
-   account. The current implementation permits only one claim for the whole account,
-   so it does not yet satisfy the per-character promise.
-2. A legacy one-time signup code for an eligible founder who is not account-linked at
-   freeze time. This is a bearer credential, currently grants only one card, and must
-   remain private.
-3. A separate native-launch reward. This is not part of the 190-player pre-signup
-   promise and must be counted separately.
+1. A linked founder qualification freezes into one exact
+   `starter:<webAccountId>:<playerId>` marker for each eligible character under that
+   account. Each marker is independently available or claimed and cannot be recreated
+   by deleting the character.
+2. A legacy code-only founder reservation keeps one controlled base signup-code route.
+   It grants one founder issuance, remains private, and cannot create an extra card when
+   it is bound to a linked founder character.
+3. A separate `launch_24h_card` promotion applies to every character created before
+   `2026-07-19T18:00:00Z`. This is not part of the pre-signup cohort count and must be
+   reported separately.
 
 Every eligible founder must have exactly one qualification route: linked account or a
-controlled legacy-account claim, never neither and never both. After qualification,
-every eligible character under that account must have exactly one starter-card marker,
-never zero and never more than one. Referral and native-launch rewards are separate
-bonuses and do not satisfy or duplicate that per-character promise.
+controlled legacy code-only claim, never neither and never both. Every eligible
+character under a linked qualifying account must have exactly one founder composite
+marker. Referral rewards remain independent bonuses. Launch-24h eligibility is counted
+separately, but founder and launch routes on the same character yield at most one
+physical card.
 
 - [x] Name the implementation's authoritative source for cohort eligibility:
   production portal `founders[]`; have the owner approve its freeze-time contents.
 - [ ] Name the authoritative account identifier used to join portal and game records.
 - [ ] Reconcile the current baseline count of 190 without exposing identities.
-- [ ] Define the final eligibility cutoff time and whether an incomplete email
-  verification is eligible.
+- [x] Define the founder cutoff time and whether an incomplete email verification is
+  eligible: cutoff `2026-07-18T18:00:00Z`; pending verification alone is not a linked
+  founder-character qualification.
 - [ ] Freeze a final cohort snapshot and record its count and SHA-256 below.
 - [ ] Exclude QA, headless, disposable, banned, and test accounts unless the owner
   explicitly approves an exception.
 - [ ] Preserve every eligible portal/game identity through the launch reset.
 - [ ] Give every eligible founder exactly one account-qualification route: a linked
   account or a controlled private legacy claim.
-- [ ] Give every eligible character under every qualifying account exactly one
-  available starter-card marker.
-- [ ] Give no character under an ineligible account a starter-card marker.
-- [ ] Prove there are no eligible characters with zero or multiple starter-card
-  markers.
-- [ ] Count referral and native-launch rewards separately from the founder base reward.
+- [ ] Give every eligible character under every qualifying linked account exactly one
+  available founder composite marker.
+- [ ] Give no character under an ineligible founder account a founder composite marker;
+  launch-24h markers follow their separate cutoff instead.
+- [ ] Prove there are no eligible founder characters with zero or multiple founder
+  composite markers.
+- [ ] Count referral and launch-24h rewards separately from the founder base reward, and
+  prove founder/launch overlap yields only one physical card.
 - [ ] Prove every retained ordinary player has ordinary rank unless separately
   approved as staff.
 - [ ] Prove the reset removes unintended progress/economy state without removing the
@@ -117,9 +125,10 @@ bonuses and do not satisfy or duplicate that per-character promise.
 - [ ] Prove a second claim by the same character cannot mint a second free card.
 - [ ] Prove every other character linked to the same qualifying account has its own
   independent card marker and can claim exactly once.
-- [ ] Decide and test how characters created after the roster freeze qualify. If new
-  characters qualify, prevent delete/recreate churn from becoming an unlimited-card
-  generator.
+- [ ] Prove the agreed timing rule: the founder manifest freezes at launch; every
+  character created before `2026-07-19T18:00:00Z` gets the separate launch promotion;
+  characters created at or after that cutoff get no launch route and cannot expand the
+  frozen founder manifest; overlap grants only one card.
 - [ ] Stop portal/game writes, then back up and restore-test the production portal JSON
   store and game database as one coordinated, hash-matched set.
 - [ ] Make production portal startup fail closed if an existing store is missing or
@@ -129,7 +138,8 @@ Freeze evidence:
 
 | Field | Value |
 |---|---|
-| Eligibility cutoff | `PENDING` |
+| Founder cohort/reservation cutoff | `2026-07-18T18:00:00Z` (launch) |
+| Separate `launch_24h_card` cutoff | `2026-07-19T18:00:00Z` (24 hours after launch) |
 | Baseline count | `190` (owner-provided, 2026-07-16) |
 | Final frozen count | `PENDING` |
 | Snapshot timestamp | `PENDING` |
@@ -142,12 +152,13 @@ Freeze evidence:
 | Controlled legacy qualification routes | `PENDING` |
 | Linked + legacy qualification routes | Must equal eligible founder count |
 | Eligible character count | `PENDING` (this, not `190`, determines cards owed) |
-| Available + claimed per-character starter markers | Must equal eligible character count |
-| Eligible characters with zero starter markers | Must be `0` |
-| Eligible characters with multiple starter markers | Must be `0` |
-| Ineligible entitlement count | Must be `0` |
+| Available + claimed founder composite markers | Must equal eligible founder-character count |
+| Eligible founder characters with zero composite markers | Must be `0` |
+| Eligible founder characters with multiple composite markers | Must be `0` |
+| Ineligible founder composite count | Must be `0` |
 | Approved referral reward codes | `PENDING` (reported separately) |
-| Approved native-launch rewards | `PENDING` (reported separately) |
+| Approved `launch_24h_card` rewards | `PENDING` (reported separately) |
+| Founder/launch overlaps yielding more than one physical card | Must be `0` |
 | Restore rehearsal evidence | `PENDING` |
 
 ## P0 — immediate stop conditions
@@ -169,7 +180,7 @@ Freeze evidence:
 | Public portal boundary | Codex + operator | PASS | VS-089 exact-tree/application/package checks and VS-092 live Nginx containment pass. The include is active on all three origins; hosted forbidden, allowed, range, API, play-page, and launcher-manifest checks pass. Clean bundle replacement remains covered by bundle hygiene and superseded-bundle quarantine. |
 | Portal account flows | Codex + human | PENDING | Signup, rules acceptance, verification, login, recovery, character create/delete, logout, data-deletion link, and email delivery pass against final candidate. |
 | Pre-signed-player cohort | Owner + Codex + operator | BLOCKED | Every protected-cohort checkbox and count/hash reconciliation above passes. |
-| Reward/reset safety | Codex + owner | BLOCKED | VS-090: replace the current account-wide/code-only grant behavior and broad reset with an owner-approved frozen roster and one marker per eligible character; prove ten characters receive ten independent cards, preserve claimed state where intended, and add focused automated tests. |
+| Reward/reset safety | Codex + owner | BLOCKED | VS-090 is locally verified: exact founder composites, a separate launch-24h route, one-card overlap handling, reset reruns, and focused/full-build checks pass. The final frozen roster plus real final-candidate vendor, full-inventory, and repeat-claim evidence are still required. |
 | Portal roster durability | Codex | BLOCKED | VS-091: damaged or unexpectedly missing production portal JSON must fail startup/readiness without replacing the protected roster; explicit first-run initialization remains possible. |
 | Database choice and permissions | Owner + operator | PENDING | Explicit SQLite/MariaDB decision; integrity/foreign keys, permissions, capacity, and exactly-one-writer proof. |
 | Coordinated backup and rollback | Operator + owner | PENDING | Portal/game writes quiesced; paired hashed off-host backup restored successfully in isolation; objective rollback triggers recorded. |
@@ -267,15 +278,21 @@ or physical-device requirements.
   reward routes, and added exact zero/double-reward reconciliation gates.
 - 2026-07-16: owner clarified that the promised free card is per character, not per
   founder or parent account. A qualifying ten-character account is owed ten cards;
-  the current account-global marker and single-use legacy code do not yet meet this
-  contract.
+  VS-090 replaces the account-global marker with exact per-character founder composites,
+  pending final verification.
+- 2026-07-16: owner set two distinct cutoffs: founder reservations freeze at launch,
+  `2026-07-18T18:00:00Z`, while every character created before
+  `2026-07-19T18:00:00Z` receives the separate launch promotion. Vendor deduplication
+  prevents two cards when both routes apply.
 - 2026-07-16: committed and fully verified the local VS-089 fail-closed portal
   application/package/Nginx boundary at `6d70d5ee`. At that point the live production
   origins were still exposed and every superseded bundle remained blocked pending
   separately authorized containment.
 - 2026-07-16: triaged the per-character founder reward as VS-090 and fail-open portal
-  roster loading as VS-091. Both are P1 launch blockers; VS-090 awaits the owner's
-  deletion/recreation, promotion-stacking, and legacy-code accounting decisions.
+  roster loading as VS-091. Both are P1 launch blockers; the owner resolved VS-090's
+  deletion/recreation, promotion-stacking, and legacy-code accounting policy. VS-090's
+  local implementation and automated verification now pass; final frozen-data and
+  final-candidate acceptance gates remain open.
 - 2026-07-16: completed the explicitly authorized VS-092 Nginx-only containment at
   `e2b24ece`. Preflight caught an overbroad `.properties` denial before installation,
   preserving `/api/launcher/manifest.properties`; the corrected rule, 69/69 matrix,

@@ -266,7 +266,6 @@
 	var adminGrantSub = document.getElementById("admin-grant-sub");
 	var adminClearSub = document.getElementById("admin-clear-sub");
 	var adminGrantStarter = document.getElementById("admin-grant-starter");
-	var adminRevokeStarter = document.getElementById("admin-revoke-starter");
 	var adminRevokeSessions = document.getElementById("admin-revoke-sessions");
 	var adminCharacterTable = document.getElementById("admin-character-table");
 	var adminSignalTable = document.getElementById("admin-signal-table");
@@ -333,6 +332,7 @@
 		var launchCountdownTimer = 0;
 		var launchOpenActive = false;
 		var launchStarterCardOpen = true;
+		var launchServerClockOffset = 0;
 	var googleClientId = "";
 	var googleNonce = "";
 	var googleButtonRendered = false;
@@ -1002,14 +1002,7 @@
 	if (adminGrantStarter) {
 		adminGrantStarter.addEventListener("click", async function () {
 			if (!adminAccount || !adminAccount.account) return setAdminMessage("Load an account first.");
-			await runAdminAction("/api/admin/accounts/" + adminAccount.account.id + "/starter-card", { action: "grant" }, "Starter card granted.");
-		});
-	}
-
-	if (adminRevokeStarter) {
-		adminRevokeStarter.addEventListener("click", async function () {
-			if (!adminAccount || !adminAccount.account) return setAdminMessage("Load an account first.");
-			await runAdminAction("/api/admin/accounts/" + adminAccount.account.id + "/starter-card", { action: "revoke" }, "Starter card revoked.");
+			await runAdminAction("/api/admin/accounts/" + adminAccount.account.id + "/starter-card", { action: "grant" }, "Founder freeze reconciled.");
 		});
 	}
 
@@ -1680,7 +1673,7 @@
 					if (prelaunchSuccessAccount) prelaunchSuccessAccount.textContent = accountState.email || email || "-";
 					if (prelaunchSuccessStatus) prelaunchSuccessStatus.textContent = "Email verification sent";
 					if (prelaunchSuccess) prelaunchSuccess.hidden = false;
-					founderMessage.textContent = "Check your email to verify. Your account, first character, and starter card are created only after verification.";
+					founderMessage.textContent = "Check your email to verify. Complete verification before 11:00 AM PT (18:00 UTC) on July 19, 2026 to receive the starter card.";
 					return;
 				}
 				applyAccountState(accountState);
@@ -1899,11 +1892,10 @@
 	function applyPublicState(state) {
 			if (!state) return;
 			launchSignupModeActive = Boolean(state.launchSignupMode);
-			launchStarterCardOpen = starterCardWindowOpen(state.launch || (state.beta && state.beta.schedule) || null);
+			var launchSchedule = state.launch || (state.beta && state.beta.schedule) || null;
 			document.body.classList.toggle("launch-signup-mode", launchSignupModeActive);
-		googleClientId = state.oauth && state.oauth.google && state.oauth.google.enabled ? String(state.oauth.google.clientId || "") : "";
-		updateLaunchSignupCopy();
-		updateGoogleSignupButton();
+			googleClientId = state.oauth && state.oauth.google && state.oauth.google.enabled ? String(state.oauth.google.clientId || "") : "";
+			updateGoogleSignupButton();
 		if (state.publicMode && !publicModeActive) {
 			publicModeActive = true;
 			document.body.classList.add("public-mode");
@@ -1913,7 +1905,8 @@
 				activateView((window.location.hash || "#account").replace("#", "") || "account");
 			}
 		}
-		applyLaunchState(state.launch || (state.beta && state.beta.schedule) || null, state.founderStats || null);
+			applyLaunchState(launchSchedule, state.founderStats || null);
+			updateLaunchSignupCopy();
 		if (state.status) {
 			if (serverWorldLabel) serverWorldLabel.textContent = state.status.world || "World 1";
 			if (serverOnlineCount) serverOnlineCount.textContent = (state.status.playersOnline || 0) + " online";
@@ -1984,6 +1977,8 @@
 			betaSignupCount.textContent = formatCompactNumber(reservations);
 		}
 			launchCountdownState = schedule && schedule.openAt ? schedule : null;
+			var serverNow = launchCountdownState && launchCountdownState.now ? Date.parse(launchCountdownState.now) : NaN;
+			launchServerClockOffset = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
 			launchStarterCardOpen = starterCardWindowOpen(launchCountdownState);
 			if (!launchCountdownState) {
 			setLaunchOpenState(false);
@@ -2192,7 +2187,7 @@
 			setLaunchOpenState(false);
 			return;
 		}
-			var remaining = Math.max(0, openAtMs - Date.now());
+			var remaining = Math.max(0, openAtMs - (Date.now() + launchServerClockOffset));
 			var previousStarterCardOpen = launchStarterCardOpen;
 			launchStarterCardOpen = starterCardWindowOpen(launchCountdownState);
 			setLaunchOpenState(remaining <= 0);
@@ -2206,7 +2201,7 @@
 				betaCountdownNote.textContent = remaining > 0
 					? (launchSignupModeActive
 							? (launchStarterCardOpen
-								? "Reserve your account name now. Your starter card is reserved for the Lumbridge vendor on launch day."
+								? "Create and verify your first character before 11:00 AM PT (18:00 UTC) on July 19, 2026 to receive the starter card."
 								: "Create your account and first character now.")
 					: "Reserve your username now. Your code is shown on screen and can be synced to the game database for launch day.")
 				: "Launch is open. Create or manage your account, then download the launcher or use the mobile web client.";
@@ -2270,11 +2265,12 @@
 		function starterCardWindowOpen(schedule) {
 			var card = schedule && schedule.starterCard;
 			if (!card) return true;
+			if (card.open === false) return false;
 			if (card.endsAt) {
 				var endsAt = Date.parse(card.endsAt);
-				if (Number.isFinite(endsAt)) return endsAt > Date.now();
+				if (Number.isFinite(endsAt)) return endsAt > Date.now() + launchServerClockOffset;
 			}
-			return card.open !== false;
+			return true;
 		}
 
 		function setCountdownValue(days, hours, minutes, seconds) {

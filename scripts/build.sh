@@ -81,6 +81,11 @@ echo "==> Testing portal public-static boundary"
 python3 "$SCRIPT_DIR/test-package-portal-runtime.py"
 python3 "$SCRIPT_DIR/test-launch-staging-config.py"
 
+echo "==> Testing founder subscription claim policy"
+"$SCRIPT_DIR/test-void-subscription-claim-policy-java.sh"
+echo "==> Testing repeatable launch reward reset"
+"$SCRIPT_DIR/test-reset-launch-game-db.sh"
+
 echo "==> Testing gathering input buffer policy"
 "$SCRIPT_DIR/test-gather-repeat-buffer-java.sh"
 python3 "$SCRIPT_DIR/test-gather-input-buffer-contract.py"

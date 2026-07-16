@@ -124,7 +124,7 @@ Launch decision: `member_world` stays globally enabled on the server for every c
 
 The shared game client uses the original packet registration form for desktop `Create Account`; release configs set `want_packet_register:true` and `want_email:false` so that form creates a game character without email. Native Android and web `/play` use the portal account route so Android signup records Community Rules acceptance; client recovery opens `https://voidscape.gg/portal?auth=recovery` (or the web-client recovery sentinel resolved by `/play/`). The server also defaults missing `want_packet_register` to `false`, so a missing config key fails closed instead of silently re-opening packet registration.
 
-Starter-card reward display is source-of-truth checked against the game DB when `PORTAL_OPENRSC_DB` is configured. `starter_card:<webAccountId> = 1` means waiting at the Lumbridge vendor, `2` means claimed, and staff revoke only clears an unclaimed waiting marker.
+Founder-card reward display is source-of-truth checked against the game DB when `PORTAL_OPENRSC_DB` is configured. Each character in the founder cohort frozen at `2026-07-18T18:00:00Z` has a durable global `starter:<webAccountId>:<playerId>` row: `1` means waiting at the Lumbridge vendor and `2` means claimed. The frozen manifest is immutable: admin reconciliation cannot create or expand it, and founder-card revoke is unsupported. Waiting rows, claimed rows, and deletion tombstones remain lifetime audit state. The separate `launch_24h_card` promotion covers every character created before `2026-07-19T18:00:00Z`; the vendor gives at most one card when both routes apply. The old account-wide `starter_card:<webAccountId>` row is migration/display input only.
 
 Phase 2 can optionally introduce a character-picker login, but that is a protocol/client feature and must follow `docs/subsystems/networking-protocol.md`.
 
@@ -192,7 +192,7 @@ It currently proves:
 
 - founder/reserved-name shape
 - public launch-signup mode (`PORTAL_PUBLIC_MODE=1 PORTAL_LAUNCH_SIGNUP_MODE=1`) that exposes the safe account path while keeping dev-only, redirect-OAuth, payment, and link-simulation surfaces hidden
-- starter-card reward state for the free weekly subscription card
+- per-character reward state for founder, launch-24h, and merged founder/launch card routes
 - public site payloads for status, XP rates, news, downloads, highscores, market intel, and activity feed
 - web account registration/login flow with required public password-signup email verification, a 48-hour pending-signup lifetime, and scanner-safe explicit confirmation
 - local dev Google sign-in flow and launch-mode Google Identity Services ID-token signup that store a `google` provider identity and return a normal portal bearer session
@@ -209,8 +209,8 @@ It currently proves:
 - local character link challenges with hashed one-time codes and a dev simulation path
 - account-wide subscription-card redemption state
 - separate salted-signal velocity controls for completed signup, verification sends, and additional character creation, with targeted exact-IP blocks and proxy overrides
-- starter-card abuse controls that keep accepted accounts active and default the IP review threshold off, while preserving optional staff-review mode
-- token-gated local staff endpoints for account lookup, status changes, subscription grants/clears, starter-card grants/revokes, and session revocation
+- founder-qualification abuse controls that keep accepted accounts active and default the IP review threshold off, without suppressing the separate launch-24h marker
+- token-gated local staff endpoints for account lookup, status changes, subscription grants/clears, immutable founder-freeze reconciliation, and session revocation; founder-card revoke is unsupported
 - explicit `501` stubs for redirect-style Google OAuth and subscription-card payment checkout
 - optional read-only OpenRSC SQLite saved-character snapshots when `PORTAL_OPENRSC_DB` or `OPENRSC_SQLITE_DB` is configured
 - portal account-management schema constraints through `scripts/test-portal-schema.sh`
@@ -226,7 +226,7 @@ It does not yet prove:
 
 ### Registration and character-creation friction
 
-Public password signup keeps verified email mandatory. A pending signup lasts 48 hours by default; the account, first game character, and starter-card marker do not exist until the player explicitly posts the scanner-safe fragment token. `POST /api/accounts/verify-email/resend` is enumeration-safe: absent, expired, and live pending emails receive the same accepted response unless a generic rate limit fires. Initial and resend sends share independent limits of 3 requests per hour per source IP and 3 per hour per canonical email through `PORTAL_EMAIL_VERIFICATION_IP_LIMIT`, `PORTAL_EMAIL_VERIFICATION_EMAIL_LIMIT`, and `PORTAL_EMAIL_VERIFICATION_WINDOW_MINUTES=60`.
+Public password signup keeps verified email mandatory. A pending signup lasts 48 hours by default; the account and first game character do not exist until the player explicitly posts the scanner-safe fragment token. Completion before `2026-07-18T18:00:00Z` also records founder qualification, while every character created before `2026-07-19T18:00:00Z` atomically receives its separate `launch_24h_card` marker. `POST /api/accounts/verify-email/resend` is enumeration-safe: absent, expired, and live pending emails receive the same accepted response unless a generic rate limit fires. Initial and resend sends share independent limits of 3 requests per hour per source IP and 3 per hour per canonical email through `PORTAL_EMAIL_VERIFICATION_IP_LIMIT`, `PORTAL_EMAIL_VERIFICATION_EMAIL_LIMIT`, and `PORTAL_EMAIL_VERIFICATION_WINDOW_MINUTES=60`.
 
 Verification-request signals are separate from completed-signup signals. Sending or resending verification mail does not consume completed signup velocity; a password signup is recorded against that velocity only when verification creates the account. Launch defaults allow 3 completed signups per hour and 5 per day from one non-local IP, plus 20 per hour and 50 per day from one IPv4 `/24`.
 
@@ -236,15 +236,16 @@ The first game character created inside an accepted launch signup bypasses repea
 
 ### Starter-card abuse policy
 
-The free subscription card is protected at the reward boundary rather than by adding heavy signup hurdles. Every new account can still be created and can still enter the game through the portal-created character path. The one-time starter card is granted only when the account passes server-side checks:
+The free founder subscription cards are protected at the reward boundary rather than by adding heavy signup hurdles. Every new account can still be created and can still enter the game through the portal-created character path. Campaign qualification is recorded only when the account passes server-side checks, and the founder freeze turns an approved qualification into at most ten exact account/player issuances:
 
-- one active starter-card entitlement per web account
+- one active campaign-qualification entitlement per web account
+- one durable composite marker for each eligible character present in the freeze snapshot
 - one canonical email per web account, with common alias normalization
 - one Google provider subject per linked Google account
 - salted abuse-signal hashes for signup IP, email, and identity
-- an optional daily limit for starter-card grants from the same non-local IP bucket, disabled by default
+- an optional daily limit for founder qualification from the same non-local IP bucket, disabled by default
 
-When operators intentionally set a positive IP bucket limit and it is exceeded, the account remains `active`; only the free starter card is marked as review-required and not mirrored into the OpenRSC `starter_card:<webAccountId>` cache. Staff can inspect the hashed signal history and grant the card manually if the cluster is legitimate.
+When operators intentionally set a positive IP bucket limit and it is exceeded, the account remains `active`; only founder-card qualification is marked as review-required. Staff must resolve legitimate reviews before the founder freeze. Routine signup, character creation/linking, and native backfill never add rows to the frozen `starter:<webAccountId>:<playerId>` manifest afterward; post-freeze admin reconciliation cannot expand or revoke it. The separate launch-24h marker follows character creation time and is not suppressed by this founder-review setting.
 
 This keeps the normal launch path low friction while preventing throwaway accounts from reliably minting unlimited free subscription cards.
 

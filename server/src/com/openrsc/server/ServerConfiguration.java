@@ -882,12 +882,16 @@ public class ServerConfiguration {
 	}
 
 	public boolean isLaunchSubscriptionCardActive() {
+		return isLaunchSubscriptionCardActive(System.currentTimeMillis());
+	}
+
+	public boolean isLaunchSubscriptionCardActive(final long atEpochMillis) {
 		final String until = LAUNCH_SUBSCRIPTION_CARD_UNTIL == null ? "" : LAUNCH_SUBSCRIPTION_CARD_UNTIL.trim();
 		if (until.isEmpty()) {
 			return false;
 		}
 		try {
-			return Instant.parse(until).toEpochMilli() > System.currentTimeMillis();
+			return Instant.parse(until).toEpochMilli() > atEpochMillis;
 		} catch (DateTimeParseException ex) {
 			LOGGER.error("launch_subscription_card_until must be an ISO-8601 UTC timestamp, got {}", until);
 			return false;

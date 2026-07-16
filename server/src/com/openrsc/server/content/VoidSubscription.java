@@ -8,13 +8,19 @@ public final class VoidSubscription {
 	public static final String ACCOUNT_ID_CACHE_KEY = "web_account_id";
 	public static final String ACCOUNT_SUBSCRIPTION_CACHE_PREFIX = "acct_sub:";
 	public static final String PLAYER_SUBSCRIPTION_CACHE_PREFIX = "char_sub:";
-	public static final String STARTER_CARD_CACHE_PREFIX = "starter_card:";
+	/** Durable per-character founder issuance state. */
+	public static final String STARTER_CARD_CACHE_PREFIX = "starter:";
+	/** Migration input only. Runtime claim paths must not consult this account-wide key. */
+	public static final String LEGACY_STARTER_CARD_CACHE_PREFIX = "starter_card:";
 	public static final int STARTER_CARD_AVAILABLE = 1;
 	public static final int STARTER_CARD_CLAIMED = 2;
 	public static final String LAUNCH_CARD_CACHE_KEY = "launch_24h_card";
 	public static final int LAUNCH_CARD_AVAILABLE = 1;
 	public static final int LAUNCH_CARD_CLAIMED = 2;
 	public static final String SIGNUP_CODE_CACHE_PREFIX = "signup_code:";
+	public static final String BASE_CODE_TAG_CACHE_PREFIX = "base_tag:";
+	public static final String BASE_CODE_ACCOUNT_CACHE_PREFIX = "base_acct:";
+	public static final int BASE_CODE_UNASSIGNED = 0;
 	public static final int SIGNUP_CODE_AVAILABLE = 1;
 	public static final int SIGNUP_CODE_REDEEMED = 2;
 	// player_cache.key is varchar(32); 32 - "signup_code:".length() = 20
@@ -156,15 +162,137 @@ public final class VoidSubscription {
 		return SIGNUP_CODE_CACHE_PREFIX + normalizedCode;
 	}
 
-	public static String starterCardCacheKey(Player player) {
-		return starterCardCacheKey(getAccountId(player));
+	public static String baseCodeTagCacheKey(String normalizedCode) {
+		if (normalizedCode == null || normalizedCode.isEmpty()
+			|| normalizedCode.length() > SIGNUP_CODE_MAX_LENGTH) {
+			return "";
+		}
+		return BASE_CODE_TAG_CACHE_PREFIX + normalizedCode;
 	}
 
-	public static String starterCardCacheKey(int accountId) {
+	public static String baseCodeAccountCacheKey(String normalizedCode) {
+		if (normalizedCode == null || normalizedCode.isEmpty()
+			|| normalizedCode.length() > SIGNUP_CODE_MAX_LENGTH) {
+			return "";
+		}
+		return BASE_CODE_ACCOUNT_CACHE_PREFIX + normalizedCode;
+	}
+
+	public static String starterCardCacheKey(Player player) {
+		return starterCardCacheKey(getAccountId(player), player == null ? 0 : player.getDatabaseID());
+	}
+
+	public static String starterCardCacheKey(int accountId, int playerId) {
+		if (accountId <= 0 || playerId <= 0) {
+			return "";
+		}
+		return STARTER_CARD_CACHE_PREFIX + accountId + ":" + playerId;
+	}
+
+	public static String legacyStarterCardCacheKey(int accountId) {
 		if (accountId <= 0) {
 			return "";
 		}
-		return STARTER_CARD_CACHE_PREFIX + accountId;
+		return LEGACY_STARTER_CARD_CACHE_PREFIX + accountId;
+	}
+
+	/**
+	 * A base founder code may be unassigned, or pre-bound to exactly one database player ID.
+	 * A missing tag is a referral code and is deliberately not accepted by this classifier.
+	 */
+	public static boolean baseCodeMayBeRedeemedBy(Integer assignedPlayerId, int claimantPlayerId) {
+		return assignedPlayerId != null
+			&& claimantPlayerId > 0
+			&& (assignedPlayerId == BASE_CODE_UNASSIGNED || assignedPlayerId == claimantPlayerId);
+	}
+
+	public static boolean linkedBaseCodeRouteMatches(Integer frozenAccountId,
+													Integer assignedPlayerId, int currentAccountId,
+													int claimantPlayerId, boolean hasCompositeLedger) {
+		return frozenAccountId != null && frozenAccountId > 0
+			&& assignedPlayerId != null && assignedPlayerId > 0
+			&& frozenAccountId == currentAccountId
+			&& assignedPlayerId == claimantPlayerId
+			&& hasCompositeLedger;
+	}
+
+	public static boolean isCardClaimState(Integer state) {
+		return state == null || state == STARTER_CARD_AVAILABLE || state == STARTER_CARD_CLAIMED;
+	}
+
+	/**
+	 * Resolve the native-launch and per-character founder routes as one issuance. A claimed
+	 * route suppresses an available sibling route; two available routes grant exactly one card.
+	 */
+	public static CardClaimPlan planReservedCardClaim(Integer starterState, Integer launchState) {
+		if (!isCardClaimState(starterState) || !isCardClaimState(launchState)) {
+			return CardClaimPlan.NONE;
+		}
+
+		if (starterState != null && starterState == STARTER_CARD_AVAILABLE) {
+			if (launchState != null && launchState == LAUNCH_CARD_CLAIMED) {
+				return new CardClaimPlan(false, true, false);
+			}
+			return new CardClaimPlan(true, true,
+				launchState != null && launchState == LAUNCH_CARD_AVAILABLE);
+		}
+		if (starterState != null && starterState == STARTER_CARD_CLAIMED) {
+			return new CardClaimPlan(false, false,
+				launchState != null && launchState == LAUNCH_CARD_AVAILABLE);
+		}
+		if (launchState != null && launchState == LAUNCH_CARD_AVAILABLE) {
+			return new CardClaimPlan(true, false, true);
+		}
+		return CardClaimPlan.NONE;
+	}
+
+	/**
+	 * A base founder code itself is an entitlement only for code-only/unlinked founders.
+	 * Linked founders must already have an exact reset-created composite row; this method
+	 * never creates one. Existing founder or native issuance retires the code without a
+	 * second card.
+	 */
+	public static CardClaimPlan planFounderCodeClaim(boolean hasCompositeLedger, Integer starterState,
+													Integer launchState) {
+		if ((hasCompositeLedger && (starterState == null || !isCardClaimState(starterState)))
+			|| !isCardClaimState(launchState)) {
+			return CardClaimPlan.NONE;
+		}
+		boolean alreadyIssued = (hasCompositeLedger
+			&& starterState == STARTER_CARD_CLAIMED)
+			|| (launchState != null && launchState == LAUNCH_CARD_CLAIMED);
+		return new CardClaimPlan(!alreadyIssued,
+			hasCompositeLedger && starterState == STARTER_CARD_AVAILABLE,
+			launchState != null && launchState == LAUNCH_CARD_AVAILABLE);
+	}
+
+	public static final class CardClaimPlan {
+		private static final CardClaimPlan NONE = new CardClaimPlan(false, false, false);
+		private final boolean grantCard;
+		private final boolean claimStarter;
+		private final boolean claimLaunch;
+
+		private CardClaimPlan(boolean grantCard, boolean claimStarter, boolean claimLaunch) {
+			this.grantCard = grantCard;
+			this.claimStarter = claimStarter;
+			this.claimLaunch = claimLaunch;
+		}
+
+		public boolean grantsCard() {
+			return grantCard;
+		}
+
+		public boolean claimsStarter() {
+			return claimStarter;
+		}
+
+		public boolean claimsLaunch() {
+			return claimLaunch;
+		}
+
+		public boolean hasWork() {
+			return grantCard || claimStarter || claimLaunch;
+		}
 	}
 
 	public static void refreshAccountSubscription(Player player) {

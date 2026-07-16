@@ -17,6 +17,8 @@ public_admin_token="portal-public-admin-token-fixture-1234567890"
 public_abuse_salt="portal-public-abuse-salt-fixture-1234567890"
 server_pid=""
 captcha_pid=""
+launch_window_pid=""
+post_cutoff_pid=""
 public_pid=""
 no_db_pid=""
 verify_pid=""
@@ -32,6 +34,14 @@ cleanup() {
 	if [[ -n "$captcha_pid" ]]; then
 		kill "$captcha_pid" >/dev/null 2>&1 || true
 		wait "$captcha_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$launch_window_pid" ]]; then
+		kill "$launch_window_pid" >/dev/null 2>&1 || true
+		wait "$launch_window_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$post_cutoff_pid" ]]; then
+		kill "$post_cutoff_pid" >/dev/null 2>&1 || true
+		wait "$post_cutoff_pid" >/dev/null 2>&1 || true
 	fi
 	if [[ -n "$public_pid" ]]; then
 		kill "$public_pid" >/dev/null 2>&1 || true
@@ -349,11 +359,13 @@ if (!Array.isArray(findings.findings) || findings.findings.length < 1) throw new
 
 PORT="$PORT" \
 	PORTAL_DATA_DIR="$tmp_dir" \
-	PORTAL_OPENRSC_DB="$fixture_db" \
-	PORTAL_ADMIN_TOKEN="dev-admin" \
-	PORTAL_SIGNUP_IP_DAILY_LIMIT=3 \
-	PORTAL_CHARACTER_IP_DAILY_LIMIT=2 \
-	node web/portal/dev-server.mjs >/tmp/voidscape-portal-api-smoke.log 2>&1 &
+PORTAL_OPENRSC_DB="$fixture_db" \
+PORTAL_ADMIN_TOKEN="dev-admin" \
+PORTAL_SIGNUP_IP_DAILY_LIMIT=3 \
+PORTAL_CHARACTER_IP_DAILY_LIMIT=2 \
+PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+PORTAL_LAUNCH_FREE_CARD_HOURS=24 \
+node web/portal/dev-server.mjs >/tmp/voidscape-portal-api-smoke.log 2>&1 &
 server_pid="$!"
 
 for _ in {1..60}; do
@@ -384,9 +396,69 @@ if [[ "$bad_signup_keys" != "0" ]]; then
 	exit 1
 fi
 
-starter_card_state="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
-if [[ "$starter_card_state" != "1" ]]; then
-	echo "expected SmokeHero starter subscription card to be reserved in OpenRSC account cache, got ${starter_card_state:-empty}"
+node - "$tmp_dir/dev-store.json" "$fixture_db" <<'NODE'
+const { execFileSync } = require("child_process");
+const fs = require("fs");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const database = process.argv[3];
+const normalize = (code) => String(code || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
+const scalar = (sql) => Number(execFileSync("sqlite3", [database, sql], { encoding: "utf8" }).trim() || 0);
+const values = (sql) => {
+	const output = execFileSync("sqlite3", [database, sql], { encoding: "utf8" }).trim();
+	return output ? output.split(/\r?\n/) : [];
+};
+for (const founder of store.founders || []) {
+	const baseCode = normalize(founder.signupCodeNormalized || founder.signupCode);
+	if (baseCode) {
+		const key = `base_tag:${baseCode}`;
+		const accountKey = `base_acct:${baseCode}`;
+		if (key.length > 32) throw new Error("founder base tag exceeds player_cache key limit");
+		const tagValues = values(`SELECT value FROM player_cache WHERE playerID=0 AND key='${key}' ORDER BY dbid;`);
+		if (tagValues.length !== 1 || !/^(0|[1-9]\d*)$/.test(tagValues[0]) || Number(tagValues[0]) > 2147483647) {
+			throw new Error(`founder base code ${baseCode} must have exactly one classifier tag`);
+		}
+		const accountValues = values(`SELECT value FROM player_cache WHERE playerID=0 AND key='${accountKey}' ORDER BY dbid;`);
+		if (accountValues.length !== 1 || !/^(0|[1-9]\d*)$/.test(accountValues[0]) || Number(accountValues[0]) > 2147483647) {
+			throw new Error(`founder base code ${baseCode} must have exactly one account classifier`);
+		}
+	}
+	for (const reward of founder.referralRewardCodes || []) {
+		const referralCode = normalize(reward && reward.code);
+		if (referralCode && scalar(`SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key IN ('base_tag:${referralCode}','base_acct:${referralCode}');`) !== 0) {
+			throw new Error(`referral reward ${referralCode} must remain independent of founder base tags`);
+		}
+	}
+}
+NODE
+
+starter_card_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter:1:%' AND value='1';")"
+if [[ "$starter_card_count" != "0" ]]; then
+	echo "portal admin must not create founder-card markers outside the cutoff finalizer, got ${starter_card_count:-0}"
+	exit 1
+fi
+legacy_starter_card_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter_card:%';")"
+if [[ "$legacy_starter_card_count" != "0" ]]; then
+	echo "portal runtime must not create legacy account-wide starter-card markers"
+	exit 1
+fi
+unbound_starter_card_count="$(sqlite3 "$fixture_db" <<'SQL'
+SELECT COUNT(*)
+FROM player_cache reward
+WHERE reward.playerID = 0
+  AND reward.key LIKE 'starter:1:%'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM players p
+    JOIN player_cache link
+      ON link.playerID = p.id
+     AND link.key = 'web_account_id'
+     AND link.value = '1'
+    WHERE reward.key = 'starter:1:' || p.id
+  );
+SQL
+)"
+if [[ "$unbound_starter_card_count" != "0" ]]; then
+	echo "every reconciled founder-card marker must bind to a linked player ID"
 	exit 1
 fi
 
@@ -506,6 +578,137 @@ grep -q '"CaptchaOk"' <<<"$captcha_ok" || { echo "captcha-gated signup should ac
 kill "$captcha_pid" >/dev/null 2>&1 || true
 wait "$captcha_pid" >/dev/null 2>&1 || true
 captcha_pid=""
+
+# Founder reservations freeze when launch opens, while every portal-created
+# character still receives the separate launch card through the next 24 hours.
+launch_window_port=$((PORT + 8))
+launch_window_db="$tmp_dir/openrsc-launch-window-fixture.db"
+launch_window_at="$(node -e 'process.stdout.write(new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString())')"
+cp "$base_fixture_db" "$launch_window_db"
+PORT="$launch_window_port" \
+	PORTAL_DATA_DIR="$tmp_dir/launch-window-store" \
+	PORTAL_OPENRSC_DB="$launch_window_db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="$launch_window_at" \
+	PORTAL_LAUNCH_FREE_CARD_HOURS=24 \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	node web/portal/dev-server.mjs >"$tmp_dir/launch-window.log" 2>&1 &
+launch_window_pid="$!"
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${launch_window_port}/api/health" >/dev/null 2>&1; then break; fi
+	sleep 0.1
+done
+launch_window_public="$(curl -fsS "http://127.0.0.1:${launch_window_port}/api/public")"
+node -e '
+const payload = JSON.parse(process.argv[1]);
+if (!payload.launch || payload.launch.locked !== false) throw new Error("launch-window fixture should be post-launch");
+if (!payload.launch.starterCard || payload.launch.starterCard.open !== true) throw new Error("24-hour launch-card window should remain open");
+' "$launch_window_public"
+launch_window_founder="$(curl -sS -w '\n%{http_code}' -X POST "http://127.0.0.1:${launch_window_port}/api/founder/reservations" \
+	-H 'content-type: application/json' \
+	-d '{"username":"LateFounder","email":"late-founder@example.com"}')"
+if [[ "$(tail -n1 <<<"$launch_window_founder")" != "410" ]] || ! grep -q '"error": "founder_program_closed"' <<<"$launch_window_founder"; then
+	echo "founder reservations must freeze when launch opens"
+	exit 1
+fi
+launch_window_signup="$(curl -fsS -X POST "http://127.0.0.1:${launch_window_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-d '{"username":"WindowOne","email":"window-one@example.com","password":"Windowpass1","termsAccepted":true,"termsVersion":"2026-07-16"}')"
+launch_window_token="$(node -e '
+const payload = JSON.parse(process.argv[1]);
+if (!payload.token || !payload.founder || payload.founder.starterCardUnlocked !== false) throw new Error("post-launch account should not enter the frozen founder cohort");
+if (!payload.rewards || payload.rewards.starterSubscriptionCards !== 1) throw new Error("first launch-window character should receive one card");
+if (!payload.rewards.cards.some((card) => card.source === "launch_24h_card")) throw new Error("launch-window reward must use the launch marker");
+process.stdout.write(payload.token);
+' "$launch_window_signup")"
+launch_window_second="$(curl -fsS -X POST "http://127.0.0.1:${launch_window_port}/api/characters" \
+	-H "authorization: Bearer ${launch_window_token}" \
+	-H 'content-type: application/json' \
+	-d '{"name":"WindowTwo","gamePassword":"Wind2"}')"
+node -e '
+const payload = JSON.parse(process.argv[1]);
+if (!Array.isArray(payload.characters) || payload.characters.length !== 2) throw new Error("launch-window account should create a second character");
+if (!payload.rewards || payload.rewards.starterSubscriptionCards !== 2) throw new Error("each launch-window character should receive its own card");
+if (!payload.rewards.cards.every((card) => card.source === "launch_24h_card")) throw new Error("launch-window cards must remain separate per-character launch markers");
+' "$launch_window_second"
+assert_launch_window_markers="$(sqlite3 "$launch_window_db" "SELECT COUNT(*) FROM player_cache WHERE playerID IN (SELECT id FROM players WHERE username IN ('WindowOne','WindowTwo')) AND key='launch_24h_card' AND value='1';")"
+if [[ "$assert_launch_window_markers" != "2" ]]; then
+	echo "every portal character created during the 24-hour launch window needs a launch card marker"
+	exit 1
+fi
+kill "$launch_window_pid" >/dev/null 2>&1 || true
+wait "$launch_window_pid" >/dev/null 2>&1 || true
+launch_window_pid=""
+
+# After the 24-hour launch promotion ends, normal account/character creation
+# remains open, but founder reservations and starter-card qualification close.
+post_cutoff_port=$((PORT + 7))
+post_cutoff_db="$tmp_dir/openrsc-post-cutoff-fixture.db"
+cp "$base_fixture_db" "$post_cutoff_db"
+PORT="$post_cutoff_port" \
+	PORTAL_DATA_DIR="$tmp_dir/post-cutoff-store" \
+	PORTAL_OPENRSC_DB="$post_cutoff_db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2000-01-01T00:00:00Z" \
+	PORTAL_LAUNCH_FREE_CARD_HOURS=24 \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	node web/portal/dev-server.mjs >"$tmp_dir/post-cutoff.log" 2>&1 &
+post_cutoff_pid="$!"
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${post_cutoff_port}/api/health" >/dev/null 2>&1; then break; fi
+	sleep 0.1
+done
+post_cutoff_public="$(curl -fsS "http://127.0.0.1:${post_cutoff_port}/api/public")"
+node -e '
+const payload = JSON.parse(process.argv[1]);
+if (!payload.launch || !payload.launch.starterCard) throw new Error("post-cutoff launch state is missing starter-card metadata");
+if (payload.launch.starterCard.open !== false || payload.launch.starterCard.remainingMs !== 0) {
+	throw new Error("starter-card qualification must close after the configured 24-hour launch window");
+}
+' "$post_cutoff_public"
+post_cutoff_founder="$(curl -sS -w '\n%{http_code}' -X POST "http://127.0.0.1:${post_cutoff_port}/api/founder/reservations" \
+	-H 'content-type: application/json' \
+	-d '{"username":"LateFounder","email":"late-founder@example.com"}')"
+if [[ "$(tail -n1 <<<"$post_cutoff_founder")" != "410" ]] || ! grep -q '"error": "founder_program_closed"' <<<"$post_cutoff_founder"; then
+	echo "public founder reservations must close at the launch cutoff"
+	exit 1
+fi
+post_cutoff_signup="$(curl -fsS -X POST "http://127.0.0.1:${post_cutoff_port}/api/accounts/register" \
+	-H 'content-type: application/json' \
+	-d '{"username":"LatePlayer","email":"late-player@example.com","password":"Latepass1","termsAccepted":true,"termsVersion":"2026-07-16"}')"
+node -e '
+const payload = JSON.parse(process.argv[1]);
+if (!payload.token || !Array.isArray(payload.characters) || payload.characters.length !== 1) {
+	throw new Error("post-cutoff registration should still create an account and first character");
+}
+if (!payload.founder || payload.founder.starterCardUnlocked !== false) {
+	throw new Error("post-cutoff founder state must remain unqualified");
+}
+if (!payload.rewards || payload.rewards.starterSubscriptionCards !== 0) {
+	throw new Error("post-cutoff registration must not grant a starter subscription card");
+}
+' "$post_cutoff_signup"
+node - "$tmp_dir/post-cutoff-store/dev-store.json" <<'NODE'
+const fs = require("fs");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const account = (store.accounts || []).find((row) => row.emailCanonical === "late-player@example.com");
+if (!account) throw new Error("post-cutoff account is missing");
+if ((store.entitlements || []).some((row) => row.accountId === account.id && row.type === "starter_free_subscription")) {
+	throw new Error("post-cutoff account persisted an ineligible founder entitlement");
+}
+if (!account.starterCardReview || account.starterCardReview.status !== "closed") {
+	throw new Error("post-cutoff account should record the closed qualification window");
+}
+NODE
+kill "$post_cutoff_pid" >/dev/null 2>&1 || true
+wait "$post_cutoff_pid" >/dev/null 2>&1 || true
+post_cutoff_pid=""
 
 # ---- PORTAL_PUBLIC_MODE lockdown ----
 public_port=$((PORT + 1))
@@ -975,7 +1178,7 @@ PORT="$launch_port" \
 	PORTAL_PUBLIC_MODE=1 \
 	PORTAL_LAUNCH_SIGNUP_MODE=1 \
 	PORTAL_CHARACTER_ACCOUNT_HOURLY_LIMIT=2 \
-	PORTAL_LAUNCH_AT="2026-07-18T18:00:00Z" \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
 	PORTAL_GOOGLE_CLIENT_ID="test-google-client" \
 	PORTAL_EMAIL_PROVIDER=resend \
 	PORTAL_EMAIL_DRY_RUN=1 \
@@ -1310,9 +1513,9 @@ if [[ "$launch_link_count" != "1" ]]; then
 	exit 1
 fi
 
-launch_starter_card_state="$(sqlite3 "$launch_fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
-if [[ "$launch_starter_card_state" != "1" ]]; then
-	echo "launch-signup registration should sync one waiting starter card marker"
+launch_starter_card_count="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND (key LIKE 'starter:1:%' OR key='starter_card:1');")"
+if [[ "$launch_starter_card_count" != "0" ]]; then
+	echo "launch signup should record qualification without minting the frozen per-character ledger"
 	exit 1
 fi
 
@@ -1321,8 +1524,9 @@ node -e "
 const payload = JSON.parse(process.argv[1]);
 if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('admin account state should show starter card waiting');
 if (payload.rewards.starterSubscriptionCards !== 1) throw new Error('admin account state should expose one waiting starter card');
+if (!Array.isArray(payload.rewards.cards) || payload.rewards.cards[0].source !== 'launch_24h_card') throw new Error('pre-freeze character should expose its launch-window card marker');
 " "$launch_admin_waiting"
-launch_starter_marker_total_before_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter_card:%';")"
+launch_starter_marker_total_before_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND (key LIKE 'starter:1:%' OR key='starter_card:1');")"
 
 # Game-only creation keeps its 4-20 limit and accepts letters and numbers only.
 for invalid_game_password in 'A12' 'A12345678901234567890' 'Bad!' 'Bad Pass1' 'Bad`Pass1' 'Bad£Pass1' 'Bad💥Pass1' $'Bad\nPass1'; do
@@ -1343,8 +1547,8 @@ if (!extra) throw new Error('second launch character should appear in the accoun
 if (extra.source !== 'openrsc-sqlite-created') throw new Error('second launch character should create a real OpenRSC save');
 if (extra.linkStatus !== 'linked') throw new Error('second launch character should be linked to the account');
 if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('second character creation should leave the starter card waiting');
-if (payload.rewards.starterSubscriptionCards !== 1) throw new Error('second character creation should not grant another starter card');
-if (!Array.isArray(payload.rewards.cards) || payload.rewards.cards.length !== 1) throw new Error('second character creation should leave exactly one visible starter-card entitlement');
+if (payload.rewards.starterSubscriptionCards !== 2) throw new Error('second character creation should grant that character its own launch card');
+if (!Array.isArray(payload.rewards.cards) || payload.rewards.cards.length !== 2) throw new Error('second character creation should expose two per-character launch cards');
 " "$launch_extra_character"
 launch_player_count_after_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM players WHERE username IN ('LaunchGuy', 'LaunchAlt') AND group_id=10;")"
 if [[ "$launch_player_count_after_extra" != "2" ]]; then
@@ -1356,12 +1560,12 @@ if [[ "$launch_extra_link_count" != "1" ]]; then
 	echo "second launch OpenRSC player should be linked to the same web account"
 	exit 1
 fi
-launch_starter_marker_count_after_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter_card:1' AND value='1';")"
-if [[ "$launch_starter_marker_count_after_extra" != "1" ]]; then
-	echo "second launch character creation should preserve exactly one waiting starter card marker"
+launch_starter_marker_count_after_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter:1:%';")"
+if [[ "$launch_starter_marker_count_after_extra" != "0" ]]; then
+	echo "second launch character creation must not enter the frozen founder-card manifest"
 	exit 1
 fi
-launch_starter_marker_total_after_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter_card:%';")"
+launch_starter_marker_total_after_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND (key LIKE 'starter:1:%' OR key='starter_card:1');")"
 if [[ "$launch_starter_marker_total_after_extra" != "$launch_starter_marker_total_before_extra" ]]; then
 	echo "second launch character creation should not mint additional starter-card markers"
 	exit 1
@@ -1372,6 +1576,12 @@ const extra = payload.characters.find((character) => character.name === 'LaunchA
 if (!extra || !extra.id) throw new Error('second launch character should expose a portal id');
 process.stdout.write(String(extra.id));
 " "$launch_extra_character")"
+launch_guy_player_id="$(sqlite3 "$launch_fixture_db" "SELECT id FROM players WHERE username='LaunchGuy' LIMIT 1;")"
+launch_extra_player_id="$(sqlite3 "$launch_fixture_db" "SELECT id FROM players WHERE username='LaunchAlt' LIMIT 1;")"
+if [[ -z "$launch_guy_player_id" || -z "$launch_extra_player_id" ]]; then
+	echo "launch founder-ledger fixture requires stable player IDs"
+	exit 1
+fi
 launch_extra_password_before="$(sqlite3 -separator '|' "$launch_fixture_db" "SELECT pass, salt FROM players WHERE username='LaunchAlt' LIMIT 1;")"
 node - "$launch_extra_password_before" <<'NODE'
 const { spawnSync } = require("child_process");
@@ -1530,6 +1740,28 @@ expect_status 503 -X DELETE "http://127.0.0.1:${no_db_port}/api/characters/${lau
 kill "$no_db_pid" >/dev/null 2>&1 || true
 wait "$no_db_pid" >/dev/null 2>&1 || true
 no_db_pid=""
+
+# Qualification stays open through the advertised launch moment, but neither
+# staff nor routine portal paths may freeze an account early and thereby omit a
+# character created during the remaining prelaunch window.
+expect_status 409 -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
+	-H "x-portal-admin-token: ${public_admin_token}" \
+	-H 'content-type: application/json' \
+	-d '{"action":"grant"}'
+launch_prefreeze_rows="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter:1:%';")"
+if [[ "$launch_prefreeze_rows" != "0" ]]; then
+	echo "admin reconciliation must not materialize the founder freeze before launch cutoff"
+	exit 1
+fi
+
+# Simulate the immutable launch freeze after both eligible characters exist. These
+# global markers must survive deletion, and routine replacement creation must not
+# mint a new one while the promotional window is still open.
+sqlite3 "$launch_fixture_db" <<SQL
+INSERT INTO player_cache (playerID, type, key, value) VALUES
+  (0, 0, 'starter:1:${launch_guy_player_id}', '1'),
+  (0, 0, 'starter:1:${launch_extra_player_id}', '1');
+SQL
 launch_delete_extra="$(curl -fsS -X DELETE "http://127.0.0.1:${launch_port}/api/characters/${launch_extra_id}" \
 	-H "authorization: Bearer ${launch_token}")"
 node -e "
@@ -1538,6 +1770,7 @@ if (!Array.isArray(payload.characters) || payload.characters.length !== 1) throw
 if (payload.characters.some((character) => character.name === 'LaunchAlt')) throw new Error('deleted launch character should leave the account roster');
 if (!payload.characters.some((character) => character.name === 'LaunchGuy')) throw new Error('deleting the second launch character should keep the first character');
 if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('character deletion should leave the waiting starter card alone');
+if (payload.rewards.starterSubscriptionCards !== 2) throw new Error('character deletion must preserve both frozen lifetime issuance rows');
 " "$launch_delete_extra"
 launch_alt_after_delete="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchAlt';")"
 if [[ "$launch_alt_after_delete" != "0" ]]; then
@@ -1549,60 +1782,103 @@ if [[ "$launch_alt_link_after_delete" != "0" ]]; then
 	echo "deleting a launch-created character should not leave orphaned web-account links"
 	exit 1
 fi
-
-launch_revoke="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
-	-H "x-portal-admin-token: ${public_admin_token}" \
-	-H 'content-type: application/json' \
-	-d '{"action":"revoke"}')"
-node -e "
-const payload = JSON.parse(process.argv[1]);
-if (payload.rewards.starterCardStatus !== 'none') throw new Error('admin revoke should clear an unclaimed starter card');
-if (payload.rewards.starterSubscriptionCards !== 0) throw new Error('admin revoke should leave zero waiting starter cards');
-" "$launch_revoke"
-launch_waiting_after_revoke="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter_card:1' AND value='1';")"
-if [[ "$launch_waiting_after_revoke" != "0" ]]; then
-	echo "admin starter-card revoke should clear the unclaimed OpenRSC marker"
+launch_deleted_tombstone="$(sqlite3 "$launch_fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter:1:${launch_extra_player_id}' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$launch_deleted_tombstone" != "1" ]]; then
+	echo "deleting a frozen character must preserve its global founder-card tombstone"
 	exit 1
 fi
 
-launch_grant="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
+launch_replacement="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/characters" \
+	-H "authorization: Bearer ${launch_token}" \
+	-H 'content-type: application/json' \
+	-d '{"name":"LaunchRepl","gamePassword":"R3pl"}')"
+launch_replacement_portal_id="$(node -e "
+const payload = JSON.parse(process.argv[1]);
+const row = payload.characters.find((character) => character.name === 'LaunchRepl');
+if (!row || !row.id) throw new Error('replacement character should be created');
+if (payload.rewards.starterSubscriptionCards !== 3) throw new Error('replacement creation should receive its separate launch-window card without expanding the founder ledger');
+process.stdout.write(String(row.id));
+" "$launch_replacement")"
+launch_replacement_player_id="$(sqlite3 "$launch_fixture_db" "SELECT id FROM players WHERE username='LaunchRepl' LIMIT 1;")"
+launch_replacement_marker="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter:1:${launch_replacement_player_id}';")"
+if [[ "$launch_replacement_marker" != "0" ]]; then
+	echo "a replacement character must not inherit or replenish a frozen founder issuance"
+	exit 1
+fi
+launch_grant_existing="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
 	-H "x-portal-admin-token: ${public_admin_token}" \
 	-H 'content-type: application/json' \
 	-d '{"action":"grant"}')"
 node -e "
 const payload = JSON.parse(process.argv[1]);
-if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('admin grant should restore starter card waiting state');
-if (payload.rewards.starterSubscriptionCards !== 1) throw new Error('admin grant should expose one waiting starter card');
-" "$launch_grant"
-launch_waiting_after_grant="$(sqlite3 "$launch_fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
-if [[ "$launch_waiting_after_grant" != "1" ]]; then
-	echo "admin starter-card grant should restore the OpenRSC marker"
+if (payload.rewards.starterSubscriptionCards !== 3) throw new Error('admin grant must leave the founder and launch ledgers unchanged');
+const replacement = payload.rewards.cards.find((card) => Number(card.playerId) === Number(process.argv[2]));
+if (!replacement || replacement.source !== 'launch_24h_card') throw new Error('replacement must remain launch-only after admin reconciliation');
+" "$launch_grant_existing" "$launch_replacement_player_id"
+launch_replacement_marker_after_grant="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter:1:${launch_replacement_player_id}';")"
+if [[ "$launch_replacement_marker_after_grant" != "0" ]]; then
+	echo "admin reconciliation must not expand an immutable founder freeze"
 	exit 1
 fi
+expect_status 409 -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
+	-H "x-portal-admin-token: ${public_admin_token}" \
+	-H 'content-type: application/json' \
+	-d '{"action":"revoke"}'
+launch_waiting_after_rejected_revoke="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter:1:%' AND value='1';")"
+if [[ "$launch_waiting_after_rejected_revoke" != "2" ]]; then
+	echo "unsupported admin revoke must leave the immutable freeze untouched"
+	exit 1
+fi
+curl -fsS -X DELETE "http://127.0.0.1:${launch_port}/api/characters/${launch_replacement_portal_id}" \
+	-H "authorization: Bearer ${launch_token}" >/dev/null
 
-sqlite3 "$launch_fixture_db" "UPDATE player_cache SET value='2' WHERE playerID=0 AND key='starter_card:1';"
+sqlite3 "$launch_fixture_db" "UPDATE player_cache SET value='2' WHERE playerID=0 AND key='starter:1:${launch_guy_player_id}';"
 launch_account_claimed="$(curl -fsS -H "authorization: Bearer ${launch_token}" "http://127.0.0.1:${launch_port}/api/account")"
 node -e "
 const payload = JSON.parse(process.argv[1]);
-if (payload.rewards.starterCardStatus !== 'claimed') throw new Error('account state should show a claimed starter card');
-if (payload.rewards.starterSubscriptionCards !== 0) throw new Error('claimed starter cards should not remain waiting');
+if (payload.rewards.starterCardStatus !== 'waiting') throw new Error('the deleted sibling still has one waiting lifetime issuance');
+if (payload.rewards.starterSubscriptionCards !== 1) throw new Error('one sibling marker should remain waiting');
 if (payload.rewards.starterSubscriptionCardsClaimed !== 1) throw new Error('claimed starter card count should be exposed');
 " "$launch_account_claimed"
 
-launch_revoke_claimed="$(curl -fsS -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
+expect_status 409 -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
 	-H "x-portal-admin-token: ${public_admin_token}" \
 	-H 'content-type: application/json' \
-	-d '{"action":"revoke"}')"
-node -e "
-const payload = JSON.parse(process.argv[1]);
-if (payload.rewards.starterCardStatus !== 'claimed') throw new Error('admin revoke should not erase an already claimed starter card');
-if (payload.rewards.starterSubscriptionCardsClaimed !== 1) throw new Error('claimed starter card should remain visible after revoke');
-" "$launch_revoke_claimed"
-launch_claimed_after_revoke="$(sqlite3 "$launch_fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter_card:1' ORDER BY dbid DESC LIMIT 1;")"
-if [[ "$launch_claimed_after_revoke" != "2" ]]; then
-	echo "admin starter-card revoke should preserve an already claimed marker"
+	-d '{"action":"revoke"}'
+launch_claimed_after_rejected_revoke="$(sqlite3 "$launch_fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='starter:1:${launch_guy_player_id}' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$launch_claimed_after_rejected_revoke" != "2" ]]; then
+	echo "unsupported admin revoke must preserve claimed audit truth"
 	exit 1
 fi
+
+# Claimed legacy history remains visible as independent audit metadata even when
+# valid composite rows exist; it becomes a display-only fallback only when no
+# valid composite survives.
+sqlite3 "$launch_fixture_db" "INSERT INTO player_cache (playerID,type,key,value) VALUES (0,0,'starter_card:1','2');"
+launch_composite_with_legacy="$(curl -fsS -H "authorization: Bearer ${launch_token}" "http://127.0.0.1:${launch_port}/api/account")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.rewards.cards.length !== 2 || payload.rewards.cards.some((card) => card.legacy)) throw new Error('valid composites remain the visible reward rows');
+if (payload.rewards.starterCardLedger.legacyStatus !== 'claimed') throw new Error('claimed legacy audit state must remain independently visible');
+if (payload.rewards.starterCardLedger.legacyFallback) throw new Error('legacy should not double-count beside valid composites');
+" "$launch_composite_with_legacy"
+sqlite3 "$launch_fixture_db" <<SQL
+DELETE FROM player_cache WHERE playerID=0 AND key LIKE 'starter:1:%';
+DELETE FROM player_cache WHERE playerID=${launch_guy_player_id} AND key='launch_24h_card';
+INSERT INTO player_cache (playerID,type,key,value) VALUES (0,0,'starter:1:2147483648','1');
+SQL
+expect_status 409 -X POST "http://127.0.0.1:${launch_port}/api/admin/accounts/1/starter-card" \
+	-H "x-portal-admin-token: ${public_admin_token}" \
+	-H 'content-type: application/json' \
+	-d '{"action":"grant"}'
+launch_legacy_only="$(curl -fsS -H "authorization: Bearer ${launch_token}" "http://127.0.0.1:${launch_port}/api/account")"
+node -e "
+const payload = JSON.parse(process.argv[1]);
+if (payload.rewards.starterCardStatus !== 'claimed') throw new Error('claimed legacy audit truth must remain visible');
+if (payload.rewards.starterSubscriptionCardsClaimed !== 1) throw new Error('claimed legacy fallback should count exactly once');
+if (!payload.rewards.starterCardLedger.legacyFallback) throw new Error('claimed legacy reward should identify its display-only fallback');
+if (payload.rewards.cards.length !== 1 || payload.rewards.cards[0].legacy !== true) throw new Error('out-of-range composite IDs must be ignored');
+" "$launch_legacy_only"
 
 expect_status 409 -X POST "http://127.0.0.1:${launch_port}/api/characters" \
 	-H "authorization: Bearer ${launch_token}" \
@@ -2057,9 +2333,9 @@ if [[ "$verify_after_players" != "1" ]]; then
 	echo "email verification should create exactly one OpenRSC player"
 	exit 1
 fi
-verify_waiting_card="$(sqlite3 "$verify_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='starter_card:1' AND value='1';")"
-if [[ "$verify_waiting_card" != "1" ]]; then
-	echo "email verification should create one waiting starter-card marker"
+verify_waiting_card="$(sqlite3 "$verify_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND (key LIKE 'starter:1:%' OR key='starter_card:1');")"
+if [[ "$verify_waiting_card" != "0" ]]; then
+	echo "email verification should record founder qualification without expanding the launch freeze"
 	exit 1
 fi
 
@@ -2073,11 +2349,16 @@ const payload = JSON.parse(process.argv[1]);
 if (payload.createdAccounts !== 2) throw new Error('native backfill should create two synthetic portal accounts, got ' + payload.createdAccounts);
 if (payload.createdCharacters !== 2) throw new Error('native backfill should create two native character links, got ' + payload.createdCharacters);
 if (payload.linkedPlayers !== 2) throw new Error('native backfill should stamp two ownership markers, got ' + payload.linkedPlayers);
-if (payload.starterCardsGranted !== 2) throw new Error('native backfill should preserve the promotion for both older accounts');
+if (payload.starterCardsGranted !== 0) throw new Error('native backfill must not mint founder-card rows outside the launch freeze');
 if (payload.subscriptionsMigrated !== 1 || !payload.gameWrites || payload.gameWrites.accountSubscriptionsUpserted !== 1) {
 	throw new Error('native backfill should migrate the active character subscription to its portal account');
 }
 " "$native_backfill"
+native_backfill_starter_rows="$(sqlite3 "$verify_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND (key LIKE 'starter:%' OR key LIKE 'starter_card:%');")"
+if [[ "$native_backfill_starter_rows" != "0" ]]; then
+	echo "native ownership backfill must not expand the founder freeze manifest"
+	exit 1
+fi
 
 legacy_store="$tmp_dir/verify-store/dev-store.json"
 legacy_before="$(node - "$legacy_store" <<'NODE'
@@ -2278,7 +2559,7 @@ const state = JSON.parse(process.argv[2]);
 if (!state.account || state.account.id !== before.accountId || state.account.email !== 'legacy-owner@example.com') throw new Error('claim must preserve the account id and expose the verified email');
 const character = (state.characters || []).find((row) => row.id === before.characterId);
 if (!character || character.playerId !== before.playerId || character.source !== before.characterSource) throw new Error('claim must preserve the native character link and source');
-if (!state.rewards || state.rewards.starterSubscriptionCards !== 1) throw new Error('claim must preserve the starter-card promotion');
+if (!state.rewards || state.rewards.starterSubscriptionCards !== before.entitlements) throw new Error('claim must preserve the existing founder-reward count without minting through native backfill');
 " "$legacy_before" "$legacy_account_state"
 legacy_after="$(node - "$legacy_store" <<'NODE'
 const store = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
@@ -2417,8 +2698,54 @@ kill "$verify_pid" >/dev/null 2>&1 || true
 wait "$verify_pid" >/dev/null 2>&1 || true
 verify_pid=""
 
-# Simulate one in-game redemption, then check the admin signup list reflects it.
-sqlite3 "$fixture_db" "UPDATE player_cache SET value='2' WHERE playerID=0 AND key=(SELECT key FROM player_cache WHERE playerID=0 AND key LIKE 'signup_code:%' ORDER BY dbid LIMIT 1);"
+# A base signup code and its founder classifier are one atomic unit. Force the
+# classifier insert to abort and prove the signup row is rolled back too.
+sqlite3 "$fixture_db" <<'SQL'
+CREATE TRIGGER fail_founder_base_tag_insert
+BEFORE INSERT ON player_cache
+WHEN NEW.playerID=0 AND NEW.key LIKE 'base_tag:%'
+BEGIN
+  SELECT RAISE(ABORT, 'forced base tag failure');
+END;
+SQL
+atomic_founder="$(curl -fsS -X POST "http://127.0.0.1:${PORT}/api/founder/reservations" \
+	-H 'content-type: application/json' \
+	-d '{"username":"AtomicFail","email":"atomic-fail@example.com"}')"
+atomic_founder_code="$(node -e "
+const payload = JSON.parse(process.argv[1]);
+if (!payload.signup || payload.signup.syncedToGame !== false) throw new Error('forced classifier failure should leave the portal code unsynced');
+process.stdout.write(String(payload.signup.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20));
+" "$atomic_founder")"
+atomic_founder_rows="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key IN ('signup_code:${atomic_founder_code}','base_tag:${atomic_founder_code}','base_acct:${atomic_founder_code}');")"
+if [[ "$atomic_founder_rows" != "0" ]]; then
+	echo "founder signup code and classifier must roll back together"
+	exit 1
+fi
+sqlite3 "$fixture_db" "DROP TRIGGER fail_founder_base_tag_insert;"
+
+# Simulate one in-game base-code redemption with an unbound legacy classifier.
+# The routine admin repair must preserve that ambiguity rather than binding the
+# code to whichever same-name character happens to exist now. Also remove one
+# clean referral row and contaminate another with a founder tag so repair must
+# recreate only the clean reward and fail closed on the contaminated one.
+read -r redeemed_base_code repair_referral_code contaminated_referral_code < <(node - "$tmp_dir/dev-store.json" <<'NODE'
+const fs = require("fs");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const normalize = (code) => String(code || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
+const founder = (store.founders || []).find((entry) => entry.signupCode && Array.isArray(entry.referralRewardCodes) && entry.referralRewardCodes.length);
+if (!founder) throw new Error("founder with referral rewards not found");
+const referrals = founder.referralRewardCodes.filter((entry) => entry && entry.code && entry.syncedAt);
+if (referrals.length < 2) throw new Error("two synced referral reward fixtures not found");
+process.stdout.write(`${normalize(founder.signupCode)} ${normalize(referrals[0].code)} ${normalize(referrals[1].code)}\n`);
+NODE
+)
+sqlite3 "$fixture_db" <<SQL
+UPDATE player_cache SET value='2' WHERE playerID=0 AND key='signup_code:${redeemed_base_code}';
+DELETE FROM player_cache WHERE playerID=0 AND key='base_tag:${redeemed_base_code}';
+DELETE FROM player_cache WHERE playerID=0 AND key='signup_code:${repair_referral_code}';
+DELETE FROM player_cache WHERE playerID=0 AND key='signup_code:${contaminated_referral_code}';
+INSERT INTO player_cache (playerID,type,key,value) VALUES (0,0,'base_tag:${contaminated_referral_code}','0');
+SQL
 
 signups_json="$(curl -fsS -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${PORT}/api/admin/signups")"
 if ! grep -q '"redeemed"' <<<"$signups_json"; then
@@ -2441,7 +2768,54 @@ if ! node -e "
 const result = JSON.parse(process.argv[1]);
 if (result.skippedRedeemed < 1) throw new Error('sync should skip the redeemed code');
 if (result.failed !== 0) throw new Error('sync should not fail against the fixture DB');
+if (result.referralSynced < 1) throw new Error('sync should repair the clean missing referral reward row');
+if (result.referralFailed !== 1) throw new Error('sync should fail closed on the contaminated referral classifier');
 " "$sync_result"; then
 	echo "admin signup sync failed: $sync_result"
 	exit 1
 fi
+redeemed_base_tag="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='base_tag:${redeemed_base_code}' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$redeemed_base_tag" != "0" ]]; then
+	echo "routine sync must not infer a positive player binding for an already-redeemed legacy base code"
+	exit 1
+fi
+repaired_referral_value="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='signup_code:${repair_referral_code}' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$repaired_referral_value" != "1" ]]; then
+	echo "admin signup sync should restore a missing referral reward code"
+	exit 1
+fi
+repaired_referral_tag_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key IN ('base_tag:${repair_referral_code}','base_acct:${repair_referral_code}');")"
+if [[ "$repaired_referral_tag_count" != "0" ]]; then
+	echo "admin signup sync must keep referral rewards independent of founder base tags"
+	exit 1
+fi
+contaminated_referral_rows="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key='signup_code:${contaminated_referral_code}';")"
+if [[ "$contaminated_referral_rows" != "0" ]]; then
+	echo "referral repair must not activate a code carrying a founder classifier"
+	exit 1
+fi
+
+# Once staff removes the invalid classifier, the same repair safely restores the
+# referral. Founder tags must also reject out-of-range and mismatched bindings.
+sqlite3 "$fixture_db" "DELETE FROM player_cache WHERE playerID=0 AND key='base_tag:${contaminated_referral_code}';"
+referral_repair_retry="$(curl -fsS -X POST -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${PORT}/api/admin/signups/sync")"
+node -e "
+const result = JSON.parse(process.argv[1]);
+if (result.failed !== 0 || result.referralFailed !== 0) throw new Error('corrected signup ledgers should repair cleanly');
+if (result.referralSynced < 2) throw new Error('forced repair should reconcile every referral reward');
+" "$referral_repair_retry"
+assert_repaired_contaminated="$(sqlite3 "$fixture_db" "SELECT value FROM player_cache WHERE playerID=0 AND key='signup_code:${contaminated_referral_code}' ORDER BY dbid DESC LIMIT 1;")"
+if [[ "$assert_repaired_contaminated" != "1" ]]; then
+	echo "corrected referral reward should be restored as available"
+	exit 1
+fi
+
+sqlite3 "$fixture_db" "UPDATE player_cache SET value='2147483648' WHERE playerID=0 AND key='base_tag:${redeemed_base_code}';"
+out_of_range_sync="$(curl -fsS -X POST -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${PORT}/api/admin/signups/sync")"
+node -e "const result=JSON.parse(process.argv[1]); if(result.failed < 1) throw new Error('out-of-range founder tag must fail sync');" "$out_of_range_sync"
+sqlite3 "$fixture_db" "UPDATE player_cache SET value='2147483647' WHERE playerID=0 AND key='base_tag:${redeemed_base_code}';"
+mismatched_sync="$(curl -fsS -X POST -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${PORT}/api/admin/signups/sync")"
+node -e "const result=JSON.parse(process.argv[1]); if(result.failed < 1) throw new Error('wrong positive founder binding must fail sync');" "$mismatched_sync"
+sqlite3 "$fixture_db" "UPDATE player_cache SET value='0' WHERE playerID=0 AND key='base_tag:${redeemed_base_code}';"
+final_sync="$(curl -fsS -X POST -H 'x-portal-admin-token: dev-admin' "http://127.0.0.1:${PORT}/api/admin/signups/sync")"
+node -e "const result=JSON.parse(process.argv[1]); if(result.failed !== 0 || result.referralFailed !== 0) throw new Error('restored canonical ledgers should pass final sync');" "$final_sync"

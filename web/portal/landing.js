@@ -204,10 +204,9 @@
 		captchaConfig = state && state.captcha || null;
 		downloadRows = Array.isArray(state && state.downloads) ? state.downloads : [];
 		launchSchedule = state && (state.launch || (state.beta && state.beta.schedule)) || null;
+		var serverNow = launchSchedule && launchSchedule.now ? Date.parse(launchSchedule.now) : NaN;
+		serverClockOffset = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
 		launchStarterCardOpen = starterCardWindowOpen(launchSchedule);
-		serverClockOffset = launchSchedule && launchSchedule.now
-			? Date.parse(launchSchedule.now) - Date.now()
-			: 0;
 		renderSignupCounter(state && state.founderStats);
 		updateDownloadLinks();
 		updateLaunchStateFromSchedule(state && state.status);
@@ -264,7 +263,7 @@
 				: loggedIn
 					? "Download a client or manage your account while the countdown runs."
 					: launchStarterCardOpen
-					? "Reserve your name now - founders start with a free week."
+					? "Create and verify your first character before 11:00 AM PT (18:00 UTC) on July 19, 2026 to get a free week."
 					: "Create your account and first character.";
 		}
 		if (els.chipText) {
@@ -505,7 +504,7 @@
 		if (els.successBlock) els.successBlock.hidden = false;
 		if (els.successName) els.successName.textContent = state.username || name || normalizeName(els.reserveName && els.reserveName.value || "") || "-";
 		if (els.successSub) {
-			els.successSub.textContent = "Check your email to verify. Your account, first character, and starter card are created only after verification.";
+			els.successSub.textContent = "Check your email to verify. Complete verification before 11:00 AM PT (18:00 UTC) on July 19, 2026 to receive the starter card.";
 		}
 		if (els.successCodeCard) els.successCodeCard.hidden = true;
 		pendingVerificationEmail = String(state.email || (els.reserveEmail && els.reserveEmail.value) || "").trim();
@@ -846,11 +845,12 @@
 	function starterCardWindowOpen(schedule) {
 		var card = schedule && schedule.starterCard;
 		if (!card) return true;
+		if (card.open === false) return false;
 		if (card.endsAt) {
 			var endsAt = Date.parse(card.endsAt);
-			if (Number.isFinite(endsAt)) return endsAt > Date.now();
+			if (Number.isFinite(endsAt)) return endsAt > Date.now() + serverClockOffset;
 		}
-		return card.open !== false;
+		return true;
 	}
 
 	function updateSignInCta() {
@@ -1000,9 +1000,12 @@
 	function launchDateLabel(value) {
 		var date = new Date(value || "");
 		if (Number.isNaN(date.getTime())) return "Launch date";
-		return "Launches " + date.toLocaleDateString("en-US", {
+		return "Launches " + date.toLocaleString("en-US", {
 			month: "long",
 			day: "numeric",
+			hour: "numeric",
+			minute: "2-digit",
+			timeZoneName: "short",
 			timeZone: "America/Los_Angeles"
 		});
 	}

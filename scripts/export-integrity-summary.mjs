@@ -169,10 +169,13 @@ async function accountIntegritySummary(sqliteDbPath) {
 		SELECT c.playerID, p.username, c.type, c.key, c.value
 		FROM player_cache c
 		LEFT JOIN players p ON p.id = c.playerID
-		WHERE c.key IN ('web_account_id', 'xp_lock_mask', 'player_title_active', 'player_title_unique_claim')
+		WHERE c.key IN ('web_account_id', 'xp_lock_mask', 'player_title_active', 'player_title_unique_claim', 'launch_24h_card')
 			OR c.key LIKE 'acct_sub:%'
 			OR c.key LIKE 'char_sub:%'
+			OR c.key LIKE 'starter:%'
 			OR c.key LIKE 'starter_card:%'
+			OR c.key LIKE 'base_tag:%'
+			OR c.key LIKE 'base_acct:%'
 			OR c.key LIKE 'signup_code:%'
 			OR c.key LIKE 'player_title_unlocked_%'
 		ORDER BY c.playerID ASC, c.key ASC
@@ -557,10 +560,17 @@ function scanAccountCacheRows(findings, rows, playerIDs) {
 		}
 		if (key === "web_account_id" && !isPositiveIntegerString(value)) {
 			findings.push(cacheFinding("invalid_web_account_link", "high", row, `web_account_id is not a positive integer.`));
+		} else if (key === "launch_24h_card") {
+			if (playerID <= 0) {
+				findings.push(cacheFinding("invalid_reward_key", "high", row, `Native launch-card marker is not character-scoped.`));
+			}
+			if (!["1", "2"].includes(value)) {
+				findings.push(cacheFinding("invalid_reward_state", "medium", row, `Native launch-card state is not available/claimed.`));
+			}
 		} else if (key === "xp_lock_mask" && !isNonNegativeIntegerString(value)) {
 			findings.push(cacheFinding("invalid_xp_lock_mask", "medium", row, `xp_lock_mask is not a non-negative integer.`));
 		} else if (key.startsWith("acct_sub:")) {
-			if (playerID !== -1) {
+			if (playerID !== 0) {
 				findings.push(cacheFinding("subscription_cache_scope", "medium", row, `Account subscription cache row is not global.`));
 			}
 			if (!isPositiveIntegerString(key.slice("acct_sub:".length))) {
@@ -569,15 +579,42 @@ function scanAccountCacheRows(findings, rows, playerIDs) {
 			validateSubscriptionExpires(findings, row, value, nowMillis, maxSubscriptionMillis);
 		} else if (key.startsWith("char_sub:")) {
 			const suffix = key.slice("char_sub:".length);
-			if (playerID !== -1) {
+			if (playerID !== 0) {
 				findings.push(cacheFinding("subscription_cache_scope", "medium", row, `Character subscription cache row is not global.`));
 			}
 			if (!isPositiveIntegerString(suffix) || !playerIDs.has(Number(suffix))) {
 				findings.push(cacheFinding("invalid_subscription_key", "high", row, `Character subscription key points at a missing player.`));
 			}
 			validateSubscriptionExpires(findings, row, value, nowMillis, maxSubscriptionMillis);
-		} else if (key.startsWith("starter_card:") && !["1", "2"].includes(value)) {
-			findings.push(cacheFinding("invalid_reward_state", "medium", row, `Starter-card reward state is not available/claimed.`));
+		} else if (key.startsWith("starter:")) {
+			const match = /^starter:([1-9][0-9]*):([1-9][0-9]*)$/.exec(key);
+			if (playerID !== 0 || !match || key.length > 32) {
+				findings.push(cacheFinding("invalid_reward_key", "high", row, `Founder-card reward key is not a global account/player marker.`));
+			}
+			if (!["1", "2"].includes(value)) {
+				findings.push(cacheFinding("invalid_reward_state", "medium", row, `Founder-card reward state is not available/claimed.`));
+			}
+		} else if (key.startsWith("starter_card:")) {
+			if (playerID !== 0 || !/^starter_card:[1-9][0-9]*$/.test(key)) {
+				findings.push(cacheFinding("invalid_reward_key", "high", row, `Legacy starter-card key has invalid scope or account id.`));
+			}
+			if (!["1", "2"].includes(value)) {
+				findings.push(cacheFinding("invalid_reward_state", "medium", row, `Legacy starter-card reward state is not available/claimed.`));
+			}
+		} else if (key.startsWith("base_tag:")) {
+			if (playerID !== 0 || !/^base_tag:[A-Z0-9]{1,20}$/.test(key) || key.length > 32) {
+				findings.push(cacheFinding("invalid_reward_key", "high", row, `Founder base-code tag has invalid scope or code.`));
+			}
+			if (!isNonNegativeIntegerString(value) || Number(value) > 2147483647) {
+				findings.push(cacheFinding("invalid_reward_state", "medium", row, `Founder base-code tag is not unassigned or bound to a player id.`));
+			}
+		} else if (key.startsWith("base_acct:")) {
+			if (playerID !== 0 || !/^base_acct:[A-Z0-9]{1,20}$/.test(key) || key.length > 32) {
+				findings.push(cacheFinding("invalid_reward_key", "high", row, `Founder base-code account tag has invalid scope or code.`));
+			}
+			if (!isNonNegativeIntegerString(value) || Number(value) > 2147483647) {
+				findings.push(cacheFinding("invalid_reward_state", "medium", row, `Founder base-code account tag is not code-only or bound to an account id.`));
+			}
 		} else if (key.startsWith("signup_code:") && !["1", "2"].includes(value)) {
 			findings.push(cacheFinding("invalid_reward_state", "medium", row, `Signup-code reward state is not available/redeemed.`));
 		}

@@ -36,6 +36,7 @@ REVIEWED_VOIDSCAPE_PROFILE = {
     "idle_timer": "600000",
     "idle_timer_subscriber": "900000",
     "inventory_count_toggle": "true",
+    "launch_subscription_card_until": "2026-07-19T18:00:00Z",
     "melee_gives_xp_hit": "true",
     "member_world": "true",
     "milliseconds_between_casts": "1900",

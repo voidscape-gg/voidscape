@@ -26,7 +26,15 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** VS-090 — founder starter card is account-wide instead of per character.
+- **Active bug:** VS-091 — invalid production portal store silently becomes an empty roster.
+- **Session preflight 2026-07-16 (VS-090 implementation):** branch
+  `codex/release-10139-integration`; worktree clean at `96ccf15a`; pre-change
+  `scripts/build.sh` passes with JDK 25 compatibility warnings only. Ryan approved the
+  recommended launch policy: only eligible characters present in the freeze snapshot
+  receive a founder card; deletion/recreation never replenishes an issuance; the same
+  character cannot stack a separate native-launch card; and a redeemed legacy founder
+  reward counts as that character's issuance. No production data will be used or
+  changed while implementing or testing this contract.
 - **Session preflight 2026-07-16 (VS-092):** branch
   `codex/release-10139-integration`; VS-089 is committed and fully verified at
   `6d70d5ee`, the worktree was clean at `6b4db905`, and its pre-change
@@ -130,16 +138,16 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — completed owner-authorized VS-092 production
-  containment. The active Nginx state and access logs were backed up, the narrow rule
-  passed syntax validation and reload, and all three public origins passed the
-  69-request matrix and canonical hosted verifier without breaking the launcher
-  manifest, portal, or play page. The corrected repository template and regression
-  coverage pass the full build.
-- **Next action:** resume VS-090 by obtaining or applying the recorded owner policy for
-  deletion/recreation, native-launch stacking, and legacy bearer-code accounting;
-  implement and verify the per-character founder entitlement, then work VS-091. Do not
-  push, publish source, or deploy any game/server/client artifact.
+- **Last session:** 2026-07-16 — completed and verified VS-090 locally. The founder
+  cohort freezes strictly at `2026-07-18T18:00:00Z`; each frozen character has its own
+  durable founder route, and every character created before
+  `2026-07-19T18:00:00Z` has a launch route. Overlap resolves to one physical card,
+  referral codes remain independent, and portal/native character creation plus reset
+  reruns are atomic and idempotent. Focused portal, reset, policy, packaging, and
+  boundary suites plus `scripts/build.sh` pass. No production data, deployment, push,
+  or source publication occurred.
+- **Next action:** implement and verify VS-091's fail-closed production store loading.
+  Do not push, publish source, or deploy any game/server/client artifact.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -422,36 +430,6 @@ half-remembered is fine, triage will chase it down.)_
 ---
 
 ## Open bugs
-
-### VS-090 — Founder starter card is account-wide instead of per character
-- Status: confirmed · Severity: P1 · Area: subscriptions / web-portal / launch reset
-- Evidence: Ryan's launch contract is one free card per character under every
-  qualifying pre-signed account. `VoidSubscription.starterCardCacheKey()` derives the
-  global `starter_card:<webAccountId>` key, `VoidSubscriptionVendor` changes that one
-  shared value from available to claimed, the portal maintains one starter entitlement
-  per account, and `reset-launch-game-db.mjs` emits one global account marker. The
-  portal API regression suite currently asserts that a second character does not
-  create another marker. Thus the first sibling to claim consumes every sibling's
-  promised reward.
-- Repro: make one eligible portal account with characters A and B and one available
-  global starter marker. Claim on A; the global state becomes claimed and B cannot
-  claim. An account with ten characters still has only one marker/card.
-- Verify: preserve one campaign-eligibility record for each approved founder account
-  and one durable `starter_card_character` available/claimed marker per eligible
-  player ID. Two siblings claim independently; repeated/full-inventory claims remain
-  idempotent; ten characters yield exactly ten lifetime grant records; ineligible
-  accounts yield zero; create/link/backfill/reset paths converge without duplicates;
-  legacy base codes convert without resurrection; referral rewards remain separate;
-  the native-launch promotion follows the approved stacking rule; deletion/recreation
-  follows the approved lifetime policy; card redemption still extends the shared
-  account subscription. Add synthetic 190-founder reset fixtures and run the focused
-  portal/vendor/reset suites plus `scripts/build.sh`.
-- Log: 2026-07-16 triaged from Ryan's explicit per-character clarification and
-  conclusive code evidence. Recommended policy: at most ten lifetime founder-card
-  issuances per qualifying account, deletion does not replenish the allowance, the
-  separate native-launch base card does not stack on the same character, and a used
-  legacy bearer code consumes one of the ten lifetime issuances. Await owner ruling
-  before implementation because these choices materially change the economy.
 
 ### VS-091 — Invalid production portal store silently becomes an empty roster
 - Status: confirmed · Severity: P1 · Area: web-portal / account-data durability
@@ -1097,6 +1075,30 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-090 — Founder starter card is account-wide instead of per character (FIXED)
+- Status: verified · Severity: P1 · Area: subscriptions / web-portal / launch reset
+- Root cause: every sibling under a qualifying founder account used the same global
+  `starter_card:<accountId>` state, so the first claim consumed the promised reward
+  for all of them. The independent launch promotion and legacy bearer-code paths also
+  lacked one authoritative overlap rule.
+- Fix: the founder freeze now writes one durable
+  `starter:<accountId>:<playerId>` route for each eligible character present strictly
+  before `2026-07-18T18:00:00Z`; deletion does not replenish that frozen manifest.
+  Founder base codes are classified by both `base_tag:<code>` and
+  `base_acct:<code>`, while referral codes remain independent bonuses. Separately,
+  portal and packet registration atomically create one `launch_24h_card` route for
+  every character created before `2026-07-19T18:00:00Z`. A character with overlapping
+  founder and launch routes receives exactly one physical card and both routes close
+  together. Legacy account-wide markers are migration input only, and ambiguous
+  history fails closed.
+- Verified 2026-07-16: synthetic reset fixtures cover 190 founders, ten-character
+  accounts, strict launch/founder cutoff boundaries, deletion/recreation, repeated
+  official-freeze resets, redeemed code-only founders that later link to a portal
+  account, and founder/launch duplicate suppression. The policy suite covers sibling
+  independence, code binding, overlap, and cutoff behavior. Portal registration/API,
+  schema, static-boundary, launch-config/package, reset, and full `scripts/build.sh`
+  checks pass. No production data, deployment, push, or source publication occurred.
 
 ### VS-092 — Emergency Nginx containment template overblocks the launcher manifest (FIXED)
 - Status: verified · Severity: P1 · Area: web-portal / nginx / release operations
