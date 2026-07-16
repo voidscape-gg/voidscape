@@ -7,6 +7,8 @@
     <property name="jar" location="Open_RSC_Client.jar"/>
     <property name="javac.source" value="1.8"/>
     <property name="javac.target" value="1.8"/>
+    <!-- Stable ZIP entry timestamps keep the release jar and legacy MD5 table reproducible. -->
+    <property name="archive.modificationtime" value="2000-01-01T00:00:00Z"/>
     <property name="workbench.jvmargs" value=""/>
 
     <target name="clean">
@@ -30,7 +32,7 @@
             </classpath>
             <compilerarg line="-Xlint:unchecked"/>
         </javac>
-        <jar basedir="${build}" destfile="${jar}">
+        <jar basedir="${build}" destfile="${jar}" modificationtime="${archive.modificationtime}">
             <zipgroupfileset dir="${lib}" includes="*.jar"/>
             <manifest>
                 <attribute name="Main-Class" value="orsc.OpenRSC"/>

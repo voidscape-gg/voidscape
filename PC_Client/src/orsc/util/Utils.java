@@ -32,15 +32,17 @@ public class Utils {
 		}
 	}
 
-	public static void openWebpage(final String url) {
+	public static boolean openWebpage(final String url) {
 		final Desktop desktop = Desktop.isDesktopSupported() ? Desktop.getDesktop() : null;
 		if (desktop != null && desktop.isSupported(Desktop.Action.BROWSE)) {
 			try {
 				desktop.browse(new URL(url).toURI());
+				return true;
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
+		return false;
 	}
 
 	public static synchronized long currentTimeMillis() {

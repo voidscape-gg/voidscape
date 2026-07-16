@@ -638,8 +638,7 @@ public class ORSCApplet extends Applet implements ComponentListener, ImageObserv
 		if (url == null || url.trim().length() == 0) {
 			return false;
 		}
-		Utils.openWebpage(url.trim());
-		return true;
+		return Utils.openWebpage(url.trim());
 	}
 
 	@Override
