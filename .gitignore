@@ -217,3 +217,10 @@ tools/rsc-mapgen/map.png
 tools/voidbot/capture.jsonl
 tools/voidbot/dbg.jsonl
 tools/voidbot/__pycache__/
+tools/headless_players/__pycache__/
+
+# Python bytecode caches are always local build/test artifacts.
+__pycache__/
+
+# Machine-local Claude launch state contains per-session temporary paths.
+.claude/launch.json
