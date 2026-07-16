@@ -66,10 +66,10 @@ Account creation and recovery are browser portal handoffs on the web mobile prof
 
 ```text
 https://<host>/index.html?mobile=1&portal=https://<portal-host>/
-https://<host>/index.html?mobile=1&portalAccountUrl=https://<portal-host>/#account&portalRecoveryUrl=https://<portal-host>/#security
+https://<host>/index.html?mobile=1&portalAccountUrl=https://<portal-host>/portal%3Fauth%3Dregister&portalRecoveryUrl=https://<portal-host>/portal%3Fauth%3Drecovery
 ```
 
-`portal` derives `#account` for Create Account and `#security` for Recover account. Specific `portalAccountUrl` / `accountUrl` and `portalRecoveryUrl` / `recoveryUrl` override those defaults. Query-configured portal URLs are saved in browser storage for Home Screen launches; use `resetPortal=1` or `portalReset=1` to clear them. Only `http`, `https`, or same-origin relative URLs are accepted. The handoff navigates the current tab instead of calling `window.open`, which avoids Mobile Safari popup-blocking when the shared Java game loop handles the click.
+`portal` derives `?auth=register` on the portal base for Create Account and retains the `#security` recovery handoff. Production may use the canonical `/portal?auth=register` and `/portal?auth=recovery` aliases through the explicit overrides. Specific `portalAccountUrl` / `accountUrl` and `portalRecoveryUrl` / `recoveryUrl` override those defaults. Query-configured portal URLs are saved in browser storage for Home Screen launches; use `resetPortal=1` or `portalReset=1` to clear them. Only `http`, `https`, or same-origin relative URLs are accepted. The handoff navigates the current tab instead of calling `window.open`, which avoids Mobile Safari popup-blocking when the shared Java game loop handles the click.
 
 Repeatable Chrome iPhone-emulation smoke:
 

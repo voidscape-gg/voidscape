@@ -847,6 +847,17 @@ if (apkBuilt) {
 	community_rules_html="$(curl -fsS "http://127.0.0.1:${public_port}/community-rules")"
 	grep -q '<title>Voidscape Community Rules</title>' <<<"$community_rules_html" || { echo "/community-rules should serve the current policy"; exit 1; }
 	grep -q 'version 2026-07-16' <<<"$community_rules_html" || { echo "/community-rules should identify the registration terms version"; exit 1; }
+	expect_status 302 "http://127.0.0.1:${public_port}/portal?auth=register"
+	expect_status 302 -I "http://127.0.0.1:${public_port}/portal?auth=register"
+	registration_headers="$(curl -sS -D - -o /dev/null "http://127.0.0.1:${public_port}/portal?auth=register&ref=VOID-ABC123")"
+	grep -Eqi '^location: /\?auth=register&ref=VOID-ABC123\r?$' <<<"$registration_headers" || {
+		echo "/portal?auth=register should redirect to the rules-gated landing signup and preserve a valid referral"
+		exit 1
+	}
+	registration_html="$(curl -fsSL "http://127.0.0.1:${public_port}/portal?auth=register")"
+	grep -q 'id="reserve-form"' <<<"$registration_html" || { echo "registration redirect should land on the signup form"; exit 1; }
+	grep -q 'id="reserve-terms" type="checkbox" value="2026-07-16"' <<<"$registration_html" || { echo "registration redirect should retain the current Community Rules acceptance gate"; exit 1; }
+	grep -q 'href="/community-rules"' <<<"$registration_html" || { echo "registration redirect should expose the Community Rules link"; exit 1; }
 	expect_status 200 "http://127.0.0.1:${public_port}/data-deletion"
 	privacy_html="$(curl -fsS "http://127.0.0.1:${public_port}/privacy")"
 	grep -q 'Voidscape account data should stay boring and explainable.' <<<"$privacy_html" || { echo "/privacy should render the policy copy"; exit 1; }

@@ -27,6 +27,16 @@ to resume from these two files alone. Keep every entry self-contained.
 ## Loop state
 
 - **Active bug:** None.
+- **Session preflight 2026-07-16 (VS-084):** branch
+  `codex/release-10139-integration`; tracked worktree clean at
+  `28ee1df1667957935354e6ab28baea48b3ecdfe2`. The exact signed Play AAB v10 was
+  uploaded under managed publishing, but release QA proved its compiled Android
+  account URL is `/portal?auth=login`; the TeaVM default similarly derives
+  `/#account`, which the landing script redirects to sign-in. The launch portal's
+  actual rules-gated registration form is `/`. Google Play versionCode 10 is now
+  consumed, so the corrected candidate must use a higher versionCode and replace the
+  held Play change before publication. Pre-change build/release gates on this clean
+  commit were green; no production server, portal, web client, or Play rollout is live.
 - **Session preflight 2026-07-15 (VS-083):** branch `main`; the extensive approved
   uncommitted feature tree remains in place, including existing VS-082 gathering
   guards, earned-batching changes, headless-controller/voidbot work, and changes in
@@ -53,16 +63,14 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-15 — VS-083 verified. Repeated exact-target scenery clicks
-  during Woodcutting, Fishing, and Mining now coalesce into one follow-up attempt;
-  earned repeats satisfy the buffered click before a single manual tail is considered,
-  and point-walk/other semantic input still cancels immediately. Isolated live voidbot
-  proof covered all three skills plus the level-10 two-attempt boundary, focused Java,
-  contract, interruption, and wire tests pass, and the full build is green. The fix
-  remains uncommitted with the approved uncommitted skill-batching/headless-player
-  feature base it depends on.
-- **Next action:** no bug is active; resume the launch-readiness sweep or triage the
-  next Intake report when the bug loop is invoked again.
+- **Last session:** 2026-07-16 — VS-084 verified. Android and TeaVM Create Account now
+  open the rules-gated registration surface directly, the portal preserves the safe
+  registration/referral alias, and Google Play advances to v11 / 1.0.10. Portal API,
+  schema, full visual signup, TeaVM controls, staging guards, API35 bootstrap and exact
+  browser intent, signed APK, signed AAB, provenance, signer, version, and full build
+  gates pass. Play remains held behind managed publishing while v11 replaces v10.
+- **Next action:** triage the release QA finding that TeaVM packaging admitted editor
+  scratch files, then continue the held release-candidate sweep.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -969,6 +977,28 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-084 — Android/web Create Account opened sign-in instead of registration (FIXED)
+- Status: verified · Severity: P1 · Area: Android APK / TeaVM web / portal launch
+- Root cause: native Android compiled Create Account against
+  `/portal?auth=login`, while TeaVM derived its default account handoff through the
+  legacy `#account` hash; both paths reached sign-in before the rules-gated signup.
+  Google Play versionCode 10 was already consumed by the held managed-publishing
+  submission containing that contract.
+- Fix: Android v11 / 1.0.10 compiles the canonical `/portal?auth=register` URL. The
+  portal maps GET/HEAD for that alias to `/?auth=register` with no-store semantics and
+  preserves only a valid referral token; TeaVM derives the same direct registration
+  handoff. Staging guards, documentation, web QA, and Android intent assertions share
+  the contract. Desktop packet registration and all gameplay/network behavior remain
+  unchanged.
+- Verified 2026-07-16: portal API and schema tests, 71/71 portal visual checks including
+  Community Rules acceptance and account creation, TeaVM build/controls, staging guard,
+  clean API35 bootstrap, and the focused API35 Create Account intent pass. The trusted
+  upload certificate signed v11 APK and AAB; APK and Play preflights verify client
+  cohort 10139, exact clean provenance, signer SHA-256, artifact hashes, target SDK,
+  and versionCode greater than 10. `scripts/build.sh`, syntax, and whitespace gates
+  pass. Managed publishing keeps Play non-public while the corrected v11 candidate
+  replaces v10 and the remaining release gates are completed.
 
 ### VS-083 — Re-clicking a gathering node cancelled the attempt and dropped the input (FIXED)
 - Status: verified · Severity: P2 · Area: server gameplay / gathering input

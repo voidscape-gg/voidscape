@@ -96,6 +96,7 @@ ONLY_AUTH_LOGIN=0
 ONLY_AUTH_LIFECYCLE=0
 ONLY_AUTH_CREDENTIALS=0
 ONLY_BOOTSTRAP=0
+ONLY_ACCOUNT_HANDOFF=0
 ORIGINAL_ACCELEROMETER_ROTATION=""
 ORIGINAL_USER_ROTATION=""
 ORIGINAL_WINDOW_ROTATION_MODE=""
@@ -115,6 +116,8 @@ AUTH_USER="${ANDROID_SMOKE_AUTH_USER:-}"
 AUTH_PASS="${ANDROID_SMOKE_AUTH_PASS:-}"
 AUTH_HOST="${ANDROID_SMOKE_AUTH_HOST:-10.0.2.2}"
 AUTH_PORT="${ANDROID_SMOKE_AUTH_PORT:-43596}"
+ACCOUNT_HANDOFF_HOST="${ANDROID_SMOKE_ACCOUNT_HANDOFF_HOST:-}"
+ACCOUNT_HANDOFF_PORT="${ANDROID_SMOKE_ACCOUNT_HANDOFF_PORT:-43596}"
 AUTH_DB="${ANDROID_SMOKE_AUTH_DB:-}"
 AUTH_USE_BUNDLED_ENDPOINT="${ANDROID_SMOKE_AUTH_USE_BUNDLED_ENDPOINT:-0}"
 AUTH_EXISTING_USER_X_PCT="${ANDROID_SMOKE_AUTH_EXISTING_USER_X_PCT:-50}"
@@ -227,7 +230,7 @@ PENDING_SERVER_PORT=""
 
 usage() {
     cat <<EOF
-Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-bootstrap] [--only-auth-credentials] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-camera] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-afk] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
+Usage: scripts/android-smoke.sh [--no-build] [--no-install] [--only-bootstrap] [--only-account-handoff] [--only-auth-credentials] [--only-auth-login] [--only-auth-lifecycle] [--only-auth-camera] [--only-auth-zoom] [--only-auth-chat-tabs] [--only-auth-chat-send] [--only-auth-bank] [--only-auth-shop] [--only-auth-equipment] [--only-auth-magic-prayer] [--only-auth-world-map] [--only-auth-settings] [--only-auth-afk] [--only-auth-ground-loot] [--only-auth-wilderness-target] [--only-auth-pvp-stress] [--out DIR]
 
 Builds and installs the debug APK, starts $AVD_NAME when no Android device is
 connected, launches the wrapper, and captures the core Android QA screenshots.
@@ -242,12 +245,15 @@ Environment:
   ANDROID_SMOKE_AUTH_PASS          Optional game password for in-game/logout smoke
   ANDROID_SMOKE_AUTH_HOST          Optional auth smoke host, default: 10.0.2.2
   ANDROID_SMOKE_AUTH_PORT          Optional auth smoke port, default: 43596
+  ANDROID_SMOKE_ACCOUNT_HANDOFF_HOST Optional reachable server used only to load the login home for --only-account-handoff
+  ANDROID_SMOKE_ACCOUNT_HANDOFF_PORT Optional account-handoff server port, default: 43596
   ANDROID_SMOKE_AUTH_DB            Optional SQLite DB path for movement assertions
   ANDROID_SMOKE_LEAVE_LOGGED_IN=1  Leave --only-auth-login running in-game for manual testing
   ANDROID_SMOKE_AUTH_USE_BUNDLED_ENDPOINT=1
                                     Optional: do not write the requested endpoint before auth smoke launch
   ANDROID_SMOKE_AUTH_*_X_PCT/Y_PCT Optional login-screen tap percentage overrides
   --only-bootstrap                 Focused offline bundled-cache install/repair/skip and endpoint smoke
+  --only-account-handoff           Focused Create Account portal URL smoke; no game server required
   --only-auth-credentials          Focused opt-in encrypted saved-login, persistence, and forget smoke
   --only-auth-login                Focused auth smoke; defaults to android/android and server/inc/sqlite/voidscape.db
   --only-auth-lifecycle            Focused auth smoke for login, resume/relaunch, logout, and crash checks
@@ -505,6 +511,10 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --only-bootstrap)
             ONLY_BOOTSTRAP=1
+            shift
+            ;;
+        --only-account-handoff)
+            ONLY_ACCOUNT_HANDOFF=1
             shift
             ;;
         --only-auth-camera)
@@ -1800,6 +1810,7 @@ assert_resumed_activity() {
 wait_for_external_activity() {
 	local label="$1"
 	local timeout="${2:-15}"
+	local expected_url="${3:-}"
 	local deadline=$((SECONDS + timeout))
 	local activities resumed escaped_app_id
 	escaped_app_id="${APP_ID//./\\.}"
@@ -1807,7 +1818,15 @@ wait_for_external_activity() {
 		activities="$("$ADB" shell dumpsys activity activities | tr -d '\r')"
 		resumed="$(grep -E '(mResumedActivity|topResumedActivity)[:=]' <<< "$activities" | head -1 || true)"
 		if [[ -n "$resumed" ]] && ! grep -Eq "${escaped_app_id}/" <<< "$resumed"; then
+			if [[ -n "$expected_url" ]] && ! grep -Fq "dat=$expected_url" <<< "$activities"; then
+				echo "ERROR: $label opened an external activity without the expected URL: $expected_url" >&2
+				grep -E 'Intent \{|mIntent=|intent=' <<< "$activities" | tail -20 >&2 || true
+				return 1
+			fi
 			echo "Verified external Android handoff for $label: $resumed"
+			if [[ -n "$expected_url" ]]; then
+				echo "Verified external Android URL for $label: $expected_url"
+			fi
 			return 0
 		fi
 		sleep 1
@@ -10114,8 +10133,40 @@ launch_to_login_home() {
 	dismiss_fullscreen_education
 }
 
+run_account_handoff_smoke() {
+	if [[ -n "$ACCOUNT_HANDOFF_HOST" ]]; then
+		if [[ ! "$ACCOUNT_HANDOFF_PORT" =~ ^[0-9]+$ ]] \
+			|| (( ACCOUNT_HANDOFF_PORT < 1 || ACCOUNT_HANDOFF_PORT > 65535 )); then
+			echo "ERROR: ANDROID_SMOKE_ACCOUNT_HANDOFF_PORT must be between 1 and 65535" >&2
+			exit 1
+		fi
+		PENDING_SERVER_HOST="$ACCOUNT_HANDOFF_HOST"
+		PENDING_SERVER_PORT="$ACCOUNT_HANDOFF_PORT"
+	fi
+	enable_android_smoke_login
+	"$ADB" logcat -c || true
+	launch_to_login_home
+	local home_line
+	home_line="$(wait_for_login_state 0 20)" || exit 1
+	screenshot 00-account-home
+	tap_login_state_target 0 homeNew 8 || {
+		echo "ERROR: Create Account target was absent from Android login telemetry" >&2
+		login_log_tail
+		exit 1
+	}
+	wait_for_external_activity "Create Account portal" 15 \
+		"https://voidscape.gg/portal?auth=register" || exit 1
+	screenshot 01-create-account-portal-handoff
+	echo "Android Create Account handoff evidence written to $OUT_DIR"
+}
+
 if [[ "$ONLY_BOOTSTRAP" -eq 1 ]]; then
 	run_bootstrap_smoke
+	exit 0
+fi
+
+if [[ "$ONLY_ACCOUNT_HANDOFF" -eq 1 ]]; then
+	run_account_handoff_smoke
 	exit 0
 fi
 
@@ -10369,7 +10420,7 @@ screenshot 15-saved-credentials-loaded
 "$ADB" shell input keyevent BACK
 sleep 1
 tap_pct 50 59
-wait_for_external_activity "Recover account portal" 15 || exit 1
+wait_for_external_activity "Recover account portal" 15 "https://voidscape.gg/portal?auth=recovery" || exit 1
 screenshot 16-recover-account-handoff
 
 "$ADB" shell input keyevent BACK
@@ -10378,7 +10429,7 @@ wait_for_login_state 2 10 || exit 1
 wait_for_login_state 0 10 || exit 1
 screenshot 17-existing-user-back-home
 tap_create_account_button
-wait_for_external_activity "Create Account portal" 15 || exit 1
+wait_for_external_activity "Create Account portal" 15 "https://voidscape.gg/portal?auth=register" || exit 1
 screenshot 18-create-account-portal-handoff
 
 "$ADB" shell input keyevent BACK

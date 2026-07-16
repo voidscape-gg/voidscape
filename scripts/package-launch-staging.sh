@@ -299,7 +299,7 @@ if [[ -z "$WS_URL" ]]; then
 fi
 
 if [[ "$SKIP_ANDROID" -eq 0 ]]; then
-	if ! python3 - "$ANDROID_CONFIG" "$GAME_HOST" "$GAME_PORT" "$PORTAL_URL/portal?auth=login" "$PORTAL_URL/portal?auth=recovery" "$PORTAL_URL/data-deletion" <<'PY'
+	if ! python3 - "$ANDROID_CONFIG" "$GAME_HOST" "$GAME_PORT" "$PORTAL_URL/portal?auth=register" "$PORTAL_URL/portal?auth=recovery" "$PORTAL_URL/data-deletion" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -771,7 +771,7 @@ if [[ "$SKIP_ANDROID" -eq 0 ]]; then
 	echo "==> Packaging Android APK for staging host"
 	ANDROID_BACKUP="$(mktemp)"
 	cp "$ANDROID_CONFIG" "$ANDROID_BACKUP"
-	python3 - "$ANDROID_CONFIG" "$GAME_HOST" "$GAME_PORT" "$PORTAL_URL/portal?auth=login" "$PORTAL_URL/portal?auth=recovery" "$PORTAL_URL/data-deletion" <<'PY'
+	python3 - "$ANDROID_CONFIG" "$GAME_HOST" "$GAME_PORT" "$PORTAL_URL/portal?auth=register" "$PORTAL_URL/portal?auth=recovery" "$PORTAL_URL/data-deletion" <<'PY'
 import re
 import sys
 from pathlib import Path

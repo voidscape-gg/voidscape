@@ -326,7 +326,7 @@ async function assertPortalWiring(page, label) {
 }
 
 async function assertPolicyPagesReachable(context, label) {
-	for (const pagePath of ["/privacy", "/data-deletion", "/transparency"]) {
+	for (const pagePath of ["/privacy", "/community-rules", "/data-deletion", "/transparency"]) {
 		const target = new URL(pagePath, portalUrl).href;
 		try {
 			const response = await context.request.get(target, { timeout: 15000, failOnStatusCode: false });
@@ -473,6 +473,29 @@ async function runLandingClickMap(page, context) {
 	assertCheck("landing feature guide link is present", links.features, JSON.stringify(links));
 	assertCheck("landing NPC database link is present", links.npcs, JSON.stringify(links));
 	assertCheck("landing sign-in link targets the account portal", links.signIn.startsWith("/portal?auth=login"), JSON.stringify(links));
+	await page.goto(new URL("/portal?auth=register", portalUrl).href, { waitUntil: "domcontentloaded", timeout: 30000 });
+	await page.waitForURL((url) => url.pathname === "/" && url.searchParams.get("auth") === "register", { timeout: 10000 });
+	await page.locator("#reserve-name").fill(signup.username);
+	await page.locator("#reserve-submit").click();
+	await page.locator("#reserve-more").waitFor({ state: "visible", timeout: 5000 });
+	const registration = await page.evaluate(() => ({
+		path: window.location.pathname,
+		auth: new URLSearchParams(window.location.search).get("auth") || "",
+		formVisible: Boolean(document.querySelector("#reserve-form")?.getBoundingClientRect().height),
+		loginVisible: Boolean(document.querySelector('[data-auth-panel="login"]')?.getBoundingClientRect().height),
+		termsPresent: Boolean(document.querySelector("#reserve-terms")),
+		termsLabelVisible: Boolean(document.querySelector("label.terms-acceptance")?.getBoundingClientRect().height),
+		rulesHref: document.querySelector('label.terms-acceptance a')?.getAttribute("href") || "",
+		rulesVisible: Boolean(document.querySelector('label.terms-acceptance a')?.getBoundingClientRect().height)
+	}));
+	assertCheck(
+		"Create Account URL lands directly on rules-gated registration",
+		registration.path === "/" && registration.auth === "register"
+			&& registration.formVisible && !registration.loginVisible && registration.termsPresent
+			&& registration.termsLabelVisible && registration.rulesVisible && registration.rulesHref === "/community-rules",
+		JSON.stringify(registration)
+	);
+	await gotoPortal(page);
 	await assertSignInCta(page);
 	await screenshot(page, "02-desktop-signed-out-auth");
 }
@@ -609,6 +632,12 @@ async function runSignupFlow(page) {
 		invalidPasswordHint || ""
 	);
 	await page.locator("#reserve-password").fill(signup.password);
+	await page.locator("#reserve-terms").check();
+	assertCheck(
+		"signup accepts the Community Rules before submit",
+		await page.locator("#reserve-terms").isChecked(),
+		"#reserve-terms must be checked before /api/accounts/register"
+	);
 	const responsePromise = page.waitForResponse((response) => response.url().includes("/api/accounts/register") && response.request().method() === "POST", { timeout: 20000 });
 	await page.locator("#reserve-confirm").click();
 	const response = await responsePromise;

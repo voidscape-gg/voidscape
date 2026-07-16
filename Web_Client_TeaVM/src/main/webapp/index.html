@@ -1720,6 +1720,20 @@
 				}
 			}
 
+			function portalRegistrationUrlFromBase(base) {
+				var url = safePortalUrl(base || '/');
+				if (!url) return '';
+				try {
+					var parsed = new URL(url);
+					parsed.hash = '';
+					parsed.search = '';
+					parsed.searchParams.set('auth', 'register');
+					return safePortalUrl(parsed.href);
+				} catch (error) {
+					return '';
+				}
+			}
+
 			function configurePortalUrls() {
 				var params = new URLSearchParams(window.location.search);
 				var existing = window.__voidscapePortalConfig || {};
@@ -1760,7 +1774,7 @@
 				}
 
 				if (!accountUrl) {
-					accountUrl = portalUrlFromBase(base, 'account');
+					accountUrl = portalRegistrationUrlFromBase(base);
 				}
 				if (!recoveryUrl) {
 					recoveryUrl = portalUrlFromBase(base, 'security');

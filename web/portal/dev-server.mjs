@@ -712,6 +712,25 @@ function trackBackgroundTask(task) {
 
 async function handleRequest(request, response) {
 	const url = new URL(request.url, `http://${request.headers.host || "127.0.0.1"}`);
+	if (url.pathname === "/portal" && url.searchParams.get("auth") === "register") {
+		if (!["GET", "HEAD"].includes(request.method || "GET")) {
+			throw new HttpError(405, "method_not_allowed");
+		}
+		const referralInput = String(url.searchParams.get("ref") || url.searchParams.get("invite") || "")
+			.trim()
+			.toUpperCase();
+		const referral = /^[A-Z0-9-]{1,18}$/.test(referralInput) ? referralInput : "";
+		const registrationUrl = new URL("/", "https://voidscape.invalid");
+		registrationUrl.searchParams.set("auth", "register");
+		if (referral) registrationUrl.searchParams.set("ref", referral);
+		response.writeHead(302, {
+			location: `${registrationUrl.pathname}${registrationUrl.search}`,
+			"cache-control": "no-store",
+			...securityHeaders()
+		});
+		response.end();
+		return;
+	}
 	if (publicMode && !betaMode && !launchSignupMode && (
 		url.pathname.startsWith("/openrsc/avatar/")
 	)) {

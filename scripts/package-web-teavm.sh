@@ -164,11 +164,11 @@ Profiles do not store game credentials. endpoint=reset and resetPortal=1 clear
 only the active profile's saved web settings.
 
 The mobile login account/recovery buttons default to the same web root:
-  Create Account  -> /portal?auth=login
+  Create Account  -> /?auth=register
   Recover account -> /portal?auth=recovery
 Override when needed:
   index.html?mobile=1&portal=https://<portal-host>/
-  index.html?mobile=1&portalAccountUrl=https://<portal-host>/portal%3Fauth%3Dlogin&portalRecoveryUrl=https://<portal-host>/portal%3Fauth%3Drecovery
+  index.html?mobile=1&portalAccountUrl=https://<portal-host>/portal%3Fauth%3Dregister&portalRecoveryUrl=https://<portal-host>/portal%3Fauth%3Drecovery
 Portal overrides are saved for Home Screen launches. To clear stale tester
 portal URLs, open:
   index.html?mobile=1&resetPortal=1
@@ -259,7 +259,7 @@ Profiles isolate saved endpoint/portal settings only; they do not store game cre
 Account/recovery portal handoff:
   https://<host>/index.html?mobile=1&portal=https://<portal-host>/
 or:
-  https://<host>/index.html?mobile=1&portalAccountUrl=https://<portal-host>/portal%3Fauth%3Dlogin&portalRecoveryUrl=https://<portal-host>/portal%3Fauth%3Drecovery
+  https://<host>/index.html?mobile=1&portalAccountUrl=https://<portal-host>/portal%3Fauth%3Dregister&portalRecoveryUrl=https://<portal-host>/portal%3Fauth%3Drecovery
 
 Those portal overrides are saved for later Home Screen launches. Clear with:
   https://<host>/index.html?mobile=1&resetPortal=1

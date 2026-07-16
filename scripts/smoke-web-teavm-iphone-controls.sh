@@ -1434,7 +1434,7 @@ async function runRuntimeModeSmoke(browser) {
     javascriptUrlOpened: window.__voidscapeOpenClientUrl('javascript:alert(1)'),
     opened: (window.__voidscapeOpenedUrls || []).slice()
   }));
-	  const expectedAccountUrl = new URL('/iphone-account/#account', baseUrl).href;
+	  const expectedAccountUrl = new URL('/iphone-account/?auth=register', baseUrl).href;
 	  const expectedRecoveryUrl = new URL('/iphone-recovery/', baseUrl).href;
 	  assert(portalHandoff.profile && portalHandoff.profile.id === 'smoke' && portalHandoff.profile.namespaced === true,
 	    `profile query should select a namespaced web-client profile: ${JSON.stringify(portalHandoff)}`);
