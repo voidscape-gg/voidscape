@@ -165,7 +165,8 @@ Freeze evidence:
 | Public portal boundary | Codex + operator | BLOCKED | Exact packaged tree; Nginx include installed; all-origin forbidden-path probes `404`; hosted allowed paths and ranges pass. |
 | Portal account flows | Codex + human | PENDING | Signup, rules acceptance, verification, login, recovery, character create/delete, logout, data-deletion link, and email delivery pass against final candidate. |
 | Pre-signed-player cohort | Owner + Codex + operator | BLOCKED | Every protected-cohort checkbox and count/hash reconciliation above passes. |
-| Reward/reset safety | Codex + owner | BLOCKED | Replace the current account-wide/code-only grant behavior and broad reset with an owner-approved frozen roster and one marker per eligible character; prove ten characters receive ten independent cards, preserve claimed state where intended, and add focused automated tests. |
+| Reward/reset safety | Codex + owner | BLOCKED | VS-090: replace the current account-wide/code-only grant behavior and broad reset with an owner-approved frozen roster and one marker per eligible character; prove ten characters receive ten independent cards, preserve claimed state where intended, and add focused automated tests. |
+| Portal roster durability | Codex | BLOCKED | VS-091: damaged or unexpectedly missing production portal JSON must fail startup/readiness without replacing the protected roster; explicit first-run initialization remains possible. |
 | Database choice and permissions | Owner + operator | PENDING | Explicit SQLite/MariaDB decision; integrity/foreign keys, permissions, capacity, and exactly-one-writer proof. |
 | Coordinated backup and rollback | Operator + owner | PENDING | Portal/game writes quiesced; paired hashed off-host backup restored successfully in isolation; objective rollback triggers recorded. |
 | Desktop and launcher | Human + Codex | PENDING | Exact candidate fresh install, update, repair, offline behavior, login, gameplay, save, logout, and relogin. |
@@ -266,3 +267,6 @@ or physical-device requirements.
   application/package/Nginx boundary at `6d70d5ee`. The live production origins and
   every superseded bundle remain blocked until an operator performs an explicitly
   authorized containment/deployment and the hosted probes pass.
+- 2026-07-16: triaged the per-character founder reward as VS-090 and fail-open portal
+  roster loading as VS-091. Both are P1 launch blockers; VS-090 awaits the owner's
+  deletion/recreation, promotion-stacking, and legacy-code accounting decisions.

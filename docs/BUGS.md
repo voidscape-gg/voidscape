@@ -26,7 +26,20 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** None.
+- **Active bug:** VS-090 — founder starter card is account-wide instead of per character.
+- **Session preflight 2026-07-16 (VS-090):** branch
+  `codex/release-10139-integration`; VS-089 is committed at `6d70d5ee`, readiness is
+  recorded through `d9c0ec17`, the worktree is clean, and `scripts/build.sh` passes.
+  Ryan clarified that the founder benefit is one free subscription card for every
+  character under a qualifying account: ten characters means ten independently
+  claimable cards. Current code conclusively violates that contract because every
+  sibling derives the same global `starter_card:<webAccountId>` key and the first
+  claim consumes it for the whole account. Plan: preserve account-level campaign
+  eligibility but issue one durable per-player marker/grant, make create/link/reset
+  paths idempotent, convert legacy base codes without duplication, and keep physical
+  card redemption's subscription time account-wide. Owner policy is required for
+  delete/recreate lifetime limits, stacking with the separate native-launch reward,
+  and how a redeemed legacy bearer code counts.
 - **Session preflight 2026-07-16 (VS-089):** branch
   `codex/release-10139-integration`; VS-088 is committed at `b8ea420f`, its public-safe
   mirror is committed at `27158188`, and the pre-change full `scripts/build.sh` passes.
@@ -103,15 +116,13 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — VS-089 verified locally. The portal serves an exact
-  static allowlist, the release package contains only the required runtime and public
-  files, the generated Nginx layer adds generic defense-in-depth, and the hosted gate
-  checks allowed/forbidden paths on every production origin. Portal API/schema tests,
-  the complete packaged-tree test, the minimized-runtime HTTP matrix, the all-origin
-  verifier, launch-config coverage, and `scripts/build.sh` pass.
-- **Next action:** commit and mirror the verified VS-089 fix into the standalone clean
-  public tree, then triage the new per-character founder-card and fail-closed portal
-  store Intake reports. Do not deploy, push, or publish without separate authorization.
+- **Last session:** 2026-07-16 — Intake triage promoted the owner-confirmed
+  per-character reward defect to VS-090 and the protected-roster fail-open load defect
+  to VS-091. VS-090 is active; code evidence and the existing second-character
+  regression test establish the account-global behavior without a live claim.
+- **Next action:** obtain the three VS-090 reward-policy decisions named in its entry,
+  then implement the per-character ledger one bug at a time. Keep VS-091 queued next.
+  Do not deploy, push, or publish without separate authorization.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -319,17 +330,6 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Intake — dump raw bug reports here
 
-- Pre-signed-player free subscription cards are required per character, but the
-  current `starter_card:<webAccountId>` marker is global to the parent account: the
-  first character changes it to claimed for every sibling. A qualifying account with
-  ten characters must receive ten independently claimable cards, while each character
-  may claim only once. The portal entitlement, legacy-code conversion, launch reset,
-  vendor claim, create/link hooks, deletion policy, and regression tests all need a
-  per-character campaign ledger; owner clarified this launch contract on 2026-07-16.
-- Production portal-store loading treats a missing, unreadable, or malformed existing
-  JSON store as an empty store. A later write could persist that empty state and lose
-  the protected pre-signup roster; production startup must fail closed while retaining
-  an explicit first-run initialization path.
 - Headless Karamja traveller death recovery can strand a session in
   `journey-funding-missing`: Ultraz respawned at `(120,648)` with only item ids
   466/473/476, no coins or sellable starter sword, and an empty bank. The controller
@@ -405,6 +405,57 @@ half-remembered is fine, triage will chase it down.)_
 ---
 
 ## Open bugs
+
+### VS-090 — Founder starter card is account-wide instead of per character
+- Status: confirmed · Severity: P1 · Area: subscriptions / web-portal / launch reset
+- Evidence: Ryan's launch contract is one free card per character under every
+  qualifying pre-signed account. `VoidSubscription.starterCardCacheKey()` derives the
+  global `starter_card:<webAccountId>` key, `VoidSubscriptionVendor` changes that one
+  shared value from available to claimed, the portal maintains one starter entitlement
+  per account, and `reset-launch-game-db.mjs` emits one global account marker. The
+  portal API regression suite currently asserts that a second character does not
+  create another marker. Thus the first sibling to claim consumes every sibling's
+  promised reward.
+- Repro: make one eligible portal account with characters A and B and one available
+  global starter marker. Claim on A; the global state becomes claimed and B cannot
+  claim. An account with ten characters still has only one marker/card.
+- Verify: preserve one campaign-eligibility record for each approved founder account
+  and one durable `starter_card_character` available/claimed marker per eligible
+  player ID. Two siblings claim independently; repeated/full-inventory claims remain
+  idempotent; ten characters yield exactly ten lifetime grant records; ineligible
+  accounts yield zero; create/link/backfill/reset paths converge without duplicates;
+  legacy base codes convert without resurrection; referral rewards remain separate;
+  the native-launch promotion follows the approved stacking rule; deletion/recreation
+  follows the approved lifetime policy; card redemption still extends the shared
+  account subscription. Add synthetic 190-founder reset fixtures and run the focused
+  portal/vendor/reset suites plus `scripts/build.sh`.
+- Log: 2026-07-16 triaged from Ryan's explicit per-character clarification and
+  conclusive code evidence. Recommended policy: at most ten lifetime founder-card
+  issuances per qualifying account, deletion does not replenish the allowance, the
+  separate native-launch base card does not stack on the same character, and a used
+  legacy bearer code consumes one of the ten lifetime issuances. Await owner ruling
+  before implementation because these choices materially change the economy.
+
+### VS-091 — Invalid production portal store silently becomes an empty roster
+- Status: confirmed · Severity: P1 · Area: web-portal / account-data durability
+- Evidence: `loadStore()` catches a missing, unreadable, or malformed
+  `$PORTAL_DATA_DIR/dev-store.json` and returns a newly normalized empty store. A later
+  portal mutation can atomically rename that empty state over the intended production
+  path, losing the protected founder/account/character/entitlement roster. The
+  temp-file-plus-rename write path is sound, but startup does not distinguish an
+  intentional first run from damaged production state.
+- Repro: point a fixture portal at an existing malformed JSON store and start it; the
+  process accepts an empty in-memory store instead of refusing startup. Exercise any
+  persistent mutation and the replacement store is valid JSON but lacks the original
+  records.
+- Verify: an existing malformed, unreadable, wrong-shape, or unexpectedly missing
+  production store prevents readiness/startup and preserves the original bytes. A
+  deliberately enabled first-run initialization path can create an empty store only
+  when no store exists, with restricted permissions and an audit message. Valid stores
+  still load and temp-file/rename writes pass; focused corrupt/missing/valid fixtures,
+  portal API/schema tests, and `scripts/build.sh` pass.
+- Log: 2026-07-16 triaged from the protected 190-player cohort audit. Queue behind the
+  active per-character reward contract; do not test against the production roster.
 
 ### VS-072 — Website character manager cannot delete characters
 - Status: fixed · Severity: P1 · Area: web-portal / launch surface
