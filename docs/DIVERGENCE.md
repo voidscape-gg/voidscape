@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-16 - Physical Android QA enforces portal registration
+
+The physical Android release report now derives and records the rules-gated registration route from its configured portal, and its Create Account check requires the browser to open that route, accept Community Rules version `2026-07-16`, create the portal account and first character, return to the app, and complete Existing User login. The paired validator requires the registration URL and rejects any route that differs from `<portal>/portal?auth=register`, preventing a previously generated native-signup checklist from satisfying the public APK gate. Generated-output and wrong-route fixtures pass/fail as intended under `tmp/vs087-android-device-qa-contract/`, and the full build remains green. This changes release-QA instructions and validation only: Android runtime behavior, account persistence, gameplay, packets, opcodes, client cohort, artifacts, Play state, and live systems are unchanged. Reversibility is restoring the retired mandatory check and dropping the registration-route field, which would reopen the false release-pass path.
+
 ### 2026-07-16 - TeaVM production packages reject scratch artifacts
 
 The TeaVM production packager now removes and then rejects case-insensitive editor/download scratch basenames and suffixes, including symlinks, before generating `voidscape-web-build.json`. Static and deep hosted verification use the same basename-aware contract, closing the gap that admitted `Authentic_Sprites.orsc.bak` into the held web candidate while avoiding substring false positives such as `archive.bakery`. Focused fixtures cover mixed-case files, a scratch-named symlink, manifest contents, and a legitimate extension. Client code, cache payload contents, protocol cohort 10139, packets, opcodes, and gameplay are unchanged. Reversibility is removing the prune/assert and verifier predicates, which would again allow local editor residue into public artifacts.

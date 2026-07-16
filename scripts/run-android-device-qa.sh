@@ -77,6 +77,7 @@ mkdir -p "$OUT_DIR"
 REPORT="$OUT_DIR/android-device-qa-report.md"
 STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 APK_VALUE="${APK_UNDER_TEST:-TODO}"
+REGISTRATION_URL="${PORTAL_URL%/}/portal?auth=register"
 
 cat > "$REPORT" <<EOF
 # Android Device QA Report
@@ -105,13 +106,14 @@ scripts/validate-android-device-qa-report.py "$REPORT"
 - **Distribution channel:** $CHANNEL
 - **Game endpoint:** $GAME_ENDPOINT
 - **Portal URL:** $PORTAL_URL
+- **Registration URL:** $REGISTRATION_URL
 - **Result:** HOLD
 
 ## Mandatory Checks
 
 - [ ] Fresh install reaches the branded Voidscape splash/ready screen without Android system dialogs covering app UI.
 - [ ] Play reaches the intended game endpoint and the selected server is understandable.
-- [ ] Create Account opens the in-client username/password character creation form, creates a fresh test character, and returns to Existing User with credentials prefilled.
+- [ ] Create Account opens $REGISTRATION_URL in the browser, requires acceptance of Community Rules version 2026-07-16 before registration completes, creates a fresh account and first character, then returns to the app and logs in through Existing User with the new credentials.
 - [ ] Recover account opens the portal security/recovery route in the browser.
 - [ ] Existing-user login accepts username/password with the soft keyboard.
 - [ ] Portrait gameplay framing is acceptable: HUD is not clipped, touch targets are reachable, and unused vertical space is not release-blocking.

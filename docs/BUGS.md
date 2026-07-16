@@ -27,6 +27,14 @@ to resume from these two files alone. Keep every entry self-contained.
 ## Loop state
 
 - **Active bug:** None.
+- **Session preflight 2026-07-16 (VS-087):** branch
+  `codex/release-10139-integration`; tracked worktree clean at `abb2f7ca` and the
+  pre-change `scripts/build.sh` passes. Conclusive template evidence reproduces the
+  defect: `scripts/run-android-device-qa.sh` still tells a physical release tester to
+  create an account through the retired native form, while the release checklist and
+  Android contract require the Community-Rules-gated portal at
+  `https://voidscape.gg/portal?auth=register`. Scope is the generated physical-device
+  QA contract only; Android runtime behavior and live systems remain untouched.
 - **Session preflight 2026-07-16 (VS-085):** branch
   `codex/release-10139-integration`; VS-084 is committed at `1e591ad1`. Release QA
   found `Cache/video/Authentic_Sprites.orsc.bak` in the exact held TeaVM package, and
@@ -71,12 +79,11 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — VS-085 verified. TeaVM production packaging now
-  removes case-insensitive editor/download scratch basenames and suffixes, including
-  symlinks, before manifest generation; both static and deep deployment verification
-  reject the same set by basename without false-positive substring matching. The old
-  held package is rejected for its `.bak`, the clean package deep-verifies 538/538,
-  and mixed-case/symlink/legitimate-extension unit coverage passes.
+- **Last session:** 2026-07-16 — VS-087 verified. The generated physical Android QA
+  report now requires the exact rules-gated registration route, Community Rules
+  acceptance, portal account/first-character creation, and a successful return to
+  Existing User login. Its validator rejects reports missing or changing the route,
+  so an older native-signup checklist cannot satisfy the release gate.
 - **Next action:** triage the public source-proof footer finding, then rebuild the exact
   commit-bound release candidate.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
@@ -985,6 +992,22 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-087 — Physical Android release QA required retired native signup (FIXED)
+- Status: verified · Severity: P1 · Area: Android physical-device release QA
+- Root cause: the physical-device report generator retained the earlier native
+  username/password registration instructions after Android release builds moved to
+  browser-based, Community-Rules-gated registration. The generic report validator
+  could still accept an already-generated checklist containing that retired contract.
+- Fix: generated reports derive and expose `<portal>/portal?auth=register`, require
+  that exact browser handoff, Community Rules version `2026-07-16` acceptance,
+  portal account/first-character creation, return to the app, and Existing User login.
+  The validator now requires the registration URL field and rejects route drift.
+- Verified 2026-07-16: shell and Python syntax pass; the generated production report
+  contains `https://voidscape.gg/portal?auth=register` and no retired native-signup
+  wording; a completely filled fixture validates, while a copy changed to
+  `/portal?auth=login` fails with the exact expected-route error. Evidence is under
+  `tmp/vs087-android-device-qa-contract/`. The post-change `scripts/build.sh` passes.
 
 ### VS-085 — TeaVM package admitted editor/download scratch files (FIXED)
 - Status: verified · Severity: P1 · Area: TeaVM web packaging / deployment verification
