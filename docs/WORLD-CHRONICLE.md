@@ -54,7 +54,8 @@ Players control the setting in game with `::hidescores on`, `::hidescores off`,
 or `::hidescores status`. `::hidescores` without an argument toggles it. The cache
 value is persisted with the normal player save, so the page copy says the change
 takes effect after the next world save. A prominent callout beneath the Monument
-explains the on/off commands and the aggregate-data limitation.
+labels the directions explicitly: `on` turns identity hiding on, while `off` makes
+the player's identity visible again. It also explains the aggregate-data limitation.
 
 ## Response contract
 

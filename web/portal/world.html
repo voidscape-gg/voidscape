@@ -73,7 +73,7 @@
 					<span class="pulse-label">Souls forged</span>
 				</div>
 				<div class="pulse-tile" data-pulse="npcKills">
-					<span class="pulse-icon"><img src="assets/world/skills/skill-attack.png" alt="" class="px pulse-art" data-px="2"></span>
+					<span class="pulse-icon"><img src="assets/npc-database/npc/3.png" alt="" class="pulse-art pulse-chicken"></span>
 					<strong data-count>0</strong>
 					<span class="pulse-label">Monsters slain</span>
 				</div>
@@ -160,7 +160,12 @@
 				<div>
 					<p class="privacy-callout-eyebrow">Your name, your choice</p>
 					<h3 id="privacy-callout-title">Want to stay out of the Chronicle?</h3>
-					<p>In game, type <code>::hidescores on</code>. Your name leaves highscores and identifying activity after the next world save. Type <code>::hidescores off</code> whenever you want to return. Aggregate world totals may still include your deeds. <span id="hidden-count"></span></p>
+					<p>Choose whether the Chronicle shows your identity:</p>
+					<div class="privacy-commands" role="list" aria-label="Chronicle visibility commands">
+						<p role="listitem"><strong>Hide your name</strong><code>::hidescores on</code></p>
+						<p role="listitem"><strong>Show your name</strong><code>::hidescores off</code></p>
+					</div>
+					<p class="privacy-note">The change appears after the next world save. Aggregate totals may still include your deeds. <span id="hidden-count"></span></p>
 				</div>
 			</aside>
 		</section>

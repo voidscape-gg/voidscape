@@ -68,9 +68,14 @@
 
 	var POD_CROWNS = ["assets/world/crown-gold.png", "assets/world/crown-silver.png", "assets/world/crown-iron.png"];
 	var POD_SHIELDS = ["assets/world/shield-1.png", "assets/world/shield-2.png", "assets/world/shield-3.png"];
-	/* Authentic RSC item picture masks used by rare-feed sprites. The source
-	   archive stores a neutral blade; the client tints gray pixels at draw time. */
-	var ITEM_PICTURE_MASKS = { 75: 0x00FFFF, 81: 0x00FFFF };
+	/* Authentic RSC item picture masks. The source archive stores neutral gray
+	   artwork; the client supplies each item's palette at draw time. */
+	var ITEM_PICTURE_MASKS = {
+		75: 0x00FFFF,
+		81: 0x00FFFF,
+		172: 0xFFCC4C,
+		373: 0xB06000
+	};
 	var smallStage = window.matchMedia("(max-width: 600px)");
 
 	var FALLBACK_AVATARS = ["assets/rsc-knight.png", "assets/rsc-ranger.png", "assets/rsc-mage.png"];
@@ -200,6 +205,14 @@
 		});
 		source.src = src;
 		return canvas;
+	}
+
+	function itemPixelArt(itemId, scale, className) {
+		var pictureMask = ITEM_PICTURE_MASKS[itemId];
+		var src = "assets/npc-database/item/" + itemId + ".png";
+		return pictureMask
+			? maskedPixelCanvas(src, scale, pictureMask, className)
+			: pixelImg(src, scale, className);
 	}
 
 	function goldMedallion() {
@@ -464,10 +477,7 @@
 			image.src = skillByKey(text(entry.skill)).icon;
 		} else if (entry.type === "rare" && Number.isFinite(Number(entry.itemId))) {
 			var itemId = number(entry.itemId);
-			var pictureMask = ITEM_PICTURE_MASKS[itemId];
-			image = pictureMask
-				? maskedPixelCanvas("assets/npc-database/item/" + itemId + ".png", 1, pictureMask)
-				: pixelImg("assets/npc-database/item/" + itemId + ".png", 1);
+			image = itemPixelArt(itemId, 1);
 		} else if (entry.type === "total") {
 			image = el("img");
 			image.src = "assets/world/mini-void.png";
@@ -729,7 +739,7 @@
 		world.economy.topItems.forEach(function (item, index) {
 			var row = el("li", "hoard-row");
 			row.appendChild(el("span", "hoard-rank", String(index + 1)));
-			row.appendChild(pixelImg("assets/npc-database/item/" + item.itemId + ".png", 1, "hoard-sprite"));
+			row.appendChild(itemPixelArt(item.itemId, 1, "hoard-sprite"));
 			var meta = el("span", "hoard-meta");
 			var name = el("span", "hoard-name", item.name);
 			name.title = item.name;
