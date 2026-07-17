@@ -1,6 +1,7 @@
 package com.openrsc.server.net.rsc.handlers;
 
 import com.openrsc.server.database.impl.mysql.queries.logging.StaffLog;
+import com.openrsc.server.model.entity.player.Group;
 import com.openrsc.server.model.entity.player.Player;
 import com.openrsc.server.net.rsc.PayloadProcessor;
 import com.openrsc.server.net.rsc.enums.OpcodeIn;
@@ -22,6 +23,19 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 	private static final Map<Long, Long> BETA_SPAWN_NPC_LAST_USE_MILLIS = new ConcurrentHashMap<Long, Long>();
 	private static final Set<String> BETA_PLAYER_COMMANDS = new HashSet<String>(Arrays.asList(
 		"beta", "betaguide", "farmkit", "farmsim", "farmcal", "codes", "refcodes"
+	));
+	private static final Set<String> PRODUCTION_REGULAR_PLAYER_BLOCKED_COMMANDS = new HashSet<String>(Arrays.asList(
+		"uniqueonline", "onlinelist", "onlinelistlocs",
+		"time", "date", "datetime", "coords", "groups", "ranks", "gang",
+		"kills", "kc", "minigamelog", "clientlimitations",
+		"maxplayersperip", "mppi", "getpidlesscatching", "tellpidlesscatching", "pidless",
+		"arena", "voidarena", "setglobalmessagecolor", "titles", "title", "b",
+		"qoloptout", "qoloptoutconfirm", "certoptout", "certoptoutconfirm",
+		"togglereceipts", "togglenpckcmessages", "oldtrade", "notradeconfirm",
+		"language", "setlanguage",
+		"bankpinoptin", "bankpin_optin", "bank_pin_opt_in",
+		"bankpinoptout", "bankpin_optout", "bank_pin_opt_out",
+		"skiptutorial", "getholidaydrop", "checkholidaydrop", "checkholidayevent", "drop"
 	));
 	private static final Set<String> BETA_BLOCKED_ADMIN_COMMANDS = new HashSet<String>(Arrays.asList(
 		"restart", "shutdown", "update", "reloadworld", "reloadland",
@@ -457,6 +471,10 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 
 	private static boolean blockUnsafeProductionCommand(Player player, String cmd, String[] args) {
 		if (!player.getWorld().getServer().getConfig().PRODUCTION_COMMAND_LOCKDOWN) return false;
+		if (player.getGroupID() == Group.USER && PRODUCTION_REGULAR_PLAYER_BLOCKED_COMMANDS.contains(cmd)) {
+			player.message(player.getConfig().MESSAGE_PREFIX + "That command is not available to regular players on this world.");
+			return true;
+		}
 		if (player.isOwner()) return false;
 		if (isPlayerExperienceFreezeCommand(player, cmd, args)) return false;
 

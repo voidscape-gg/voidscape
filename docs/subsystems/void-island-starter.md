@@ -27,7 +27,7 @@ The old **"I'm new to Classic"** guided track and Tutorial Isle runtime are reti
 
 - **Rested XP demo:** explains the mechanic and fills the pool to the 45-minute cap via `RestedExperience.grantFull(player)` (guarded by `void_vet_rested_gift`; the method drains elapsed session time first so the stale drain marker can't eat the gift). This reward is gated to players who chose the veteran welcome track.
 - **Loot beam demo:** spawns an owner-scoped dragonstone ground item beside the Archivist (20s TTL, well under the 64s owner-only window). Picking it up dissolves it (`TakeObjTrigger` on the `void_vet_beam_demo` attribute) — a flavor beat, not an exploit. This demo is gated to players who chose the veteran welcome track.
-- **Topic menu:** XP rates / paths / trading (auction house + subscription cards) / chat & titles / PvP (arena, bounty) / QoL (map autowalk, `::b`, `::commands`, `::qoloptout`). Never mentions clans/parties or beta commands (cut/locked down).
+- **Topic menu:** XP rates / paths / trading (auction house + subscription cards) / chat & Herald-managed titles / PvP (the Void Enclave arena rift, bounty) / QoL (map autowalk, bank presets, `::commands`, `::lootbeam`). Never mentions clans/parties, beta commands, or production-restricted regular-player commands.
 
 ## Path State
 

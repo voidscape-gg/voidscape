@@ -2414,7 +2414,7 @@ public class ActionSender {
 				}
 
 				if (!resumedSession && HolidayDropEvent.isOccurring(player)) {
-				    sendMessage(player, null, MessageType.QUEST, "@mag@There is a Holiday Drop Event going on now! Type @gre@::drop@mag@ for more information.", 0, null);
+				    sendMessage(player, null, MessageType.QUEST, "@mag@There is a Holiday Drop Event going on now!", 0, null);
                 }
 
                 sendGameSettings(player);
@@ -2555,8 +2555,6 @@ public class ActionSender {
 				int playerLimit = 20;
 				if (!retroClientListsAll && players.size() > playerLimit) {
 					player.playerServerMessage(MessageType.QUEST, "@red@Warning: @whi@Player list has been truncated due to too many players online.");
-					player.playerServerMessage(MessageType.QUEST, "Visit the onlinelist of your server on the web to see the full list,");
-					player.playerServerMessage(MessageType.QUEST, "or use the command @mag@::onlinelist all");
 				}
 				int playersToList = Math.min(players.size(), retroClientListsAll ? EntityList.DEFAULT_CAPACITY : playerLimit);
 				int messagesSent = 0;

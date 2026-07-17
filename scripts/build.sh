@@ -46,6 +46,9 @@ echo "==> Testing duel-proof client handshake"
 echo "==> Testing ordinary duel and XP control contract"
 python3 "$SCRIPT_DIR/test-duel-xp-controls-contract.py"
 
+echo "==> Testing production regular-player command lockdown"
+python3 "$SCRIPT_DIR/test-production-regular-command-lockdown.py"
+
 echo "==> Testing PvE physical roll multipliers"
 python3 "$REPO_ROOT/tools/combat-sim/test_pve_multipliers.py"
 

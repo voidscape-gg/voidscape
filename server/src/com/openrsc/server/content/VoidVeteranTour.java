@@ -151,22 +151,22 @@ public final class VoidVeteranTour {
 					npcsay(player, npc,
 						"::g speaks to every survivor at once; ::pk is the wilderness channel",
 						"The chat strip has a Global tab so you never lose the thread",
-						"Titles mark your deeds - ::titles shows what you can claim",
+						"The Void Herald manages the titles earned through your deeds",
 						"Some are unique: first to earn them keeps them");
 					break;
 				case 4:
 					npcsay(player, npc,
 						"The wilderness works as you remember - but watch for the bounty mark, ::bounty",
 						"Kill the marked player for bounty points and a void key",
-						"For clean duels, ::arena runs ranked deathmatches",
+						"For ranked deathmatches, take the Void Enclave rift to the arena",
 						"And when you feel strong: challenge Sir Charles there. Few survive");
 					break;
 				case 5:
 					npcsay(player, npc,
 						"Click anywhere on the world map and you will walk there",
-						"::b opens the bank when you stand in one; the bank itself holds presets",
+						"Bankers and bank chests open your bank, which also holds presets",
 						"::commands lists everything else",
-						"Purists can shed the conveniences with ::qoloptout");
+						"::lootbeam lets you customize which rare drops shine");
 					break;
 				case 6:
 				default:

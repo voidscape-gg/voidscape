@@ -189,29 +189,27 @@ public class PlayerTradeHandler implements PayloadProcessor<PlayerTradeStruct, O
 							// both players set to same trade mechanism client, no need to warn
 						} else if (warnPlayerConfirm) {
 							ActionSender.sendMessage(player, "Reminder: This world requires confirm trades");
-							ActionSender.sendMessage(player, "Other player may only finish trade if they use ::oldtrade");
+							ActionSender.sendMessage(player, "The other player's legacy client cannot complete this trade");
 							if (!affectedPlayer.hasNoTradeConfirm(1)) {
 								ActionSender.sendMessage(affectedPlayer,"The other player will not be able to complete trade");
-								ActionSender.sendMessage(affectedPlayer,"To overcome this use ::oldtrade to temporary disable confirm trade");
 							} else {
 								timeSince = (int) ((System.currentTimeMillis() - affectedPlayer.getNoTradeConfirmTime()) / 60000);
 								timeRemain = Math.max(1, 5 - timeSince);
 								ActionSender.sendMessage(affectedPlayer,"The other player cannot confirm trades");
 								ActionSender.sendMessage(affectedPlayer,"You still have " + timeRemain + " minutes for no confirm trade");
-								ActionSender.sendMessage(affectedPlayer,"You can renew the time with ::oldtrade");
+								ActionSender.sendMessage(affectedPlayer,"That temporary compatibility window cannot be renewed here");
 							}
 						} else if (warnOtherPlayerConfirm) {
 							ActionSender.sendMessage(affectedPlayer, "Reminder: This world requires confirm trades");
-							ActionSender.sendMessage(affectedPlayer, "Other player may only finish trade if they use ::oldtrade");
+							ActionSender.sendMessage(affectedPlayer, "The other player's legacy client cannot complete this trade");
 							if (!player.hasNoTradeConfirm(1)) {
 								ActionSender.sendMessage(player,"The other player will not be able to complete trade");
-								ActionSender.sendMessage(player,"To overcome this use ::oldtrade to temporary disable confirm trade");
 							} else {
 								timeSince = (int) ((System.currentTimeMillis() - player.getNoTradeConfirmTime()) / 60000);
 								timeRemain = Math.max(1, 5 - timeSince);
 								ActionSender.sendMessage(player,"The other player cannot confirm trades");
 								ActionSender.sendMessage(player,"You still have " + timeRemain + " minutes for no confirm trade");
-								ActionSender.sendMessage(player,"You can renew the time with ::oldtrade");
+								ActionSender.sendMessage(player,"That temporary compatibility window cannot be renewed here");
 							}
 						}
 					}

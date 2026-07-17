@@ -27,6 +27,22 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-16 - Curated production command access for regular users
+
+Production command lockdown now rejects the reviewed 46-token command and alias set
+for exact `Group.USER` accounts before plugin dispatch, including all Void Arena
+subcommands through the `arena` / `voidarena` root tokens. Staff and owner ranks keep
+their existing access, and regular-player behavior is unchanged when production
+lockdown is off. The in-game `::commands` pages and the regular-player section of
+`Commands.md` no longer advertise restricted commands; the Veteran Tour, portal
+feature copy, holiday/legacy-list notices, and old-client trade warnings no longer
+direct players toward blocked commands. A build-gated source contract locks the
+complete alias set, rank/config predicate, and public help surfaces. This changes
+server authorization and descriptive copy only: no opcode, packet, client version,
+cache asset, database schema, persistence format, desktop/web/Android game-client
+artifact, or gameplay system changed. Reversibility is removing the central user deny
+set and restoring the help entries.
+
 ### 2026-07-16 - Email verification gates reservation success and downloads (VS-099)
 
 Password signups waiting on email verification now show an explicit incomplete

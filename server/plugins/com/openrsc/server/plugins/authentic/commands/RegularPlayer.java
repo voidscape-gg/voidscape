@@ -1760,20 +1760,12 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::gameinfo - shows player and server information %",
 		"@whi@::leave - leaves PK catching practice early %",
 		"@whi@::online - shows players currently online %",
-		"@whi@::uniqueonline - shows number of unique IPs logged in %",
-		"@whi@::onlinelist - shows players currently online in a list %",
 		"@whi@::bug <message> - sends a bug report %",
 		"@whi@::g <message> - talk in @gr1@global @whi@chat %",
 		"@whi@::pk <message> - to talk in @or1@pking @whi@global chat channel %",
 		"@whi@::c <message> - talk in clan chat %",
 		"@whi@::p <message> - talk in party chat %",
-		"@whi@::gang - shows if you are 'Phoenix' or 'Black arm' gang %",
-		"@whi@::wilderness - shows the wilderness activity %",
-		"@whi@::arena - enter ranked Void Arena %",
-		"@whi@::event - to enter an ongoing server event %",
-		"@whi@::kills - shows kill counts of npcs %",
-		"@whi@::qoloptout - opts you out of Quality of Life features %",
-		"@whi@::certoptout - opts you out of the traditional 'cert' system %"
+		"@whi@::event - to enter an ongoing server event %"
 	};
 
 	private static final String[] pageZeroCommandsBeta = new String[]{
@@ -1783,8 +1775,6 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::gameinfo - shows player and server information %",
 		"@whi@::leave - leaves PK catching practice early %",
 		"@whi@::online - shows players currently online %",
-		"@whi@::uniqueonline - shows number of unique IPs logged in %",
-		"@whi@::onlinelist - shows players currently online in a list %",
 		"@whi@::beta - opens the Voidscape beta guide menu %",
 		"@whi@::bug <message> - sends a bug report %",
 		"@whi@::codes - shows earned beta referral reward codes %",
@@ -1792,20 +1782,13 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::pk <message> - to talk in @or1@pking @whi@global chat channel %",
 		"@whi@::c <message> - talk in clan chat %",
 		"@whi@::p <message> - talk in party chat %",
-		"@whi@::gang - shows if you are 'Phoenix' or 'Black arm' gang %",
-		"@whi@::wilderness - shows the wilderness activity %",
-		"@whi@::arena - enter ranked Void Arena %",
-		"@whi@::event - to enter an ongoing server event %",
-		"@whi@::kills - shows kill counts of npcs %",
-		"@whi@::qoloptout - opts you out of Quality of Life features %",
-		"@whi@::certoptout - opts you out of the traditional 'cert' system %"
+		"@whi@::event - to enter an ongoing server event %"
 	};
 
 	private static final String[] pageOneCommands = new String[]{
 		"@yel@Commands available: %",
 		"@lre@Type :: before you enter your command, see the list below. %",
 		" %", // this adds a line of whitespace for readability
-		"@whi@::time - shows the current server time %",
 		"@whi@::toggleglobalchat - toggle receiving global chat %",
 		"@whi@::toggleblockchat - toggle blocking all chat messages %",
 		"@whi@::toggleblockprivate - toggle block all private messages %",
@@ -1813,9 +1796,6 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::toggleblockduel - toggle blocking all duel requests %",
 		"@whi@::freezexp on|off|status - control all XP gain %",
 		"@whi@::rested - show rested XP status %",
-		"@whi@::titles - browse titles; the Void Herald manages them %",
-		"@whi@::lootbeam - customize rare drop loot beams %",
-		"@whi@::groups - shows available ranks on the server %",
-		"@whi@::togglereceipts - toggle showing shop receipts %"
+		"@whi@::lootbeam - customize rare drop loot beams %"
 	};
 }
