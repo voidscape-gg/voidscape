@@ -18,6 +18,8 @@ Every generated ladder has an exact reverse transition. Rift and ladder interact
 
 The route retains 41 ordinary NPC spawns: 7 spiders, 5 wolves, 5 unicorns, 5 ogres, 5 giants, 6 knights, 6 wizards, and 2 demons. Void Knights and Void Unicorns are aggressive; the other NPC behavior and ordinary supply drops remain unchanged. Only the complete Void-gear unique slots are retuned below.
 
+For launch, three server-side combat profiles deliberately exceed the legacy stats embedded in the current clients: Void Spiders use 28 Attack, 28 Strength, 24 Defence, and 16 Hits; Void Unicorns use 32 in all four stats; and Void Demons use 140 Attack, 150 Strength, 130 Defence, and 108 Hits. Their existing server `combatlvl` fields and client-visible combat levels remain unchanged until a later synchronized client release. This makes Void variants substantially more dangerous than ordinary monsters that appear to have similar levels without requiring a launch-client replacement. Void Giants and Void Ogres produce Big Bones on death under the launch configuration; presets with `only_regular_bones: true` retain their global regular-bones override.
+
 ## Traversal Grace
 
 Killing an NPC underground arms a five-tick, session-only traversal opportunity. Ordinary NPC auto-aggro waits for one decision scan because NPC AI is processed before queued player movement; if the player remains stationary, normal AFK re-aggro resumes on the following scan. An accepted ground or minimap walk during the opportunity activates five ticks of ordinary auto-aggro immunity so the player can move through a dense room. Ground clicks that produce no path and entity-follow clicks do not activate it, and world-map autowalk is intentionally outside the rule.

@@ -509,6 +509,8 @@ public class NpcDrops {
 		this.bigBoneNpcs.add(NpcId.MOSS_GIANT.id());
 		this.bigBoneNpcs.add(NpcId.MOSS_GIANT2.id());
 		this.bigBoneNpcs.add(NpcId.JOGRE.id());
+		this.bigBoneNpcs.add(NpcId.VOID_GIANT.id());
+		this.bigBoneNpcs.add(NpcId.VOID_OGRE.id());
 	}
 
 	private void generateAshesDrops() {
