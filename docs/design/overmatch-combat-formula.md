@@ -1,9 +1,9 @@
 # Overmatch — opposed-margin combat formula (design + simulator spec)
 
-Status: **simulator + default-off server implementation.** The `overmatch` ruleset
+Status: **accepted launch combat ruleset.** The `overmatch` ruleset
 lives in `tools/combat-sim/combat_sim.py` and is runnable via
 `scripts/combat-sim.sh --rules overmatch`. The Java port is isolated behind
-`overmatch_combat: true`, remains disabled in the launch contract, and requires no
+`overmatch_combat: true`, is required by the launch contract, and requires no
 client or packet change.
 
 The server preserves three live-content extensions that the generic simulator

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Source/config contract for the default-off Overmatch combat trial."""
+"""Source/config contract for the launch Overmatch combat ruleset."""
 
 import json
 from pathlib import Path
@@ -24,7 +24,7 @@ launch_contract = json.loads(read("scripts/launch-config-contract.json"))
 assert "public boolean OVERMATCH_COMBAT;" in config
 assert 'OVERMATCH_COMBAT = tryReadBool("overmatch_combat").orElse(false);' in config
 assert "overmatch_combat cannot be combined" in config
-assert launch_contract.get("overmatch_combat") == "false"
+assert launch_contract.get("overmatch_combat") == "true"
 
 for token in (
     "DENOMINATOR = 1024",
