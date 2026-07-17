@@ -15,19 +15,19 @@ database contents, signing material, or private source/history in this file.
 - **Immediate portal exposure:** CONTAINED by VS-092; unrelated launch blockers below
   keep the overall verdict at NO-GO.
 - **Private branch:** `codex/release-10139-integration`
-- **Latest verified release fix:** `e2b24ece` (VS-092 containment boundary)
+- **Latest verified release fix:** `f14cf3c6` (show all three clients after account creation)
 - **Sanitized public branch:** `codex/launch-rc-public-clean`
 - **Current local public commit:** `271581884add7bb434b715c598de281c631dba62`
 - **Current public `main`:** `57056c6147c105039f3e7b39c33f264cfd776247`
 - **Protocol/client version:** `10139`
-- **Play candidate:** versionCode `12`, versionName `1.0.11`, client `10139`, saved
-  as an unpublished Production draft
+- **Play candidate:** versionCode `12`, versionName `1.0.11`, client `10139`, in
+  Google review for a 100% Production rollout; Managed Publishing is off so approval
+  publishes it automatically
 - **Play candidate local SHA-256:**
   `ef48b10c28b25a3581aa8068d39c93d68196a10c38cb1592bc83614d925aef87`
-- **Release authority:** build/package work and the narrowly scoped VS-092 production
-  Nginx containment were explicitly authorized and completed. Any further production
-  deployment, public-source push, channel promotion, or Play publication requires
-  separate explicit authorization.
+- **Release authority:** the public client-channel deployment and Play publication were
+  explicitly authorized and completed through Google's review boundary. Public-source
+  publication and opening the game server remain separate actions.
 
 ## Status words
 
@@ -187,11 +187,11 @@ Freeze evidence:
 | Portal roster durability | Codex | PASS | VS-091: strict canonical startup, exact private/writable directory and file modes, absent-only service-user initialization, runtime `503`, mutation refusal, atomic writes, and preservation fixtures pass. Validating a copy of the real store and the paired restore rehearsal remain separate operator gates below. |
 | Database choice and permissions | Owner + operator | PENDING | Explicit SQLite/MariaDB decision; integrity/foreign keys, permissions, capacity, and exactly-one-writer proof. |
 | Coordinated backup and rollback | Operator + owner | PENDING | Portal/game writes quiesced; paired hashed off-host backup restored successfully in isolation; objective rollback triggers recorded. |
-| Desktop and launcher | Human + Codex | PENDING | Exact candidate fresh install, update, repair, offline behavior, login, gameplay, save, logout, and relogin. |
-| Hosted web client | Codex + human | PENDING | Exact `10139` manifest, HTTPS/WSS, cache policy, deep manifest, smoke, reconnect, and no stale `10132` assets. |
+| Desktop and launcher | Human + Codex | PENDING | Client `10139` launcher/runtime/cache are live and the 531-file hosted manifest gate passes. Exact-candidate fresh install, repair/offline behavior, and gameplay lifecycle remain the final hands-on gate. |
+| Hosted web client | Codex + human | IN PROGRESS | Exact `10139` package is live; expected-manifest match, 538/538 deep hashes, and immutable cache policy pass with zero failures. Authenticated WSS/gameplay and physical iPhone reconnect remain pending while the game server is intentionally off. |
 | Physical Android | Human | HUMAN | Validator-passing report names the exact public APK SHA-256 and covers signup, login, gameplay, background/resume, recovery, report/block, and data deletion. |
 | Physical iPhone/Home Screen | Human | HUMAN | Report covers Safari/Home Screen, signup/login, keyboard, orientation, panels, chat, bank/map, WSS reconnect, and background/resume. |
-| Play AAB identity | Codex | PASS | The exact verified local AAB at SHA-256 `ef48b10c28b25a3581aa8068d39c93d68196a10c38cb1592bc83614d925aef87` was selected for upload. Local Play preflight passed package, upload signer, version, client, server-contract, and SDK checks; Play accepted `12 (1.0.11)`, target SDK 35, and shows it as a Production draft. No review submission or rollout occurred. |
+| Play AAB identity | Codex | PASS | The exact verified AAB at SHA-256 `ef48b10c28b25a3581aa8068d39c93d68196a10c38cb1592bc83614d925aef87` passed package, upload-signer, version, client, server-contract, and SDK checks. Play accepted `12 (1.0.11)`, target SDK 35, for a 100% Production rollout. It is in Google review and will publish automatically on approval. |
 | Current live-source correspondence | Codex + owner | BLOCKED | The public source link/revision is proven to correspond to the portal service and covered clients already live or downloadable; correct any mismatch without waiting for game-server opening. |
 | Exact sanitized public source | Codex + owner | BLOCKED | Standalone sanitized clone; full reachable-history hygiene scan; exact final source commit publicly reachable and linked at/before opening. |
 | Production services | Operator | PENDING | Actual Nginx/systemd units, service identities, permissions, restart/backoff, native backfill and integrity-export timers, and exactly one game JVM audited. |
@@ -251,7 +251,11 @@ do not commit secrets or player data.
 | 2026-07-16 | VS-092 live portal containment | PASS | `e2b24ece`; snippet SHA-256 `a21ee841e920ba62ab15290d33e9861a903005a4bc9d44ba8e0622e40b3f7e5a` | Backup: `/opt/voidscape/backups/vs092-portal-containment-20260716T184849Z`. Nginx syntax/reload and 69/69 all-origin probes passed, followed by the canonical hosted verifier. Available logs show no successful body GET of backend `.mjs`, schema SQL, or build metadata; two README GETs returned bodies, with no established credential exposure. This configuration/log backup is not the required paired portal/game data backup. |
 | 2026-07-16 | Canonical build after VS-092 | PASS | `e2b24ece` | `scripts/build.sh` exit `0`; focused launch-config, static-boundary, package-runtime, portal API, and portal schema checks pass; JDK 25 compatibility warnings only. |
 | 2026-07-16 | Pre-containment held portal boundary | FAIL (historical; now contained) | held bundles from `57056c61` | Forbidden paths were packaged/served and status-only probes returned `200` on all three origins before VS-092. The live access path is now contained; bundle retirement remains open. |
-| 2026-07-16 | Play status | DRAFT, NOT PUBLIC | v12 / `1.0.11` / client `10139` | Console Production track summary: `Draft release: 12 (1.0.11) — client 10139`; the most recent public release remains v9 / `1.0.8`. |
+| 2026-07-17 | Public client surfaces | PASS | `f14cf3c6`; client `10139`; APK v12 / `1.0.11` | Live launcher SHA-256 `daa81d8eb39694a19f27c51f6a0042d73ee2ebede266f679401cfa59663268aa`; client jar `58ca1dd61fd604bc04fd4890cf4e258f6190b810283a1f4eb79fae6af5970623`; signed APK `f9ef65086cfe3f5699e48c59fcb7f748d8241510cb379f70eb11d3ae0123f382`; portal and legacy update manifests both report `10139`. Account-success Web/Desktop/Android tiles bind to the live routes. |
+| 2026-07-17 | Hosted web package | PASS (static/deep) | manifest SHA-256 `a55128655d55af97c63bfbe74cde79f4a94bba4d3ed936a1f48cd76e528620c8` | Expected manifest matches; 538/538 hosted files and immutable cache headers pass with zero failures at `tmp/web-teavm-deployment-verify-10139-live`. Authenticated WSS smoke remains deferred until the server opens. |
+| 2026-07-17 | Client-surface deployment backup | PASS | `/opt/voidscape/backups/client-surfaces-pre-20260717T031024Z` | Portal and game writers were quiesced; paired portal-store and SQLite backups were hashed before the atomic swaps. Live store permissions are `0700`/`0600`; portal and nginx are active; game/headless remain inactive. |
+| 2026-07-17 | Hosted launch/client gate | PASS | `tmp/launch-staging-live-client-10139-final` | Public portal, exact APK, Google Play URL, 531-file launcher channel, all three public origins, deployed config, and SQLite connection contract pass. Signup and web verification were intentionally skipped; the web package passed separately above. |
+| 2026-07-17 | Play status | IN REVIEW, AUTO-PUBLISH ON APPROVAL | v12 / `1.0.11` / client `10139` | Submitted for a 100% Production rollout. Console says `Your changes are now in review`; Managed Publishing is off, so the rollout starts automatically after Google approval. The currently public release remains v9 / `1.0.8` until approval. |
 | 2026-07-16 | Play AAB identity | PASS | SHA-256 `ef48b10c28b25a3581aa8068d39c93d68196a10c38cb1592bc83614d925aef87` | Canonical `--play-release` build and Play preflight pass; exact local artifact uploaded; Console accepted versionCode 12, versionName `1.0.11`, API 23+, and target SDK 35. |
 | 2026-07-16 | Protected pre-signup cohort | OWNER BASELINE ONLY | count `190` | Production count/schema/hash reconciliation pending; identities must not be recorded here. |
 
