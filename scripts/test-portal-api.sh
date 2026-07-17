@@ -21,6 +21,7 @@ launch_window_pid=""
 post_cutoff_pid=""
 public_pid=""
 no_db_pid=""
+world_live_pid=""
 verify_pid=""
 drain_pid=""
 drain_restart_pid=""
@@ -53,6 +54,10 @@ cleanup() {
 	if [[ -n "$no_db_pid" ]]; then
 		kill "$no_db_pid" >/dev/null 2>&1 || true
 		wait "$no_db_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$world_live_pid" ]]; then
+		kill "$world_live_pid" >/dev/null 2>&1 || true
+		wait "$world_live_pid" >/dev/null 2>&1 || true
 	fi
 	if [[ -n "$verify_pid" ]]; then
 		kill "$verify_pid" >/dev/null 2>&1 || true
@@ -154,7 +159,8 @@ CREATE TABLE players (
 	bodysprite int(5) DEFAULT 2,
 	cameraauto tinyint(1) DEFAULT 0,
 	creation_date int(10) NOT NULL DEFAULT 0,
-	creation_ip varchar(255) NOT NULL DEFAULT '0.0.0.0'
+	creation_ip varchar(255) NOT NULL DEFAULT '0.0.0.0',
+	banned bigint(20) NOT NULL DEFAULT 0
 );
 CREATE TABLE curstats (
 	playerID int(10) NOT NULL PRIMARY KEY,
@@ -274,6 +280,24 @@ CREATE TABLE equipped (
 	itemID int(10) NOT NULL,
 	PRIMARY KEY (playerID, itemID)
 );
+CREATE TABLE bank (
+	playerID int(10) NOT NULL,
+	itemID int(10) NOT NULL,
+	slot int(5) NOT NULL,
+	PRIMARY KEY (playerID, slot)
+);
+CREATE TABLE quests (
+	playerID int(10) NOT NULL,
+	questID int(10) NOT NULL,
+	stage int(5) NOT NULL DEFAULT 0,
+	PRIMARY KEY (playerID, questID)
+);
+CREATE TABLE live_feeds (
+	id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+	username varchar(12) NOT NULL,
+	message varchar(255) NOT NULL,
+	time int(10) NOT NULL
+);
 	CREATE TABLE itemstatuses (
 		itemID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
 		catalogID int(10) NOT NULL,
@@ -326,17 +350,55 @@ INSERT INTO players (
 );
 INSERT INTO players (id, username, group_id, email, pass, salt)
 VALUES (78, 'TakenHero', 10, 'taken@example.com', 'fixture-pass', '');
+INSERT INTO players (id, username, group_id, email, pass, salt, skill_total, npc_kills, deaths, creation_date)
+VALUES
+	(79, 'HiddenHero', 10, 'hidden@example.com', 'fixture-pass', '', 1500, 900, 40, strftime('%s', 'now', '-100 days')),
+	(80, 'StaffBoss', 2, 'staff@example.com', 'fixture-pass', '', 1782, 9999, 999, strftime('%s', 'now', '-200 days')),
+	(81, 'BannedHero', 10, 'banned@example.com', 'fixture-pass', '', 1700, 8888, 888, strftime('%s', 'now', '-150 days'));
+UPDATE players SET banned = 4102444800000 WHERE id = 81;
+INSERT INTO maxstats (playerID, attack, defense, strength, hits, ranged, prayer, magic, cooking, woodcut, fletching, fishing, firemaking, crafting, smithing, mining, herblaw, agility, thieving) VALUES
+	(77, 99, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86),
+	(79, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99),
+	(80, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99),
+	(81, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99);
+INSERT INTO experience (playerID, attack, defense, strength, hits, ranged, prayer, magic, cooking, woodcut, fletching, fishing, firemaking, crafting, smithing, mining, herblaw, agility, thieving) VALUES
+	(77, 4000, 800, 804, 808, 812, 816, 820, 824, 828, 832, 836, 840, 844, 848, 852, 856, 860, 864),
+	(79, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000),
+	(80, 12000, 12000, 12000, 12000, 12000, 12000, 12000, 12000, 12000, 12000, 12000, 12000, 12000, 12000, 12000, 12000, 12000, 12000),
+	(81, 16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000, 16000);
 INSERT INTO player_cache (playerID, type, key, value) VALUES
 	(77, 1, 'player_title_active', 'founder'),
+	(77, 1, 'player_honorific_active', 'saint'),
+	(77, 1, 'pt_u_paragon', '1'),
+	(0, 0, 'pt_first_date_paragon', strftime('%s', 'now', '-2 days')),
+	(79, 2, 'setting_hide_scores', 'true'),
+	(79, 1, 'pt_u_trailblazer', '1'),
+	(0, 0, 'pt_first_date_trailblazer', strftime('%s', 'now', '-3 days')),
 	(77, 0, 'void_path', '1'),
 	(0, 3, 'char_sub:77', '4102444800000');
 INSERT INTO itemstatuses (itemID, catalogID, amount, noted, wielded, durability, kill_log) VALUES
 	(9001, 77, 1, 0, 1, 100, NULL),
 	(9002, 117, 1, 0, 1, 100, NULL),
-	(9003, 77, 0, 0, 0, 100, NULL);
+	(9003, 77, 0, 0, 0, 100, NULL),
+	(9010, 10, 5000, 0, 0, 100, NULL),
+	(9011, 10, 9000, 0, 0, 100, NULL),
+	(9012, 10, 999999, 0, 0, 100, NULL);
 INSERT INTO invitems (playerID, itemID, slot) VALUES
 	(77, 9001, 0),
 	(77, 9002, 1);
+INSERT INTO bank (playerID, itemID, slot) VALUES
+	(77, 9010, 0),
+	(79, 9011, 0),
+	(80, 9012, 0);
+INSERT INTO quests (playerID, questID, stage) VALUES
+	(77, 1, -1),
+	(79, 1, -1),
+	(80, 1, -1);
+INSERT INTO live_feeds (username, message, time) VALUES
+	('SmokeHero', 'has completed the Dragon Slayer quest and now has 47 quest points!', strftime('%s', 'now')),
+	('HiddenHero', 'has achieved level-99 in Attack, the maximum possible! Congratulations!', strftime('%s', 'now', '-1 minute')),
+	('StaffBoss', 'has obtained a Dragon axe!', strftime('%s', 'now', '-2 minutes')),
+	('SmokeHero', 'has PKed HiddenHero', strftime('%s', 'now', '-3 minutes'));
 INSERT INTO staff_logs (
 	staff_username, action, affected_player, time, staff_x, staff_y, affected_x, affected_y,
 	staff_ip, affected_ip, extra
@@ -353,6 +415,16 @@ INSERT INTO staff_logs (
 	(9001, 77, 1, 0, 77, 'SmokeHero', 77, 'SmokeHero', 'item_transfer', 'player_inventory', 'ground_player_drop', 'drop', 123, 510, strftime('%s', 'now', '-1 minutes'), 'manual_drop=true');
 SQL
 cp "$fixture_db" "$base_fixture_db"
+sqlite3 "$base_fixture_db" <<'SQL'
+DELETE FROM bank WHERE playerID IN (79, 80, 81);
+DELETE FROM quests WHERE playerID IN (79, 80, 81);
+DELETE FROM maxstats WHERE playerID IN (79, 80, 81);
+DELETE FROM experience WHERE playerID IN (79, 80, 81);
+DELETE FROM player_cache WHERE playerID IN (79, 80, 81) OR (playerID = 0 AND key = 'pt_first_date_trailblazer');
+DELETE FROM live_feeds WHERE username IN ('HiddenHero', 'StaffBoss');
+DELETE FROM itemstatuses WHERE itemID IN (9011, 9012);
+DELETE FROM players WHERE id IN (79, 80, 81);
+SQL
 
 PORTAL_OPENRSC_DB="$fixture_db" \
 	PORTAL_INTEGRITY_SNAPSHOT="$tmp_dir/integrity-summary.json" \
@@ -401,7 +473,75 @@ if (!payload.ok) throw new Error('health endpoint should report ok');
 if (!payload.storage || payload.storage.durable !== true) throw new Error('health endpoint should report durable portal storage when PORTAL_DATA_DIR is set');
 if (!payload.openRscDb || payload.openRscDb.configured !== true) throw new Error('health endpoint should report the OpenRSC DB bridge');
 " "$health_payload"
+world_live_db="$tmp_dir/openrsc-world-live-fixture.db"
+cp "$fixture_db" "$world_live_db"
 PORT="$PORT" PORTAL_ADMIN_TOKEN="dev-admin" PORTAL_SIGNUP_IP_DAILY_LIMIT=3 PORTAL_CHARACTER_IP_DAILY_LIMIT=2 node web/portal/api-smoke.mjs
+
+# The same endpoint must drop every fictional identity at the launch boundary and
+# resume the privacy-filtered saved-world ledger. A separate post-launch process
+# keeps the main prelaunch signup fixture untouched.
+world_live_port=$((PORT + 27))
+initialize_public_store "$tmp_dir/world-live-store"
+PORT="$world_live_port" \
+	PORTAL_DATA_DIR="$tmp_dir/world-live-store" \
+	PORTAL_OPENRSC_DB="$world_live_db" \
+	PORTAL_LAUNCH_AT="2000-01-01T00:00:00Z" \
+	node web/portal/dev-server.mjs >"$tmp_dir/world-live.log" 2>&1 &
+world_live_pid="$!"
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${world_live_port}/api/health" >/dev/null 2>&1; then break; fi
+	if ! kill -0 "$world_live_pid" >/dev/null 2>&1; then
+		cat "$tmp_dir/world-live.log" >&2
+		echo "post-launch world fixture exited before becoming healthy" >&2
+		exit 1
+	fi
+	sleep 0.1
+done
+world_live_payload="$(curl -fsS "http://127.0.0.1:${world_live_port}/api/world")"
+node -e '
+const world = JSON.parse(process.argv[1]);
+if (world.live !== true || world.demo === true || world.source !== "openrsc-sqlite") throw new Error("post-launch world must contain only saved-world data");
+if (JSON.stringify(world).includes("Astravale")) throw new Error("post-launch world must clear fictional prelaunch identities");
+if (world.pulse.accounts !== 3 || world.pulse.totalGp !== 14000) throw new Error("live aggregates must preserve eligibility and hidden-player totals");
+if (world.highscores.hiddenCount !== 1 || world.highscores.overall.length !== 1 || world.highscores.overall[0].player !== "SmokeHero") throw new Error("live boards must enforce privacy and eligibility");
+if (world.highscores.skills.attack[0].xp !== 1000) throw new Error("live boards must convert fixed-point experience");
+if (world.highscores.overall[0].honorific !== "Saint" || world.highscores.overall[0].epithet !== "the Founder") throw new Error("live boards must preserve title placement");
+if (world.feed.length !== 1 || world.feed[0].player !== "SmokeHero" || JSON.stringify(world.feed).includes("HiddenHero")) throw new Error("live feed must suppress hidden identities");
+const anonymousFirst = world.records.find((record) => record.key === "first_max");
+const visibleFirst = world.records.find((record) => record.key === "first_total");
+if (!anonymousFirst || !anonymousFirst.anonymous || anonymousFirst.holder !== "An unseen adventurer") throw new Error("live records must anonymize hidden holders");
+if (!visibleFirst || visibleFirst.holder !== "SmokeHero" || visibleFirst.honorific !== "Saint") throw new Error("live records must decorate visible holders");
+if (Object.keys(world.highscores.skills).length !== 18 || !Array.isArray(world.facts) || !world.facts.length) throw new Error("live world contract is incomplete");
+' "$world_live_payload"
+kill "$world_live_pid" >/dev/null 2>&1 || true
+wait "$world_live_pid" >/dev/null 2>&1 || true
+world_live_pid=""
+
+initialize_public_store "$tmp_dir/world-prelaunch-no-db-store"
+PORT="$world_live_port" \
+	PORTAL_DATA_DIR="$tmp_dir/world-prelaunch-no-db-store" \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	node web/portal/dev-server.mjs >"$tmp_dir/world-prelaunch-no-db.log" 2>&1 &
+world_live_pid="$!"
+for _ in {1..60}; do
+	if curl -fsS "http://127.0.0.1:${world_live_port}/api/health" >/dev/null 2>&1; then break; fi
+	if ! kill -0 "$world_live_pid" >/dev/null 2>&1; then
+		cat "$tmp_dir/world-prelaunch-no-db.log" >&2
+		echo "prelaunch no-database world fixture exited before becoming healthy" >&2
+		exit 1
+	fi
+	sleep 0.1
+done
+world_no_db_payload="$(curl -fsS "http://127.0.0.1:${world_live_port}/api/world")"
+node -e '
+const world = JSON.parse(process.argv[1]);
+if (!world.demo || world.source !== "prelaunch-fiction" || world.highscores.overall.length !== 10) {
+	throw new Error("prelaunch Chronicle should remain fully populated without a game database");
+}
+' "$world_no_db_payload"
+kill "$world_live_pid" >/dev/null 2>&1 || true
+wait "$world_live_pid" >/dev/null 2>&1 || true
+world_live_pid=""
 
 signup_code_count="$(sqlite3 "$fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'signup_code:VOID%' AND value='1';")"
 if [[ "$signup_code_count" -lt 1 ]]; then

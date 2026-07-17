@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Voidscape - The Chronicle</title>
+	<meta name="description" content="The living ledger of Voidscape: highscores, world records, the economy, and everything happening in the world right now.">
+	<link rel="icon" href="assets/favicon.png">
+	<link rel="preload" as="font" type="font/woff2" href="assets/instrument-sans-latin-400-600.woff2" crossorigin>
+	<link rel="preload" as="font" type="font/ttf" href="assets/alagard.ttf" crossorigin>
+	<link rel="stylesheet" href="landing.css">
+	<link rel="stylesheet" href="world.css">
+</head>
+<body class="chronicle">
+	<a class="skip-link" href="#chronicle-main">Skip to the Chronicle</a>
+	<div class="stars" aria-hidden="true"></div>
+	<div class="void-embers" aria-hidden="true">
+		<img class="ember ember-a" src="assets/world/flame-orb.png" alt="">
+		<img class="ember ember-b" src="assets/world/flame-swirl.png" alt="">
+	</div>
+
+	<header class="nav">
+		<a class="nav-brand" href="/" aria-label="Voidscape home">
+			<img src="assets/voidscape-wordmark.png" alt="Voidscape">
+		</a>
+		<div class="nav-side">
+			<span class="launch-chip"><span class="chip-dot" aria-hidden="true"></span><span id="nav-online">Reading the ledger...</span></span>
+			<a class="nav-signin" href="/portal?auth=login">Sign in</a>
+		</div>
+	</header>
+
+	<main id="chronicle-main">
+		<!-- ======================= hero ======================= -->
+		<section class="hero chronicle-hero">
+			<p class="hero-eyebrow">The world ledger of Voidscape</p>
+			<h1 class="hero-title">The Chronicle</h1>
+			<p class="hero-sub">Levels, treasures, firsts, and Wilderness victories. The world writes them into one living ledger.</p>
+			<div class="chronicle-status is-loading" id="chronicle-status" role="status" aria-live="polite" aria-atomic="true">
+				<span class="status-rune" aria-hidden="true"></span>
+				<span id="chronicle-status-text">Opening the live ledger...</span>
+			</div>
+			<div class="live-line" id="live-line">
+				<span class="live-line-rune" aria-hidden="true">&#10022;</span>
+				<span class="live-line-text" id="live-line-text">Opening the ledger...</span>
+			</div>
+		</section>
+
+		<aside class="fiction-notice" id="fiction-notice" aria-labelledby="fiction-notice-title" hidden>
+			<img src="assets/world/title-marker.png" alt="" class="fiction-notice-mark">
+			<div>
+				<p class="fiction-notice-eyebrow">A vision before the gates open</p>
+				<h2 id="fiction-notice-title">Every name and number below is fictional.</h2>
+				<p>The Chronicle is imagining a busy world so you can explore what will be remembered here. <strong id="fiction-launch-copy">At launch, this vision clears and real player deeds take its place.</strong></p>
+			</div>
+		</aside>
+
+		<!-- ======================= world pulse ======================= -->
+		<section class="pulse" aria-label="World statistics right now">
+			<div class="pulse-grid" id="pulse-grid">
+				<div class="pulse-tile" data-pulse="online">
+					<span class="pulse-icon"><span class="pulse-dot" aria-hidden="true"></span></span>
+					<strong data-count>0</strong>
+					<span class="pulse-label">Adventurers online</span>
+				</div>
+				<div class="pulse-tile" data-pulse="totalGp">
+					<span class="pulse-icon"><img src="assets/npc-database/item/10.png" alt="" class="px px2"></span>
+					<strong data-count class="is-gold">0</strong>
+					<span class="pulse-label">Coins in circulation</span>
+				</div>
+				<div class="pulse-tile" data-pulse="accounts">
+					<span class="pulse-icon"><img src="assets/world/title-marker.png" alt="" class="art-icon"></span>
+					<strong data-count>0</strong>
+					<span class="pulse-label">Souls forged</span>
+				</div>
+				<div class="pulse-tile" data-pulse="npcKills">
+					<span class="pulse-icon"><img src="assets/world/skills/skill-attack.png" alt="" class="art-icon"></span>
+					<strong data-count>0</strong>
+					<span class="pulse-label">Monsters slain</span>
+				</div>
+				<div class="pulse-tile" data-pulse="deaths">
+					<span class="pulse-icon"><img src="assets/npc-database/item/20.png" alt="" class="px px2"></span>
+					<strong data-count>0</strong>
+					<span class="pulse-label">Wilderness deaths</span>
+				</div>
+				<div class="pulse-tile" data-pulse="questsCompleted">
+					<span class="pulse-icon"><img src="assets/world/mini-gold.png" alt="" class="art-icon"></span>
+					<strong data-count>0</strong>
+					<span class="pulse-label">Quests completed</span>
+				</div>
+			</div>
+		</section>
+
+		<!-- ======================= happening now ======================= -->
+		<section class="section" id="feed">
+			<header class="section-head">
+				<h2 class="section-title">The world, as it turns</h2>
+				<img class="section-divider" src="assets/world/divider-a.png" alt="">
+			</header>
+
+			<div class="feed-grid">
+				<div class="feed-panel">
+					<div class="feed-showcase" id="feed-showcase" hidden>
+						<img class="feed-showcase-art" src="assets/world/killfeed-bar.png" alt="">
+						<p class="feed-showcase-text" id="feed-showcase-text"></p>
+					</div>
+					<ol class="feed-list" id="feed-list">
+						<li class="feed-waiting">The Chronicle awaits its first entry...</li>
+					</ol>
+				</div>
+
+				<aside class="almanac" aria-label="From the Void Almanac">
+					<img class="almanac-portal" src="assets/world/portal.png" alt="" loading="lazy" decoding="async">
+					<p class="almanac-eyebrow">From the Void Almanac</p>
+					<p class="almanac-fact" id="almanac-fact" aria-live="polite" aria-atomic="true">The Void is thinking...</p>
+					<p class="almanac-source" id="almanac-source"></p>
+					<button class="btn-quiet almanac-btn" id="almanac-btn" type="button">Consult the Void again</button>
+				</aside>
+			</div>
+		</section>
+
+		<!-- ======================= the monument (highscores) ======================= -->
+		<section class="section" id="highscores">
+			<header class="section-head">
+				<h2 class="section-title">The Monument</h2>
+				<img class="section-divider" src="assets/world/divider-a.png" alt="">
+				<p class="section-sub">The three greatest stand in stone. The Monument is recut as the world turns.</p>
+			</header>
+
+			<nav class="skill-rail" id="skill-rail" aria-label="Choose a skill table" role="tablist"></nav>
+
+			<div class="podium" id="podium">
+				<!-- filled by world.js -->
+			</div>
+			<img class="podium-base" src="assets/world/plaque-banner.png" alt="">
+
+			<p class="board-scroll-cue">Swipe the stone table to see every column.</p>
+			<div class="board-wrap" tabindex="0" role="region" aria-labelledby="board-caption">
+				<table class="board" id="board">
+					<caption id="board-caption">Overall highscores</caption>
+					<thead>
+						<tr><th class="c-rank" scope="col">Rank</th><th scope="col">Adventurer</th><th class="c-lvl" scope="col">Level</th><th class="c-xp" scope="col">Experience</th></tr>
+					</thead>
+					<tbody id="board-body"></tbody>
+				</table>
+			</div>
+
+			<aside class="privacy-callout" aria-labelledby="privacy-callout-title">
+				<img src="assets/world/shield-5.png" alt="" class="privacy-callout-art">
+				<div>
+					<p class="privacy-callout-eyebrow">Your name, your choice</p>
+					<h3 id="privacy-callout-title">Want to stay out of the Chronicle?</h3>
+					<p>In game, type <code>::hidescores on</code>. Your name leaves highscores and identifying activity after the next world save. Type <code>::hidescores off</code> whenever you want to return. Aggregate world totals may still include your deeds. <span id="hidden-count"></span></p>
+				</div>
+			</aside>
+		</section>
+
+		<!-- ======================= etched in the void (records) ======================= -->
+		<section class="section" id="records">
+			<header class="section-head">
+				<h2 class="section-title">Etched in the Void</h2>
+				<img class="section-divider" src="assets/world/divider-a.png" alt="">
+				<p class="section-sub">First claims are cut once and never erased. Even if the holder falls, the stone remembers.</p>
+			</header>
+			<div class="records-grid" id="records-grid"></div>
+		</section>
+
+		<!-- ======================= the coin ledger (economy) ======================= -->
+		<section class="section" id="economy">
+			<header class="section-head">
+				<h2 class="section-title">The Coin Ledger</h2>
+				<img class="section-divider" src="assets/world/divider-a.png" alt="">
+			</header>
+			<div class="economy-grid">
+				<div class="economy-hero">
+					<img class="economy-coins px px3" src="assets/npc-database/item/10.png" alt="">
+					<strong class="economy-total is-gold" id="economy-total" data-count>0</strong>
+					<span class="pulse-label">coins in the world</span>
+					<p class="economy-sub" id="economy-sub"></p>
+				</div>
+				<div class="economy-hoard">
+					<p class="hoard-eyebrow">Most hoarded treasures</p>
+					<ol class="hoard-list" id="hoard-list"></ol>
+				</div>
+			</div>
+		</section>
+
+		<!-- ======================= wilderness watch ======================= -->
+		<section class="section" id="wilderness">
+			<img class="wild-banner" src="assets/world/wilderness-banner.png" alt="The Wilderness: danger ahead" loading="lazy" decoding="async">
+			<div class="wild-grid">
+				<div class="wild-crest">
+					<img src="assets/world/skull-crest.png" alt="">
+					<strong id="wild-kills">-</strong>
+					<span class="pulse-label">souls claimed this week</span>
+				</div>
+				<div class="wild-feed">
+					<p class="hoard-eyebrow">Last seen beyond the gate</p>
+					<ol class="wild-list" id="wild-list"></ol>
+				</div>
+				<div class="wild-deadliest">
+					<img src="assets/world/badge-legend.png" alt="" class="wild-badge">
+					<p class="hoard-eyebrow">Deadliest this week</p>
+					<strong class="wild-name" id="wild-deadliest">-</strong>
+					<span class="pulse-label" id="wild-deadliest-kills"></span>
+				</div>
+			</div>
+		</section>
+	</main>
+
+	<footer class="footer">
+		<img src="assets/voidscape-wordmark.png" alt="Voidscape">
+		<p class="footer-note" id="data-note">The ledger refreshes every few minutes.</p>
+		<nav aria-label="More">
+			<a href="/">Home</a>
+			<a href="/npcs">Bestiary</a>
+			<a href="/features">Features</a>
+			<a href="/privacy">Privacy</a>
+		</nav>
+	</footer>
+
+	<script src="presence.js" defer></script>
+	<script src="world.js" defer></script>
+</body>
+</html>

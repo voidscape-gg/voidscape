@@ -89,10 +89,11 @@ expect_status() {
 }
 
 for path in \
-	/ /portal /privacy /community-rules /data-deletion /features \
+	/ /portal /privacy /community-rules /data-deletion /features /world /world/ \
 	/loot-editor /loot-editor-guide /npcs /drops /discord /transparency \
 	/portal/ /loot-editor/ /loot-editor-guide/ \
-	/index.html /styles.css /presence.js /assets/favicon.png \
+	/index.html /styles.css /presence.js /world.css /world.js /assets/favicon.png \
+	/assets/world/portal.png /assets/world/skills/skill-attack.png \
 	/assets/loot-editor-data.json /assets/whitepaper/feature-void-rift-current.png \
 	/assets/npc-database/npc/0.png /assets/npc-database/item/0.png \
 	/assets/alagard.ttf /assets/instrument-sans-latin-400-600.woff2

@@ -51,6 +51,7 @@ import static com.openrsc.server.plugins.authentic.quests.free.ShieldOfArrav.isP
 
 public final class RegularPlayer implements CommandTrigger {
 	private static final Logger LOGGER = LogManager.getLogger(RegularPlayer.class);
+	private static final String HIDE_SCORES_CACHE_KEY = "setting_hide_scores";
 
 	public static String messagePrefix = null;
 	public static String badSyntaxPrefix = null;
@@ -138,6 +139,8 @@ public final class RegularPlayer implements CommandTrigger {
 			handleExperienceFreeze(player, command, args);
 		} else if (command.equalsIgnoreCase("titles") || command.equalsIgnoreCase("title")) {
 			PlayerTitleMenu.handleBrowseCommand(player, args);
+		} else if (command.equalsIgnoreCase("hidescores")) {
+			handleHideScores(player, args);
 		} else if (command.equalsIgnoreCase("b") && config().RIGHT_CLICK_BANK) {
 			if (!player.getQolOptOut()) {
 				if (player.getLocation().isInBank(config().BASED_MAP_DATA)) {
@@ -224,6 +227,31 @@ public final class RegularPlayer implements CommandTrigger {
 		return command.equalsIgnoreCase("freezexp")
 			|| command.equalsIgnoreCase("freezeexp")
 			|| command.equalsIgnoreCase("freezeexperience");
+	}
+
+	private void handleHideScores(Player player, String[] args) {
+		if (args.length > 1
+			|| (args.length == 1
+			&& !args[0].equalsIgnoreCase("on")
+			&& !args[0].equalsIgnoreCase("off")
+			&& !args[0].equalsIgnoreCase("status"))) {
+			player.message(badSyntaxPrefix + "HIDESCORES [on|off|status]");
+			return;
+		}
+
+		boolean hidden = player.getCache().hasKey(HIDE_SCORES_CACHE_KEY)
+			&& player.getCache().getBoolean(HIDE_SCORES_CACHE_KEY);
+		if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
+			player.playerServerMessage(MessageType.QUEST,
+				"The public Chronicle is currently " + (hidden ? "hiding" : "showing") + " your identity.");
+			return;
+		}
+
+		boolean next = args.length == 0 ? !hidden : args[0].equalsIgnoreCase("on");
+		player.getCache().store(HIDE_SCORES_CACHE_KEY, next);
+		player.playerServerMessage(MessageType.QUEST, next
+			? "The Chronicle will hide your identity after the next world save. Anonymous totals may still include your deeds."
+			: "The Chronicle will show your identity again after the next world save.");
 	}
 
 	private static boolean isSelfExperienceFreezeSyntax(String[] args) {
@@ -1795,6 +1823,7 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::toggleblocktrade - toggle blocking all trade requests %",
 		"@whi@::toggleblockduel - toggle blocking all duel requests %",
 		"@whi@::freezexp on|off|status - control all XP gain %",
+		"@whi@::hidescores on|off|status - control Chronicle visibility %",
 		"@whi@::rested - show rested XP status %",
 		"@whi@::lootbeam - customize rare drop loot beams %"
 	};

@@ -13,6 +13,19 @@ assert(Array.isArray(initialPublic.market) && initialPublic.market.length >= 6, 
 assert(Array.isArray(initialPublic.highscores) && initialPublic.highscores.length >= 6, "public endpoint should expose highscores");
 assert(Array.isArray(initialPublic.activity) && initialPublic.activity.length >= 6, "public endpoint should expose activity");
 assert(initialPublic.integrity && initialPublic.integrity.staffCommands, "public endpoint should expose integrity summary");
+
+const world = await api("/api/world");
+assert(world.live === false && world.demo === true && world.source === "prelaunch-fiction", "world endpoint should identify fictional prelaunch data before launch");
+assert(typeof world.launchAt === "string" && Date.parse(world.launchAt) > Date.now(), "prelaunch world should identify the automatic launch cutoff");
+assert(world.highscores.overall.length === 10, "prelaunch world should fill the overall Monument");
+assert(Object.keys(world.highscores.skills).length === 18, "world endpoint should expose all eighteen classic skill boards");
+assert(Object.values(world.highscores.skills).every((board) => board.length === 10), "prelaunch world should fill all eighteen skill boards");
+assert(world.records.length === 10 && world.records.every((record) => record.claimed), "prelaunch world should fill every memorial stone");
+assert(world.feed.length === 12, "prelaunch world should fill the activity ledger");
+assert(world.economy.topItems.length === 5, "prelaunch world should fill the economy hoard");
+assert(world.wilderness.recent.length === 8, "prelaunch world should fill the Wilderness watch");
+assert(world.facts.length === 12, "prelaunch world should fill the Void Almanac");
+assert(!JSON.stringify(world).includes("SmokeHero") && !JSON.stringify(world).includes("HiddenHero"), "prelaunch fiction must not leak saved player identities");
 assert(typeof initialPublic.integrity.staffCommands.total24h === "number", "integrity summary should expose staff command totals");
 assert(initialPublic.integrity.staffCommands.total24h >= 2, "integrity summary should count fixture staff commands");
 assert(initialPublic.integrity.staffCommands.blocked24h >= 1, "integrity summary should count blocked fixture staff commands");

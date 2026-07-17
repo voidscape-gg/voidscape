@@ -892,6 +892,10 @@ Regular Player Commands
 - online
   - Usage: `::online`
   - Shows the number of players currently online
+- hidescores
+  - Usage: `::hidescores [on|off|status]`
+  - Controls whether your character appears by name in the public Chronicle highscores and activity ledger.
+  - The setting persists with your next world save. Aggregate world totals may still include your saved deeds and holdings.
 - commands
   - Usage: `::commands`
   - Shows a list of the Regular Player commands.

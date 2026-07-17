@@ -31,7 +31,7 @@ curl -X POST -H "x-portal-admin-token: $PORTAL_ADMIN_TOKEN" -H 'content-type: ap
 
 ## Launching the public prelaunch site
 
-Set `PORTAL_PUBLIC_MODE=1` for any internet-facing prelaunch deployment. With only that flag, the server is code-only and locks down to exactly: static files, `GET /api/health`, `GET /api/public` (sanitized — no fake world stats, but with launcher/APK availability, global launch-rule metadata, and optional launch countdown metadata), `GET /api/integrity` (public-safe transparency aggregates), public launcher/APK downloads, `GET /api/launcher/manifest.properties`, `POST /api/founder/reservations`, `POST /api/presence/heartbeat`, and the token-gated `/api/admin/*`. Everything else — registration, login, dev Google sign-in, character creation, link simulation, subscription redeem, snapshots, and avatars — returns 404. The UI pins itself to the landing view (deep links like `#admin` or `#dashboard` land on the signup page).
+Set `PORTAL_PUBLIC_MODE=1` for any internet-facing prelaunch deployment. With only that flag, the server is code-only and locks down to exactly: static files, `GET /api/health`, `GET /api/public` (sanitized — no fake world stats, but with launcher/APK availability, global launch-rule metadata, and optional launch countdown metadata), `GET /api/world` (the privacy-filtered Chronicle ledger), `GET /api/integrity` (public-safe transparency aggregates), public launcher/APK downloads, `GET /api/launcher/manifest.properties`, `POST /api/founder/reservations`, `POST /api/presence/heartbeat`, and the token-gated `/api/admin/*`. Everything else — registration, login, dev Google sign-in, character creation, link simulation, subscription redeem, snapshots, and avatars — returns 404. The UI pins itself to the landing view (deep links like `#admin` or `#dashboard` land on the signup page).
 
 For launch ads, add `PORTAL_LAUNCH_SIGNUP_MODE=1`. This keeps dev/payment/link-simulation/admin surfaces locked down, but opens the safe account path needed by real players: registration and email verification, optional Google ID-token signup, login/logout, account reads, character creation/deletion, emailed and recovery-code website-password reset, authenticated game-password reset, and the remaining security actions. It also exposes `launchSignupMode: true` plus public OAuth metadata through `/api/public`, enables the authenticated Account/Characters/Subscription/Security views, and turns the landing form into "create account + first character + reserve starter card" copy. The launch form password is deliberately limited to letters and numbers because it is also the first character's game login until the clients support web-account SSO.
 
@@ -164,6 +164,15 @@ scripts/run-portal.sh
 ```
 
 Then open `http://127.0.0.1:8788/`.
+
+The public world ledger is available at `/world`. Before `PORTAL_LAUNCH_AT`,
+`GET /api/world` serves a fully populated and prominently labeled fictional
+Chronicle without requiring the game database. At that instant it automatically
+clears the fiction and switches to privacy-filtered data from the configured
+OpenRSC SQLite database, caching live snapshots for 45 seconds. Its eligibility,
+privacy commands, launch transition, response contract, failure behavior, and
+operations are documented in
+[`docs/WORLD-CHRONICLE.md`](../../docs/WORLD-CHRONICLE.md).
 
 For static-only review without API behavior:
 

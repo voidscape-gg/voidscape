@@ -86,6 +86,45 @@ const oauthStateTtlMs = 1000 * 60 * 10;
 const linkChallengeTtlMs = 1000 * 60 * 15;
 const scryptParams = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const openRscAccountIdCacheKey = "web_account_id";
+const worldHideScoresCacheKey = "setting_hide_scores";
+const worldSnapshotTtlMs = 45 * 1000;
+const worldSkills = [
+	{ key: "attack", label: "Attack", column: "attack" },
+	{ key: "defense", label: "Defence", column: "defense" },
+	{ key: "strength", label: "Strength", column: "strength" },
+	{ key: "hits", label: "Hits", column: "hits" },
+	{ key: "ranged", label: "Ranged", column: "ranged" },
+	{ key: "prayer", label: "Prayer", column: "prayer" },
+	{ key: "magic", label: "Magic", column: "magic" },
+	{ key: "cooking", label: "Cooking", column: "cooking" },
+	{ key: "woodcut", label: "Woodcutting", column: "woodcut" },
+	{ key: "fletching", label: "Fletching", column: "fletching" },
+	{ key: "fishing", label: "Fishing", column: "fishing" },
+	{ key: "firemaking", label: "Firemaking", column: "firemaking" },
+	{ key: "crafting", label: "Crafting", column: "crafting" },
+	{ key: "smithing", label: "Smithing", column: "smithing" },
+	{ key: "mining", label: "Mining", column: "mining" },
+	{ key: "herblaw", label: "Herblaw", column: "herblaw" },
+	{ key: "agility", label: "Agility", column: "agility" },
+	{ key: "thieving", label: "Thieving", column: "thieving" }
+];
+const worldPermanentRecords = [
+	{ id: "trailblazer", key: "first_max", label: "First level 99", value: "The first maxed skill", detail: "First to reach level 99 in any skill" },
+	{ id: "paragon", key: "first_total", label: "First max total", value: "1,782 total", detail: "First to master all eighteen skills" },
+	{ id: "lorekeeper", key: "first_quests", label: "First Lorekeeper", value: "Every quest completed", detail: "First to finish the full quest book" },
+	{ id: "first_swfish", key: "first_swfish", label: "Swordfish Sovereign", value: "50,000 swordfish", detail: "First to cook fifty thousand swordfish" },
+	{ id: "first_coal25k", key: "first_coal", label: "Coal Pioneer", value: "25,000 coal", detail: "First to mine twenty-five thousand coal" },
+	{ id: "first_mlogs", key: "first_mlogs", label: "Elder Feller", value: "50,000 magic logs", detail: "First to cut fifty thousand magic logs" },
+	{ id: "first_herbs", key: "first_herbs", label: "Herb Harvester", value: "25,000 herbs", detail: "First to gather twenty-five thousand herbs" },
+	{ id: "first_gems", key: "first_gems", label: "Gemsetter", value: "10,000 gems", detail: "First to cut ten thousand gems" },
+	{ id: "first_t1700", key: "first_t1700", label: "Seventeen-Hundred", value: "1,700 total", detail: "First to cross total level 1,700" },
+	{ id: "first_spells", key: "first_spells", label: "Spellstorm", value: "50,000 spells", detail: "First to cast fifty thousand spells" }
+];
+const worldHonorificNames = new Map([
+	["saint", "Saint"],
+	["knight", "Knight"],
+	["warlord_wastes", "Warlord"]
+]);
 const openRscProvisioningSource = "openrsc-sqlite-provisioning";
 const openRscCreatedSource = "openrsc-sqlite-created";
 const starterCardCachePrefix = "starter:";
@@ -577,6 +616,8 @@ const handlerDrainWaiters = new Set();
 const backgroundTasks = new Set();
 let itemDefinitionsPromise = null;
 let titleDefinitionsPromise = null;
+let worldSnapshotCache = null;
+let worldSnapshotPromise = null;
 
 class HttpError extends Error {
 	constructor(status, message) {
@@ -870,6 +911,7 @@ async function handleApi(request, response, url) {
 		const allowed =
 			(method === "GET" && url.pathname === "/api/health")
 			|| (method === "GET" && url.pathname === "/api/public")
+			|| (method === "GET" && url.pathname === "/api/world")
 			|| (method === "GET" && url.pathname === "/api/integrity")
 			|| (method === "GET" && url.pathname.startsWith("/api/openrsc/characters/") && url.searchParams.get("availability") === "1")
 			|| (method === "POST" && url.pathname === "/api/funnel/click")
@@ -958,6 +1000,11 @@ async function handleApi(request, response, url) {
 	if (method === "GET" && url.pathname === "/api/public") {
 		const store = await loadStore();
 		json(response, 200, await publicState(store));
+		return;
+	}
+
+	if (method === "GET" && url.pathname === "/api/world") {
+		json(response, 200, await worldState());
 		return;
 	}
 
@@ -5632,6 +5679,669 @@ async function publicState(store) {
 		market: publicContent.market,
 		activity: dynamicActivity(store).concat(publicContent.activity).slice(0, 8)
 	};
+}
+
+async function worldState() {
+	const launch = launchScheduleState();
+	if (launch && launch.locked) {
+		return prelaunchWorldState(launch);
+	}
+	if (!openRscDbPath) {
+		throw new HttpError(503, "openrsc_db_not_configured");
+	}
+	const now = Date.now();
+	if (worldSnapshotCache && worldSnapshotCache.expiresAt > now) {
+		return worldSnapshotCache.value;
+	}
+	if (worldSnapshotPromise) return worldSnapshotPromise;
+	worldSnapshotPromise = buildWorldState()
+		.then((value) => {
+			worldSnapshotCache = { value, expiresAt: Date.now() + worldSnapshotTtlMs };
+			return value;
+		})
+		.finally(() => {
+			worldSnapshotPromise = null;
+		});
+	return worldSnapshotPromise;
+}
+
+function prelaunchWorldState(launch) {
+	const nowSec = Math.floor(Date.now() / 1000);
+	const adventurers = [
+		{ player: "Astravale", honorific: "Saint", epithet: "of the Last Star", level: 1712, xp: 189231004 },
+		{ player: "Mordryn", honorific: "Warlord", epithet: "the Hollow", level: 1664, xp: 172440221 },
+		{ player: "Bramble", honorific: "Knight", epithet: "of Deepwood", level: 1598, xp: 151882490 },
+		{ player: "Ashen Jack", honorific: "", epithet: "the Unburnt", level: 1517, xp: 137604119 },
+		{ player: "Veilwalker", honorific: "", epithet: "between Worlds", level: 1452, xp: 128110744 },
+		{ player: "Copper Fox", honorific: "", epithet: "the Cunning", level: 1391, xp: 115908320 },
+		{ player: "Rune Widow", honorific: "", epithet: "of Varrock", level: 1328, xp: 103744612 },
+		{ player: "Old Moth", honorific: "", epithet: "the Lantern-Born", level: 1270, xp: 94412108 },
+		{ player: "Wyrmglass", honorific: "", epithet: "the Far-Seer", level: 1209, xp: 83100941 },
+		{ player: "Null Saint", honorific: "", epithet: "the Nameless", level: 1154, xp: 74771880 }
+	];
+	const overall = adventurers.map((entry, index) => ({ rank: index + 1, ...entry, avatar: "" }));
+	const skills = {};
+	worldSkills.forEach((skill, skillIndex) => {
+		skills[skill.key] = adventurers.map((_, rankIndex) => {
+			const entry = adventurers[(rankIndex + skillIndex * 3) % adventurers.length];
+			const level = Math.max(70, 99 - rankIndex * 2 - (skillIndex % 3));
+			return {
+				rank: rankIndex + 1,
+				player: entry.player,
+				honorific: entry.honorific,
+				epithet: entry.epithet,
+				level,
+				xp: Math.max(1000000, 14200000 - rankIndex * 1125000 - skillIndex * 41731),
+				avatar: ""
+			};
+		});
+	});
+	const records = worldPermanentRecords.map((record, index) => {
+		const holder = adventurers[index % adventurers.length];
+		return {
+			key: record.key,
+			label: record.label,
+			value: record.value,
+			detail: record.detail,
+			claimed: true,
+			anonymous: false,
+			holder: holder.player,
+			honorific: holder.honorific,
+			epithet: holder.epithet,
+			etchedAt: nowSec - (index + 2) * 86400
+		};
+	});
+
+	return {
+		generatedAt: nowSec,
+		live: false,
+		demo: true,
+		source: "prelaunch-fiction",
+		launchAt: launch.openAt,
+		refreshAfterSeconds: Math.ceil(worldSnapshotTtlMs / 1000),
+		pulse: {
+			online: 143,
+			totalGp: 214183647,
+			accounts: 1892,
+			npcKills: 1204882,
+			deaths: 45120,
+			questsCompleted: 8241
+		},
+		feed: [
+			{ type: "pk", at: nowSec - 118, player: "Mordryn", victim: "Salt Wraith", wildernessLevel: 34 },
+			{ type: "max", at: nowSec - 406, player: "Astravale", skill: "smithing" },
+			{ type: "rare", at: nowSec - 791, player: "Veilwalker", itemId: 594, itemName: "Dragon axe" },
+			{ type: "quest", at: nowSec - 1260, player: "Bramble", questName: "Dragon Slayer", questPoints: 44 },
+			{ type: "level", at: nowSec - 1840, player: "Copper Fox", skill: "thieving", level: 94 },
+			{ type: "pk", at: nowSec - 2915, player: "Rune Widow", victim: "Grim Tallow", wildernessLevel: 18 },
+			{ type: "rare", at: nowSec - 4100, player: "Old Moth", itemId: 31, itemName: "Rune longsword" },
+			{ type: "max", at: nowSec - 5920, player: "Wyrmglass", skill: "magic" },
+			{ type: "quest", at: nowSec - 7840, player: "Ashen Jack", questName: "Underground Pass", questPoints: 50 },
+			{ type: "level", at: nowSec - 10120, player: "Null Saint", skill: "prayer", level: 88 },
+			{ type: "pk", at: nowSec - 13900, player: "Mordryn", victim: "Bone Oracle", wildernessLevel: 46 },
+			{ type: "rare", at: nowSec - 17800, player: "Astravale", itemId: 81, itemName: "Rune 2-handed Sword" }
+		],
+		highscores: { hiddenCount: 7, overall, skills },
+		records,
+		economy: {
+			totalGp: 214183647,
+			gpPerHead: 113204,
+			topItems: [
+				{ itemId: 373, name: "Lobster", count: 141207 },
+				{ itemId: 40, name: "Nature rune", count: 96410 },
+				{ itemId: 172, name: "Gold bar", count: 44892 },
+				{ itemId: 38, name: "Prayer potion", count: 17308 },
+				{ itemId: 81, name: "Rune 2-handed Sword", count: 214 }
+			]
+		},
+		wilderness: {
+			killsWeek: 347,
+			deadliest: { player: "Mordryn", honorific: "Warlord", epithet: "the Hollow", kills: 31 },
+			recent: [
+				{ killer: "Mordryn", victim: "Salt Wraith", at: nowSec - 118, wildernessLevel: 34 },
+				{ killer: "Rune Widow", victim: "Grim Tallow", at: nowSec - 2915, wildernessLevel: 18 },
+				{ killer: "Mordryn", victim: "Bone Oracle", at: nowSec - 13900, wildernessLevel: 46 },
+				{ killer: "Ashen Jack", victim: "Hush", at: nowSec - 19320, wildernessLevel: 9 },
+				{ killer: "Copper Fox", victim: "Red Chapel", at: nowSec - 24600, wildernessLevel: 27 },
+				{ killer: "Old Moth", victim: "Kestrel", at: nowSec - 33100, wildernessLevel: 41 },
+				{ killer: "Wyrmglass", victim: "Iron Psalm", at: nowSec - 42200, wildernessLevel: 52 },
+				{ killer: "Veilwalker", victim: "Last Candle", at: nowSec - 51700, wildernessLevel: 22 }
+			]
+		},
+		facts: [
+			{ text: "The imagined vaults hold **214,183,647 coins** before the first real one is minted.", source: "fictional prelaunch Chronicle" },
+			{ text: "The preview's richest hoard contains **141,207 lobsters**. Nobody knows who counted them.", source: "fictional prelaunch Chronicle" },
+			{ text: "A made-up **347 victories** were won beyond the Wilderness gate this week.", source: "fictional prelaunch Chronicle" },
+			{ text: "Astravale is said to have smithed for **nine days without seeing daylight**.", source: "fictional prelaunch lore" },
+			{ text: "Old Moth carries a lantern whose flame points toward the **nearest unopened chest**.", source: "fictional prelaunch lore" },
+			{ text: "The Rune Widow has never lost a duel held beneath a **new moon**.", source: "fictional prelaunch lore" },
+			{ text: "Bramble claims every tree has a true name, but only **magic trees answer**.", source: "fictional prelaunch lore" },
+			{ text: "Copper Fox once traded a cabbage for a map and the map for **a kingdom**.", source: "fictional prelaunch lore" },
+			{ text: "The preview imagines **1,892 souls forged** across the world.", source: "fictional prelaunch Chronicle" },
+			{ text: "Mordryn's shadow arrives in the Wilderness **one step before he does**.", source: "fictional prelaunch lore" },
+			{ text: "Veilwalker remembers a road that exists only while **nobody watches it**.", source: "fictional prelaunch lore" },
+			{ text: "At launch, every fictional deed here vanishes and the **real Chronicle begins**.", source: "prelaunch data policy" }
+		],
+		availability: { auctionHistory: true, avatars: false }
+	};
+}
+
+async function buildWorldState() {
+	const requiredTables = [
+		"players", "maxstats", "experience", "player_cache", "live_feeds",
+		"quests", "bank", "invitems", "itemstatuses"
+	];
+	const optionalTables = ["equipped", "auctions", "expired_auctions", "auction_sales"];
+	const tables = await openRscExistingTables(requiredTables.concat(optionalTables));
+	const missing = requiredTables.filter((name) => !tables.has(name));
+	if (missing.length) {
+		throw new HttpError(503, "world_schema_unavailable");
+	}
+
+	const nowMs = Date.now();
+	const nowSec = Math.floor(nowMs / 1000);
+	const [
+		scoreRows,
+		pulseRows,
+		economyRows,
+		feedRows,
+		pkRows,
+		recordRows,
+		hiddenRows,
+		salesRows,
+		itemDefs
+	] = await Promise.all([
+		worldScoreRows(nowMs),
+		worldPulseRows(nowMs),
+		worldEconomyRows(tables, nowMs),
+		worldFeedRows(nowMs),
+		worldWildernessRows(nowMs, nowSec - 7 * 24 * 60 * 60),
+		worldRecordRows(nowMs),
+		worldHiddenPlayerRows(nowMs),
+		tables.has("auction_sales") ? worldAuctionSalesRows(nowMs) : Promise.resolve([]),
+		loadItemDefinitions()
+	]);
+
+	const hiddenNames = new Set(hiddenRows.map((row) => normalizeUsername(row.username)).filter(Boolean));
+	const itemIdsByName = new Map();
+	for (const [itemId, definition] of itemDefs) {
+		const itemName = String(definition && definition.name || "").trim().toLowerCase();
+		if (itemName && !itemIdsByName.has(itemName)) itemIdsByName.set(itemName, Number(itemId));
+	}
+
+	const parsedFeed = feedRows
+		.map((row) => parseWorldFeedRow(row, itemIdsByName))
+		.filter((entry) => entry && !(entry.type === "pk" && hiddenNames.has(normalizeUsername(entry.victim))))
+		.slice(0, 12);
+	const parsedKills = pkRows
+		.map((row) => parseWorldFeedRow(row, itemIdsByName))
+		.filter((entry) => entry && entry.type === "pk" && !hiddenNames.has(normalizeUsername(entry.victim)));
+
+	const recordClaims = worldRecordClaims(recordRows);
+	const visibleRecordPlayerIds = [];
+	const records = worldPermanentRecords.map((definition) => {
+		const claim = recordClaims.get(definition.id) || null;
+		const claimed = Boolean(claim && claim.playerId > 0);
+		const anonymous = Boolean(claimed && claim.hidden);
+		if (claimed && !anonymous) visibleRecordPlayerIds.push(claim.playerId);
+		return {
+			key: definition.key,
+			label: definition.label,
+			value: definition.value,
+			detail: definition.detail,
+			claimed,
+			anonymous,
+			holder: claimed ? (anonymous ? "An unseen adventurer" : claim.username) : "Unclaimed",
+			etchedAt: claimed ? claim.etchedAt : null,
+			playerId: claimed && !anonymous ? claim.playerId : 0
+		};
+	});
+
+	const decoratedPlayerIds = Array.from(new Set(
+		scoreRows.map((row) => Number(row.id)).concat(visibleRecordPlayerIds).filter((id) => id > 0)
+	));
+	const decorations = await worldPlayerDecorations(decoratedPlayerIds);
+	const highscores = { hiddenCount: hiddenRows.length, overall: [], skills: {} };
+	for (const skill of worldSkills) highscores.skills[skill.key] = [];
+	for (const row of scoreRows) {
+		const decoration = decorations.get(Number(row.id)) || {};
+		const score = {
+			rank: wholeNumber(row.rank),
+			player: cleanUsername(row.username),
+			honorific: decoration.honorific || "",
+			epithet: decoration.epithet || "",
+			level: wholeNumber(row.level),
+			xp: wholeNumber(row.xp),
+			avatar: decoration.avatar || ""
+		};
+		if (row.board === "overall") highscores.overall.push(score);
+		else if (highscores.skills[row.board]) highscores.skills[row.board].push(score);
+	}
+	for (const record of records) {
+		const decoration = decorations.get(record.playerId) || {};
+		record.honorific = decoration.honorific || "";
+		record.epithet = decoration.epithet || "";
+		delete record.playerId;
+	}
+
+	const pulseRow = pulseRows[0] || {};
+	const economyItems = economyRows
+		.map((row) => {
+			const itemId = wholeNumber(row.itemId);
+			const definition = itemDefs.get(itemId) || {};
+			return {
+				itemId,
+				name: String(definition.name || `Item ${itemId}`),
+				count: wholeNumber(row.itemCount)
+			};
+		})
+		.filter((row) => row.itemId >= 0 && row.count > 0);
+	const totalGp = wholeNumber((economyItems.find((row) => row.itemId === 10) || {}).count);
+	const accounts = wholeNumber(pulseRow.accounts);
+	const economy = {
+		totalGp,
+		gpPerHead: accounts ? Math.floor(totalGp / accounts) : 0,
+		topItems: economyItems.filter((row) => row.itemId !== 10).slice(0, 5)
+	};
+	const pulse = {
+		online: wholeNumber(pulseRow.online),
+		totalGp,
+		accounts,
+		npcKills: wholeNumber(pulseRow.npcKills),
+		deaths: wholeNumber(pulseRow.wildernessDeaths),
+		questsCompleted: wholeNumber(pulseRow.questsCompleted)
+	};
+	const wilderness = worldWildernessState(parsedKills);
+	const sales = salesRows[0] || {};
+	const facts = worldFacts({
+		pulse,
+		economy,
+		totalXp: wholeNumber(pulseRow.totalXp),
+		maxedSkills: wholeNumber(pulseRow.maxedSkills),
+		oldestCreation: wholeNumber(pulseRow.oldestCreation),
+		hiddenCount: hiddenRows.length,
+		auctionVolume: wholeNumber(sales.volume),
+		auctionTax: wholeNumber(sales.tax),
+		nowSec
+	});
+
+	return {
+		generatedAt: nowSec,
+		live: true,
+		source: "openrsc-sqlite",
+		refreshAfterSeconds: Math.ceil(worldSnapshotTtlMs / 1000),
+		pulse,
+		feed: parsedFeed,
+		highscores,
+		records,
+		economy,
+		wilderness,
+		facts,
+		availability: {
+			auctionHistory: tables.has("auction_sales"),
+			avatars: !publicMode || betaMode || launchSignupMode
+		}
+	};
+}
+
+function worldEligibilitySql(alias, nowMs) {
+	return `${alias}.group_id = 10
+		AND (
+			CAST(COALESCE(${alias}.banned, '0') AS INTEGER) = 0
+			OR (
+				CAST(COALESCE(${alias}.banned, '0') AS INTEGER) > 0
+				AND CAST(${alias}.banned AS INTEGER) < ${Math.floor(nowMs)}
+			)
+		)`;
+}
+
+function worldHiddenSql(alias) {
+	return `EXISTS (
+		SELECT 1 FROM player_cache world_hide
+		WHERE world_hide.playerID = ${alias}.id
+		  AND world_hide.key = ${sqlString(worldHideScoresCacheKey)}
+		  AND lower(trim(world_hide.value)) IN ('1', 'true', 'on')
+	)`;
+}
+
+function worldUnsignedXpSql(alias, column) {
+	return `(CASE
+		WHEN COALESCE(${alias}.${column}, 0) < 0 THEN COALESCE(${alias}.${column}, 0) + 4294967296
+		ELSE COALESCE(${alias}.${column}, 0)
+	END)`;
+}
+
+function worldDisplayXpSql(alias, column) {
+	return `CAST(${worldUnsignedXpSql(alias, column)} / 4 AS INTEGER)`;
+}
+
+async function worldScoreRows(nowMs) {
+	const skillFields = worldSkills.flatMap((skill) => [
+		`COALESCE(m.${skill.column}, 1) AS ${skill.key}Level`,
+		`${worldDisplayXpSql("x", skill.column)} AS ${skill.key}Xp`
+	]).join(",\n\t\t");
+	const overallXp = worldSkills.map((skill) => worldDisplayXpSql("x", skill.column)).join(" + ");
+	const rankedBoards = [
+		`SELECT 'overall' AS board, id, username, overallLevel AS level, overallXp AS xp,
+			ROW_NUMBER() OVER (ORDER BY overallLevel DESC, overallXp DESC, lower(username), id) AS rank
+		 FROM scored`
+	].concat(worldSkills.map((skill) => `
+		SELECT ${sqlString(skill.key)} AS board, id, username, ${skill.key}Level AS level, ${skill.key}Xp AS xp,
+			ROW_NUMBER() OVER (ORDER BY ${skill.key}Level DESC, ${skill.key}Xp DESC, lower(username), id) AS rank
+		FROM scored`));
+	return sqliteJson(`
+		WITH scored AS (
+			SELECT p.id, p.username, COALESCE(p.skill_total, 0) AS overallLevel,
+				${overallXp} AS overallXp,
+				${skillFields}
+			FROM players p
+			JOIN maxstats m ON m.playerID = p.id
+			JOIN experience x ON x.playerID = p.id
+			WHERE ${worldEligibilitySql("p", nowMs)}
+			  AND NOT ${worldHiddenSql("p")}
+		), ranked AS (
+			${rankedBoards.join("\n\t\t\tUNION ALL\n")}
+		)
+		SELECT board, id, username, level, xp, rank
+		FROM ranked
+		WHERE rank <= 10
+		ORDER BY board, rank
+	`);
+}
+
+async function worldPulseRows(nowMs) {
+	const totalXp = worldSkills.map((skill) => worldDisplayXpSql("x", skill.column)).join(" + ");
+	const maxedSkills = worldSkills.map((skill) => `CASE WHEN COALESCE(m.${skill.column}, 0) >= 99 THEN 1 ELSE 0 END`).join(" + ");
+	return sqliteJson(`
+		WITH eligible AS (
+			SELECT p.* FROM players p WHERE ${worldEligibilitySql("p", nowMs)}
+		)
+		SELECT
+			COUNT(DISTINCT e.id) AS accounts,
+			SUM(CASE WHEN e.online = 1 THEN 1 ELSE 0 END) AS online,
+			SUM(COALESCE(e.npc_kills, 0)) AS npcKills,
+			SUM(COALESCE(e.deaths, 0)) AS wildernessDeaths,
+			COALESCE(SUM(${totalXp}), 0) AS totalXp,
+			COALESCE(SUM(${maxedSkills}), 0) AS maxedSkills,
+			COALESCE(MIN(CASE WHEN e.creation_date > 0 THEN e.creation_date END), 0) AS oldestCreation,
+			(SELECT COUNT(*) FROM quests q JOIN eligible qe ON qe.id = q.playerID WHERE q.stage = -1) AS questsCompleted
+		FROM eligible e
+		LEFT JOIN maxstats m ON m.playerID = e.id
+		LEFT JOIN experience x ON x.playerID = e.id
+	`);
+}
+
+async function worldEconomyRows(tables, nowMs) {
+	const ownershipSources = [
+		"SELECT b.playerID, b.itemID FROM bank b JOIN eligible e ON e.id = b.playerID",
+		"SELECT i.playerID, i.itemID FROM invitems i JOIN eligible e ON e.id = i.playerID"
+	];
+	if (tables.has("equipped")) {
+		ownershipSources.push("SELECT q.playerID, q.itemID FROM equipped q JOIN eligible e ON e.id = q.playerID");
+	}
+	const extras = [];
+	if (tables.has("auctions")) {
+		extras.push(`SELECT a.itemID AS itemId, SUM(CASE WHEN a.amount_left > 0 THEN a.amount_left ELSE 0 END) AS itemCount
+			FROM auctions a JOIN eligible e ON e.id = a.seller
+			WHERE a.amount_left > 0 AND a."sold-out" = 0 AND a.was_cancel = 0
+			GROUP BY a.itemID`);
+	}
+	if (tables.has("expired_auctions")) {
+		extras.push(`SELECT a.item_id AS itemId, SUM(CASE WHEN a.item_amount > 0 THEN a.item_amount ELSE 0 END) AS itemCount
+			FROM expired_auctions a JOIN eligible e ON e.id = a.playerID
+			WHERE a.claimed = 0 AND a.item_amount > 0
+			GROUP BY a.item_id`);
+	}
+	const allSources = ["SELECT itemId, itemCount FROM held"].concat(extras);
+	return sqliteJson(`
+		WITH eligible AS (
+			SELECT p.id FROM players p WHERE ${worldEligibilitySql("p", nowMs)}
+		), owned_refs AS (
+			${ownershipSources.join("\n\t\t\tUNION\n")}
+		), held AS (
+			SELECT s.catalogID AS itemId,
+				SUM(CASE WHEN s.amount > 0 THEN s.amount ELSE 0 END) AS itemCount
+			FROM (SELECT DISTINCT playerID, itemID FROM owned_refs) r
+			JOIN itemstatuses s ON s.itemID = r.itemID
+			GROUP BY s.catalogID
+		), combined AS (
+			${allSources.join("\n\t\t\tUNION ALL\n")}
+		)
+		SELECT itemId, SUM(itemCount) AS itemCount
+		FROM combined
+		GROUP BY itemId
+		HAVING SUM(itemCount) > 0
+		ORDER BY itemCount DESC, itemId
+	`);
+}
+
+async function worldFeedRows(nowMs) {
+	return sqliteJson(`
+		SELECT lf.username, lf.message, lf.time
+		FROM live_feeds lf
+		JOIN players p ON lower(p.username) = lower(lf.username)
+		WHERE ${worldEligibilitySql("p", nowMs)}
+		  AND NOT ${worldHiddenSql("p")}
+		ORDER BY lf.time DESC, lf.id DESC
+		LIMIT 160
+	`);
+}
+
+async function worldWildernessRows(nowMs, cutoff) {
+	return sqliteJson(`
+		SELECT lf.username, lf.message, lf.time
+		FROM live_feeds lf
+		JOIN players p ON lower(p.username) = lower(lf.username)
+		WHERE ${worldEligibilitySql("p", nowMs)}
+		  AND NOT ${worldHiddenSql("p")}
+		  AND lf.time >= ${Math.floor(cutoff)}
+		  AND lf.message LIKE 'has PKed %'
+		ORDER BY lf.time DESC, lf.id DESC
+		LIMIT 5000
+	`);
+}
+
+async function worldHiddenPlayerRows(nowMs) {
+	return sqliteJson(`
+		SELECT p.username
+		FROM players p
+		WHERE ${worldEligibilitySql("p", nowMs)}
+		  AND ${worldHiddenSql("p")}
+		ORDER BY lower(p.username), p.id
+	`);
+}
+
+async function worldRecordRows(nowMs) {
+	const unlockKeys = worldPermanentRecords.map((record) => sqlString(`pt_u_${record.id}`)).join(", ");
+	const dateKeys = worldPermanentRecords.map((record) => sqlString(`pt_first_date_${record.id}`)).join(", ");
+	return sqliteJson(`
+		SELECT pc.dbid, pc.key, pc.playerID, pc.value, p.username,
+			CASE WHEN ${worldHiddenSql("p")} THEN 1 ELSE 0 END AS hidden
+		FROM player_cache pc
+		JOIN players p ON p.id = pc.playerID
+		WHERE pc.key IN (${unlockKeys})
+		  AND ${worldEligibilitySql("p", nowMs)}
+		UNION ALL
+		SELECT pc.dbid, pc.key, 0 AS playerID, pc.value, '' AS username, 0 AS hidden
+		FROM player_cache pc
+		WHERE pc.playerID = 0 AND pc.key IN (${dateKeys})
+		ORDER BY dbid
+	`);
+}
+
+async function worldAuctionSalesRows(nowMs) {
+	return sqliteJson(`
+		WITH eligible AS (
+			SELECT p.id FROM players p WHERE ${worldEligibilitySql("p", nowMs)}
+		)
+		SELECT COALESCE(SUM(s.total_price), 0) AS volume, COALESCE(SUM(s.tax), 0) AS tax
+		FROM auction_sales s
+		JOIN eligible seller ON seller.id = s.seller
+		JOIN eligible buyer ON buyer.id = s.buyer
+	`);
+}
+
+function worldRecordClaims(rows) {
+	const claims = new Map();
+	const dates = new Map();
+	for (const row of rows) {
+		if (row.playerID === 0 || Number(row.playerID) === 0) {
+			const id = String(row.key || "").replace(/^pt_first_date_/, "");
+			dates.set(id, wholeNumber(row.value));
+			continue;
+		}
+		const id = String(row.key || "").replace(/^pt_u_/, "");
+		claims.set(id, {
+			playerId: wholeNumber(row.playerID),
+			username: cleanUsername(row.username),
+			hidden: Number(row.hidden) === 1,
+			etchedAt: 0
+		});
+	}
+	for (const [id, claim] of claims) claim.etchedAt = dates.get(id) || 0;
+	return claims;
+}
+
+async function worldPlayerDecorations(playerIds) {
+	const decorations = new Map();
+	if (!playerIds.length) return decorations;
+	const rows = await sqliteJson(`
+		SELECT playerID, dbid, key, value
+		FROM player_cache
+		WHERE playerID IN (${playerIds.join(",")})
+		  AND key IN ('player_title_active', 'player_honorific_active')
+		ORDER BY dbid
+	`);
+	const cacheByPlayer = new Map();
+	for (const row of rows) {
+		const playerId = wholeNumber(row.playerID);
+		const cache = cacheByPlayer.get(playerId) || {};
+		cache[row.key] = String(row.value || "");
+		cacheByPlayer.set(playerId, cache);
+	}
+	const titleDefs = await loadTitleDefinitions();
+	const avatarsAllowed = !publicMode || betaMode || launchSignupMode;
+	await Promise.all(playerIds.map(async (playerId) => {
+		const cache = cacheByPlayer.get(playerId) || {};
+		const honorificId = cache.player_honorific_active || "";
+		const epithetId = cache.player_title_active || "";
+		decorations.set(playerId, {
+			honorific: honorificId ? (worldHonorificNames.get(honorificId) || titleDefs.get(honorificId) || "") : "",
+			epithet: epithetId ? (titleDefs.get(epithetId) || "") : "",
+			avatar: avatarsAllowed ? await openRscAvatarUrl(playerId) : ""
+		});
+	}));
+	return decorations;
+}
+
+function parseWorldFeedRow(row, itemIdsByName) {
+	const player = cleanUsername(row.username || "");
+	const message = String(row.message || "").replace(/<[^>]*>/g, "").trim();
+	const at = wholeNumber(row.time);
+	if (!player || !message || !at) return null;
+
+	let match = /^has achieved level-(\d+) in ([a-z ]+), the maximum possible! Congratulations!$/i.exec(message);
+	if (match) {
+		const skill = worldSkillKey(match[2]);
+		return skill ? { type: "max", at, player, skill, level: wholeNumber(match[1]) } : null;
+	}
+	match = /^has achieved level-(\d+) in ([a-z ]+)!$/i.exec(message);
+	if (match) {
+		const skill = worldSkillKey(match[2]);
+		return skill ? { type: "level", at, player, skill, level: wholeNumber(match[1]) } : null;
+	}
+	match = /^has completed the (.+) quest and now has (\d+) quest points!$/i.exec(message);
+	if (match) {
+		return { type: "quest", at, player, questName: match[1].trim(), questPoints: wholeNumber(match[2]) };
+	}
+	match = /^has PKed ([a-zA-Z0-9 ]{2,12})$/i.exec(message);
+	if (match) {
+		return { type: "pk", at, player, victim: cleanUsername(match[1]) };
+	}
+	match = /^has obtained (?:(\d+) x |an? )(.+)!$/i.exec(message);
+	if (match) {
+		const itemName = match[2].trim();
+		return {
+			type: "rare",
+			at,
+			player,
+			amount: wholeNumber(match[1] || 1) || 1,
+			itemId: itemIdsByName.get(itemName.toLowerCase()) || null,
+			itemName
+		};
+	}
+	return null;
+}
+
+function worldSkillKey(value) {
+	const normalized = String(value || "").trim().toLowerCase();
+	if (normalized === "defence") return "defense";
+	if (normalized === "hitpoints") return "hits";
+	if (normalized === "woodcutting") return "woodcut";
+	const skill = worldSkills.find((entry) => entry.key === normalized || entry.label.toLowerCase() === normalized);
+	return skill ? skill.key : "";
+}
+
+function worldWildernessState(kills) {
+	const counts = new Map();
+	for (const kill of kills) counts.set(kill.player, (counts.get(kill.player) || 0) + 1);
+	const deadliest = Array.from(counts.entries())
+		.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || ["No one", 0];
+	return {
+		killsWeek: kills.length,
+		deadliest: { player: deadliest[0], honorific: "", epithet: "", kills: deadliest[1] },
+		recent: kills.slice(0, 4).map((kill) => ({ killer: kill.player, victim: kill.victim, at: kill.at }))
+	};
+}
+
+function worldFacts(context) {
+	const facts = [];
+	if (context.pulse.totalGp > 0) {
+		facts.push({ text: `There are **${formatWorldNumber(context.pulse.totalGp)} coins** in saved circulation.`, source: "counted across player holdings and unclaimed market proceeds" });
+	}
+	if (context.pulse.npcKills > 0) {
+		facts.push({ text: `Adventurers have defeated **${formatWorldNumber(context.pulse.npcKills)} monsters**.`, source: "from the saved bestiary totals" });
+	}
+	if (context.totalXp > 0) {
+		facts.push({ text: `The world has earned **${formatWorldNumber(context.totalXp)} experience** across the eighteen classic skills.`, source: "from every eligible saved skill record" });
+	}
+	if (context.maxedSkills > 0) {
+		facts.push({ text: `The Chronicle counts **${formatWorldNumber(context.maxedSkills)} level-99 skills**.`, source: "from the current maximum-level ledger" });
+	}
+	if (context.economy.topItems.length) {
+		const item = context.economy.topItems[0];
+		facts.push({ text: `The most hoarded treasure after coins is **${item.name}**, with ${formatWorldNumber(item.count)} saved.`, source: "counted across banks, packs, equipment, and the market" });
+	}
+	if (context.pulse.questsCompleted > 0) {
+		facts.push({ text: `Adventurers have completed **${formatWorldNumber(context.pulse.questsCompleted)} quests**.`, source: "from completed quest stages" });
+	}
+	if (context.pulse.deaths > 0) {
+		facts.push({ text: `The Wilderness has recorded **${formatWorldNumber(context.pulse.deaths)} player deaths**.`, source: "from cumulative Wilderness records" });
+	}
+	if (context.oldestCreation > 0) {
+		const ageDays = Math.max(0, Math.floor((context.nowSec - context.oldestCreation) / 86400));
+		facts.push({ text: `The oldest eligible soul was forged **${formatWorldNumber(ageDays)} days ago**.`, source: "from account creation dates" });
+	}
+	if (context.auctionVolume > 0) {
+		facts.push({ text: `The auction ledger has moved **${formatWorldNumber(context.auctionVolume)} gp** and collected ${formatWorldNumber(context.auctionTax)} gp in tax.`, source: "from completed auction receipts" });
+	}
+	if (context.hiddenCount > 0) {
+		facts.push({ text: `**${formatWorldNumber(context.hiddenCount)} adventurer${context.hiddenCount === 1 ? " has" : "s have"}** asked the Chronicle to keep their identity hidden.`, source: "anonymous deeds still contribute to world totals" });
+	}
+	if (!facts.length) {
+		facts.push({ text: "The Chronicle is waiting for the world's first recorded deed.", source: "the stone is ready" });
+	}
+	return facts;
+}
+
+function formatWorldNumber(value) {
+	return wholeNumber(value).toLocaleString("en-US");
+}
+
+function wholeNumber(value) {
+	const number = Number(value || 0);
+	if (!Number.isFinite(number) || number <= 0) return 0;
+	return Math.floor(number);
 }
 
 async function openRscPlayersOnlineCount() {
