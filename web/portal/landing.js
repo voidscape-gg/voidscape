@@ -309,7 +309,7 @@
 		setDownloadLink(els.readyLauncher, launcher, { hiddenWhenUnavailable: true, download: true });
 		setDownloadLink(els.readyAndroid, android, { hiddenWhenUnavailable: true, download: true });
 		setDownloadLink(els.readyWeb, web, { hiddenWhenUnavailable: true });
-		if (els.readyWeb && !launchOpen) els.readyWeb.hidden = true;
+		if (els.readyWeb && !launchOpen && (!els.successBlock || els.successBlock.hidden)) els.readyWeb.hidden = true;
 		setDownloadLink(els.playLauncher, launcher, { download: true });
 		setDownloadLink(els.playWeb, web, {});
 		setDownloadLink(els.playAndroid, android, { download: true });
