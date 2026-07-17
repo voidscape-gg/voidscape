@@ -5774,7 +5774,7 @@ function prelaunchWorldState(launch) {
 			{ type: "quest", at: nowSec - 1260, player: "Bramble", questName: "Dragon Slayer", questPoints: 44 },
 			{ type: "level", at: nowSec - 1840, player: "Copper Fox", skill: "thieving", level: 94 },
 			{ type: "pk", at: nowSec - 2915, player: "Rune Widow", victim: "Grim Tallow", wildernessLevel: 18 },
-			{ type: "rare", at: nowSec - 4100, player: "Old Moth", itemId: 31, itemName: "Rune longsword" },
+			{ type: "rare", at: nowSec - 4100, player: "Old Moth", itemId: 75, itemName: "Rune long sword" },
 			{ type: "max", at: nowSec - 5920, player: "Wyrmglass", skill: "magic" },
 			{ type: "quest", at: nowSec - 7840, player: "Ashen Jack", questName: "Underground Pass", questPoints: 50 },
 			{ type: "level", at: nowSec - 10120, player: "Null Saint", skill: "prayer", level: 88 },
@@ -5790,7 +5790,7 @@ function prelaunchWorldState(launch) {
 				{ itemId: 373, name: "Lobster", count: 141207 },
 				{ itemId: 40, name: "Nature rune", count: 96410 },
 				{ itemId: 172, name: "Gold bar", count: 44892 },
-				{ itemId: 38, name: "Prayer potion", count: 17308 },
+				{ itemId: 42, name: "Law rune", count: 17308 },
 				{ itemId: 81, name: "Rune 2-handed Sword", count: 214 }
 			]
 		},

@@ -42,6 +42,13 @@
 .px3 { transform: scale(3); transform-origin: center; }
 .art-icon { width: 26px; height: 26px; object-fit: contain; }
 
+/* landing.css references `rise` but never defines it; the Chronicle supplies it,
+   so every entrance it names (hero, pulse, live-line, feed rows) actually plays. */
+@keyframes rise {
+	from { opacity: 0; transform: translateY(14px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
 /* ======================= hero ======================= */
 .chronicle-hero { padding-bottom: 18px; }
 
@@ -316,13 +323,17 @@
 
 .feed-list li:first-child { border-top: 0; }
 
-.feed-list .feed-icon,
-.feed-list .feed-art-icon {
+.feed-list .feed-icon {
 	flex: 0 0 30px;
 	width: 30px;
 	height: 30px;
-	object-fit: contain;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
+
+.feed-icon img { max-width: 30px; max-height: 30px; object-fit: contain; }
+.feed-icon img.px { max-width: none; max-height: none; }
 
 .feed-copy { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
 .feed-text { flex: 1; min-width: 0; color: var(--text); }
@@ -431,6 +442,7 @@
 	justify-content: center;
 	align-items: flex-end;
 	gap: clamp(26px, 6vw, 84px);
+	margin-top: 68px; /* air for the floating crowns above rank 1 */
 	min-height: 300px;
 	position: relative;
 	z-index: 1;
@@ -467,9 +479,22 @@
 	50% { transform: translateY(-6px); }
 }
 
-.pod-avatar { display: block; width: 132px; height: 178px; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(0 16px 22px rgba(0, 0, 0, .65)); }
+/* Sprites stand on a fixed stage; world.js sets their width/height to exact
+   integer multiples of the source pixels so nothing ever renders mushy. */
+.pod-stage { height: 208px; display: flex; align-items: flex-end; justify-content: center; }
 
-.pod-rank-1 .pod-avatar { width: 148px; height: 198px; filter: drop-shadow(0 16px 22px rgba(0, 0, 0, .65)) drop-shadow(0 0 26px rgba(143, 85, 223, .45)); }
+.pod-avatar { display: block; image-rendering: pixelated; filter: drop-shadow(0 16px 22px rgba(0, 0, 0, .65)); }
+
+.pod-rank-1 .pod-avatar { filter: drop-shadow(0 16px 22px rgba(0, 0, 0, .65)) drop-shadow(0 0 26px rgba(143, 85, 223, .45)); }
+
+.pod { animation: pod-rise .5s ease-out backwards; }
+.pod-rank-1 { animation-delay: .08s; }
+.pod-rank-3 { animation-delay: .16s; }
+
+@keyframes pod-rise {
+	from { opacity: 0; transform: translateY(18px); }
+	to { opacity: 1; transform: translateY(0); }
+}
 
 .pod-shield { width: 40px; margin-top: -18px; position: relative; z-index: 2; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .7)); }
 
@@ -540,7 +565,7 @@
 }
 
 .board-player { display: flex; align-items: center; gap: 11px; }
-.board-avatar { width: 32px; height: 38px; object-fit: contain; image-rendering: pixelated; flex: 0 0 auto; }
+.board tbody tr { animation: rise .35s ease-out backwards; }
 .board-name { color: var(--text); font-weight: 600; }
 .board-name .honorific { color: var(--purple-hi); font-weight: 600; }
 .board-name .epithet { color: var(--muted); font-weight: 400; }
@@ -630,7 +655,11 @@
 .record-card::before { top: -2px; left: -2px; background-image: url("assets/world/corner-tl.png"); }
 .record-card::after { right: -2px; bottom: -2px; background-image: url("assets/world/corner-br.png"); background-position: bottom right; }
 
-.record-art { width: 112px; height: 84px; display: block; object-fit: contain; margin: 0 auto 10px; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .55)); }
+.record-card { animation: rise .45s ease-out backwards; }
+
+.record-art-wrap { height: 96px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+.record-art { display: block; max-width: 132px; max-height: 96px; object-fit: contain; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .55)); }
+.record-art.px { max-width: none; max-height: none; }
 
 .record-label {
 	font-size: 11px;
@@ -648,6 +677,9 @@
 	text-shadow: 0 2px 14px rgba(143, 85, 223, .5);
 }
 
+.record-holder .honorific { color: var(--purple-hi); font-size: .68em; }
+.record-holder .epithet { color: var(--muted); font-size: .68em; }
+
 .record-value { margin-top: 4px; font-size: 14px; color: var(--muted); }
 .record-value b { color: var(--gold-hi); font-weight: 600; }
 
@@ -660,10 +692,12 @@
 /* ======================= the coin ledger ======================= */
 .economy-grid {
 	display: grid;
-	grid-template-columns: 1fr 1.2fr;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
 	gap: 22px;
 	align-items: stretch;
 }
+
+.economy-hero, .economy-hoard { min-width: 0; }
 
 .economy-hero {
 	border: 1px solid rgba(201, 164, 91, .35);
@@ -690,7 +724,7 @@
 	font-variant-numeric: tabular-nums;
 }
 
-.economy-sub { margin-top: 10px; font-size: 13.5px; color: var(--muted); max-width: 34ch; }
+.economy-sub { margin-top: 10px; font-size: 13.5px; color: var(--muted); max-width: min(34ch, 100%); }
 
 .economy-hoard {
 	border: 1px solid var(--line);
@@ -716,7 +750,27 @@
 .hoard-rank { flex: 0 0 20px; font-family: var(--display); color: var(--purple-hi); text-align: center; }
 .hoard-sprite { flex: 0 0 40px; width: 40px; height: 34px; object-fit: contain; image-rendering: pixelated; }
 
-.hoard-name { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; color: var(--text); font-weight: 600; }
+.hoard-meta { display: block; flex: 1; min-width: 0; }
+.hoard-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; color: var(--text); font-weight: 600; }
+
+.hoard-bar {
+	display: block;
+	margin-top: 5px;
+	height: 7px;
+	border-radius: 4px;
+	background: rgba(143, 85, 223, .12);
+	overflow: hidden;
+}
+
+.hoard-bar i {
+	display: block;
+	height: 100%;
+	border-radius: 4px;
+	background: linear-gradient(90deg, var(--gold) 0%, var(--gold-hi) 100%);
+	box-shadow: 0 0 10px rgba(201, 164, 91, .5);
+	transform-origin: left;
+	transition: transform 1.2s cubic-bezier(.22, .8, .3, 1);
+}
 
 .hoard-count { flex: 0 0 auto; font-size: 13.5px; color: var(--gold-hi); font-variant-numeric: tabular-nums; }
 .hoard-empty { color: var(--faint); font-style: italic; }
@@ -767,6 +821,8 @@
 }
 
 .wild-list li:first-child { border-top: 0; }
+.wild-list li:hover { background: linear-gradient(90deg, rgba(207, 83, 83, .08), transparent 75%); }
+.wild-level { color: var(--faint); font-size: 12.5px; }
 .wild-killer { color: var(--text); font-weight: 600; }
 .wild-victim { color: #e8a598; font-weight: 600; }
 .wild-versus { color: var(--faint); }
@@ -791,13 +847,17 @@
 .footer-note { font-size: 12.5px; color: var(--faint); text-align: center; flex: 1; }
 
 /* ======================= responsive ======================= */
+@media (max-width: 700px) {
+	.board-scroll-cue { display: block; }
+}
+
 @media (max-width: 980px) {
 	.pulse-grid { grid-template-columns: repeat(3, 1fr); }
 	.feed-grid { grid-template-columns: 1fr; }
 	.almanac { position: static; margin-top: 66px; }
 	.records-grid { grid-template-columns: repeat(2, 1fr); }
-	.economy-grid { grid-template-columns: 1fr; }
-	.wild-grid { grid-template-columns: 1fr; gap: 30px; }
+	.economy-grid { grid-template-columns: minmax(0, 1fr); }
+	.wild-grid { grid-template-columns: minmax(0, 1fr); gap: 30px; }
 }
 
 @media (max-width: 600px) {
@@ -808,10 +868,12 @@
 	.section { margin-top: 58px; }
 	.skill-rail { justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; max-width: none; margin-inline: -28px; padding: 4px 28px 14px; scroll-snap-type: x proximity; scrollbar-width: thin; }
 	.skill-tab { flex: 0 0 auto; scroll-snap-align: start; }
-	.podium { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-height: 250px; }
-	.pod-avatar { width: 82px; height: 130px; }
-	.pod-rank-1 .pod-avatar { width: 92px; height: 145px; }
+	.podium { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 54px; min-height: 200px; }
+	.pod-stage { height: 108px; }
+	.pod-crown { width: 44px; top: -38px; }
+	.pod-rank-1 .pod-crown { width: 50px; top: -46px; }
 	.pod-name { font-size: 17px; }
+	.pod-name .epithet { display: none; }
 	.pod-rank-1 .pod-name { font-size: 20px; }
 	.pod-stat { max-width: 110px; font-size: 11px; line-height: 1.35; }
 	.podium-base { margin-top: -20px; }
@@ -839,8 +901,6 @@
 	.skill-rail { margin-inline: -18px; padding-inline: 18px; }
 	.feed-panel, .wild-feed { padding-inline: 13px; }
 	.feed-showcase-text { font-size: 9px; }
-	.pod-avatar { width: 68px; height: 112px; }
-	.pod-rank-1 .pod-avatar { width: 78px; height: 126px; }
 	.pod-name { max-width: 94px; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
 	.pod-rank-1 .pod-name { font-size: 17px; }
 	.pod-stat { max-width: 92px; font-size: 10px; }

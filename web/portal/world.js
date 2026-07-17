@@ -13,6 +13,13 @@
 	var currentFacts = [];
 	var factIndex = 0;
 	var launchTransitionTimer = null;
+	var pulseRendered = false;
+	var hoardAnimated = false;
+	var feedAnimated = false;
+	var recordsAnimated = false;
+	var monumentAnimate = true;
+	var liveLineTimer = null;
+	var liveLineIndex = 0;
 	var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 	var previewRequested = new URLSearchParams(window.location.search).get("preview") === "1";
 	var localPreviewAllowed = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
@@ -38,18 +45,24 @@
 		{ key: "thieving", label: "Thieving", icon: "assets/world/skills/skill-thieving.png" }
 	];
 
+	/* Every record stone gets real art: painted kit pieces for the grand firsts,
+	   integer-scaled game item sprites for the grind firsts. */
 	var RECORD_ART = {
-		first_max: "medal-gold.png",
-		first_total: "crown-gold.png",
-		first_quests: "badge-legend.png",
-		first_swfish: "shield-1.png",
-		first_coal: "shield-2.png",
-		first_mlogs: "shield-3.png",
-		first_herbs: "shield-4.png",
-		first_gems: "medal-void.png",
-		first_t1700: "medal-gold.png",
-		first_spells: "shield-5.png"
+		first_max: { art: "assets/world/medal-voidspike.png" },
+		first_total: { art: "assets/world/crown-gold.png" },
+		first_quests: { art: "assets/world/obelisk.png" },
+		first_swfish: { sprite: 370, scale: 2 },
+		first_coal: { sprite: 155, scale: 2 },
+		first_mlogs: { sprite: 636, scale: 2 },
+		first_herbs: { sprite: 165, scale: 2 },
+		first_gems: { sprite: 157, scale: 2 },
+		first_t1700: { art: "assets/world/medal-gold.png" },
+		first_spells: { sprite: 38, scale: 2 }
 	};
+
+	var POD_CROWNS = ["assets/world/crown-gold.png", "assets/world/crown-silver.png", "assets/world/crown-iron.png"];
+	var POD_SHIELDS = ["assets/world/shield-1.png", "assets/world/shield-2.png", "assets/world/shield-3.png"];
+	var smallStage = window.matchMedia("(max-width: 600px)");
 
 	var FALLBACK_AVATARS = ["assets/rsc-knight.png", "assets/rsc-ranger.png", "assets/rsc-mage.png"];
 
@@ -263,16 +276,60 @@
 		$("chronicle-status-text").textContent = message;
 	}
 
+	/* Numbers tally up the first time their tile scrolls into view. Values at a
+	   billion or beyond stay compact; everything else gets its full glory. */
+	function displayNumber(value) { return value >= 1e9 ? compact(value) : fmt(value); }
+
+	function countUp(node, target) {
+		if (reduceMotion || node.dataset.counted === String(target)) {
+			node.dataset.counted = String(target);
+			node.textContent = displayNumber(target);
+			return;
+		}
+		node.dataset.counted = String(target);
+		var start = null;
+		function frame(ts) {
+			if (node.dataset.counted !== String(target)) return;
+			if (!start) start = ts;
+			var p = Math.min(1, (ts - start) / 1500);
+			var eased = 1 - Math.pow(1 - p, 4);
+			node.textContent = displayNumber(Math.round(target * eased));
+			if (p < 1) window.requestAnimationFrame(frame);
+		}
+		window.requestAnimationFrame(frame);
+	}
+
+	function countWhenVisible(node, target) {
+		if (reduceMotion || typeof IntersectionObserver !== "function") {
+			countUp(node, target);
+			return;
+		}
+		node.textContent = "0";
+		var observer = new IntersectionObserver(function (entries) {
+			entries.forEach(function (entry) {
+				if (!entry.isIntersecting) return;
+				observer.disconnect();
+				countUp(node, target);
+			});
+		}, { threshold: 0.35 });
+		observer.observe(node);
+	}
+
 	function renderPulse(world) {
 		var pulse = world.pulse;
+		var firstPaint = !pulseRendered;
+		pulseRendered = true;
 		Array.prototype.forEach.call(document.querySelectorAll("[data-pulse]"), function (tile) {
 			var value = number(pulse[tile.getAttribute("data-pulse")]);
 			var target = tile.querySelector("[data-count]");
-			target.textContent = value >= 100000 ? compact(value) : fmt(value);
+			if (firstPaint) countWhenVisible(target, value);
+			else countUp(target, value);
 			target.setAttribute("aria-label", fmt(value));
 			target.title = fmt(value);
 		});
-		$("nav-online").textContent = world.live ? fmt(pulse.online) + " online" : (world.demo ? "Prelaunch fiction" : "Sample ledger");
+		$("nav-online").textContent = world.live
+			? fmt(pulse.online) + " adventurers online"
+			: (world.demo ? "A fictional vision, for now" : "Sample ledger");
 	}
 
 	function feedDescription(entry) {
@@ -286,21 +343,61 @@
 		return player + " left a mark on the world";
 	}
 
-	function feedIcon(entry) {
-		if (entry.type === "pk") return pixelImg("assets/npc-database/item/20.png", 2, "feed-icon");
-		if ((entry.type === "max" || entry.type === "level") && skillByKey(text(entry.skill))) {
-			var image = el("img", "feed-art-icon");
-			image.src = skillByKey(text(entry.skill)).icon;
-			image.alt = "";
-			image.loading = "lazy";
-			return image;
+	/* Rich version of feedDescription: player names in cream, the deed's object
+	   accented, all built from the same normalized fields. */
+	function feedSentence(entry) {
+		var fragment = document.createDocumentFragment();
+		function name(value) { fragment.appendChild(el("strong", "", value)); }
+		function plain(value) { fragment.appendChild(document.createTextNode(value)); }
+		function accent(value) { fragment.appendChild(el("em", "", value)); }
+		var player = text(entry.player, "An adventurer");
+		var skill = skillByKey(text(entry.skill));
+		var skillLabel = skill ? skill.label : text(entry.skill, "a skill");
+		if (entry.type === "pk") {
+			name(player); plain(" has slain "); accent(text(entry.victim, "a rival"));
+			plain(number(entry.wildernessLevel) ? " in level-" + number(entry.wildernessLevel) + " Wilderness." : " in the Wilderness.");
+		} else if (entry.type === "max") {
+			name(player); plain(" has achieved "); accent("level-99 " + skillLabel); plain(", the maximum possible!");
+		} else if (entry.type === "level") {
+			name(player); plain(" has achieved level-" + number(entry.level) + " in "); accent(skillLabel); plain("!");
+		} else if (entry.type === "quest") {
+			name(player); plain(" has completed "); accent(text(entry.questName, "a quest"));
+			plain(number(entry.questPoints) ? " and now has " + number(entry.questPoints) + " quest points!" : "!");
+		} else if (entry.type === "rare") {
+			var item = text(entry.itemName, "a rare treasure");
+			name(player); plain(/^[aeiou]/i.test(item) ? " has obtained an " : " has obtained a "); accent(item); plain("!");
+		} else if (entry.type === "new") {
+			plain("Welcome "); name(player); plain(" to Voidscape. This is their first time in the world.");
+		} else if (entry.type === "total") {
+			name(player); plain(" has crossed "); accent(fmt(entry.totalLevel) + " total level"); plain(".");
+		} else {
+			plain(feedDescription(entry));
 		}
-		if (entry.type === "rare" && Number.isFinite(Number(entry.itemId))) return pixelImg("assets/npc-database/item/" + number(entry.itemId) + ".png", 2, "feed-icon");
-		var fallback = el("img", "feed-art-icon");
-		fallback.src = "assets/world/mini-gold.png";
-		fallback.alt = "";
-		fallback.loading = "lazy";
-		return fallback;
+		return fragment;
+	}
+
+	function feedIcon(entry) {
+		var wrap = el("span", "feed-icon");
+		var image;
+		if (entry.type === "pk") {
+			image = el("img");
+			image.src = "assets/world/mini-voidspike.png";
+		} else if ((entry.type === "max" || entry.type === "level") && skillByKey(text(entry.skill))) {
+			image = el("img");
+			image.src = skillByKey(text(entry.skill)).icon;
+		} else if (entry.type === "rare" && Number.isFinite(Number(entry.itemId))) {
+			image = pixelImg("assets/npc-database/item/" + number(entry.itemId) + ".png", 1);
+		} else if (entry.type === "total") {
+			image = el("img");
+			image.src = "assets/world/mini-void.png";
+		} else {
+			image = el("img");
+			image.src = "assets/world/mini-gold.png";
+		}
+		image.alt = "";
+		image.loading = "lazy";
+		wrap.appendChild(image);
+		return wrap;
 	}
 
 	function renderFeed(world) {
@@ -311,42 +408,76 @@
 			$("feed-showcase").hidden = true;
 			return;
 		}
-		world.feed.forEach(function (entry) {
+		world.feed.forEach(function (entry, index) {
 			var item = el("li", "feed-entry feed-" + text(entry.type, "event"));
+			if (feedAnimated || reduceMotion) item.style.animation = "none";
+			else item.style.animationDelay = Math.min(index * 55, 550) + "ms";
 			item.appendChild(feedIcon(entry));
 			var copy = el("span", "feed-copy");
-			copy.appendChild(el("span", "feed-text", feedDescription(entry)));
-			copy.appendChild(el("time", "feed-time", ago(entry.at)));
+			var line = el("span", "feed-text");
+			line.appendChild(feedSentence(entry));
+			copy.appendChild(line);
+			var time = el("time", "feed-time", ago(entry.at));
+			time.title = feedDescription(entry);
+			copy.appendChild(time);
 			item.appendChild(copy);
 			list.appendChild(item);
 		});
+
+		/* The most recent Wilderness kill gets the carved stone plaque. */
 		var showcase = $("feed-showcase");
-		var sentence = el("span", "feed-showcase-sentence", feedDescription(world.feed[0]));
-		$("feed-showcase-text").replaceChildren(sentence);
-		showcase.hidden = false;
+		var pk = null;
+		for (var i = 0; i < world.feed.length; i += 1) {
+			if (world.feed[i].type === "pk") { pk = world.feed[i]; break; }
+		}
+		if (pk) {
+			var line2 = $("feed-showcase-text");
+			line2.replaceChildren();
+			var sentence = el("span", "feed-showcase-sentence");
+			sentence.appendChild(el("span", "who", text(pk.player, "Unknown")));
+			sentence.appendChild(document.createTextNode(" has slain "));
+			sentence.appendChild(el("span", "whom", text(pk.victim, "Unknown")));
+			if (number(pk.wildernessLevel)) sentence.appendChild(document.createTextNode(" · level-" + number(pk.wildernessLevel) + " wild"));
+			line2.appendChild(sentence);
+			showcase.hidden = false;
+		} else {
+			showcase.hidden = true;
+		}
+		feedAnimated = true;
 	}
 
+	/* Built once, then only the active state is synced — periodic refreshes must
+	   never yank chips out from under a tap. */
 	function renderSkillRail() {
 		var rail = $("skill-rail");
-		rail.replaceChildren();
-		[{ key: "overall", label: "Overall", icon: "assets/world/title-marker.png" }].concat(SKILLS).forEach(function (skill) {
-			var button = el("button", "skill-tab" + (activeBoard === skill.key ? " is-active" : ""));
-			button.type = "button";
-			button.setAttribute("role", "tab");
-			button.setAttribute("aria-selected", activeBoard === skill.key ? "true" : "false");
-			button.setAttribute("aria-controls", "board");
-			button.title = skill.label;
-			var image = el("img", "skill-icon");
-			image.src = skill.icon;
-			image.alt = "";
-			image.loading = "lazy";
-			button.appendChild(image);
-			button.appendChild(el("span", "skill-label", skill.label));
-			button.addEventListener("click", function () {
-				activeBoard = skill.key;
-				renderMonument(lastGoodWorld || emptyWorld());
+		var chips = [{ key: "overall", label: "Overall", icon: "assets/world/title-marker.png" }].concat(SKILLS);
+		if (rail.childElementCount !== chips.length) {
+			rail.replaceChildren();
+			chips.forEach(function (skill) {
+				var button = el("button", "skill-tab");
+				button.type = "button";
+				button.setAttribute("role", "tab");
+				button.setAttribute("aria-controls", "board");
+				button.dataset.skill = skill.key;
+				button.title = skill.label;
+				var image = el("img", "skill-icon");
+				image.src = skill.icon;
+				image.alt = "";
+				image.loading = "lazy";
+				button.appendChild(image);
+				button.appendChild(el("span", "skill-label", skill.label));
+				button.addEventListener("click", function () {
+					activeBoard = skill.key;
+					monumentAnimate = true;
+					renderMonument(lastGoodWorld || emptyWorld());
+				});
+				rail.appendChild(button);
 			});
-			rail.appendChild(button);
+		}
+		Array.prototype.forEach.call(rail.children, function (button) {
+			var selected = button.dataset.skill === activeBoard;
+			button.classList.toggle("is-active", selected);
+			button.setAttribute("aria-selected", selected ? "true" : "false");
 		});
 	}
 
@@ -368,6 +499,16 @@
 		return image;
 	}
 
+	function podAvatar(entry) {
+		var scale = smallStage.matches ? 1 : 2;
+		var image = avatarImage(entry, "pod-avatar px");
+		image.addEventListener("load", function () {
+			image.style.width = image.naturalWidth * scale + "px";
+			image.style.height = image.naturalHeight * scale + "px";
+		});
+		return image;
+	}
+
 	function renderMonument(world) {
 		if (!world.highscores.skills[activeBoard] && activeBoard !== "overall") activeBoard = "overall";
 		renderSkillRail();
@@ -375,32 +516,59 @@
 		var boardLabel = activeBoard === "overall" ? "Overall highscores" : (skillByKey(activeBoard).label + " highscores");
 		$("board-caption").textContent = boardLabel;
 		var podium = $("podium");
+		var animate = monumentAnimate && !reduceMotion;
+		monumentAnimate = false;
 		podium.replaceChildren();
 		rows.slice(0, 3).forEach(function (entry) {
-			var place = el("article", "pod pod-rank-" + entry.rank);
-			place.appendChild(el("span", "pod-number", String(entry.rank)));
-			place.appendChild(avatarImage(entry, "pod-avatar"));
+			var place = el("article", "pod pod-" + entry.rank + " pod-rank-" + entry.rank);
+			if (!animate) place.style.animation = "none";
+
+			var crown = el("img", "pod-crown");
+			crown.src = POD_CROWNS[entry.rank - 1] || POD_CROWNS[2];
+			crown.alt = "";
+			place.appendChild(crown);
+
+			var stage = el("span", "pod-stage");
+			stage.appendChild(podAvatar(entry));
+			place.appendChild(stage);
+
+			var shield = el("img", "pod-shield");
+			shield.src = POD_SHIELDS[entry.rank - 1] || POD_SHIELDS[2];
+			shield.alt = "Rank " + entry.rank;
+			place.appendChild(shield);
+
 			var name = el("p", "pod-name");
-			decoratedName(name, entry, "pod-player");
+			name.appendChild(el("span", "pod-player", entry.player));
+			if (entry.epithet) name.appendChild(el("span", "epithet", " " + entry.epithet));
 			place.appendChild(name);
-			place.appendChild(el("p", "pod-stat", (activeBoard === "overall" ? fmt(entry.level) + " total" : "Level " + fmt(entry.level)) + " · " + fmt(entry.xp) + " xp"));
+			if (entry.honorific) place.appendChild(el("span", "pod-honorific", entry.honorific));
+
+			var stat = el("p", "pod-stat");
+			stat.appendChild(el("b", "", activeBoard === "overall" ? fmt(entry.level) + " total" : "Level " + fmt(entry.level)));
+			stat.appendChild(document.createTextNode(" · " + compact(entry.xp) + " xp"));
+			stat.title = fmt(entry.xp) + " experience";
+			place.appendChild(stat);
 			podium.appendChild(place);
 		});
 		if (!rows.length) podium.appendChild(el("p", "monument-empty", "No eligible adventurers have entered this monument yet."));
 
 		var body = $("board-body");
 		body.replaceChildren();
-		rows.forEach(function (entry) {
+		rows.forEach(function (entry, index) {
 			var row = document.createElement("tr");
+			if (!animate) row.style.animation = "none";
+			else row.style.animationDelay = Math.min(index * 40, 400) + "ms";
 			row.appendChild(el("td", "c-rank", String(entry.rank)));
 			var adventurer = el("td", "board-player");
-			adventurer.appendChild(avatarImage(entry, "board-avatar"));
 			var name = el("span", "board-name");
 			decoratedName(name, entry, "player-name");
 			adventurer.appendChild(name);
 			row.appendChild(adventurer);
 			row.appendChild(el("td", "c-lvl", fmt(entry.level)));
-			row.appendChild(el("td", "c-xp", fmt(entry.xp)));
+			var xpCell = el("td", "c-xp");
+			xpCell.appendChild(el("b", "", fmt(entry.xp)));
+			xpCell.appendChild(document.createTextNode(" xp"));
+			row.appendChild(xpCell);
 			body.appendChild(row);
 		});
 		if (!rows.length) {
@@ -420,13 +588,23 @@
 			grid.appendChild(el("p", "section-empty", "The permanent record stones are unavailable right now."));
 			return;
 		}
-		world.records.forEach(function (record) {
+		world.records.forEach(function (record, index) {
 			var card = el("article", "record-card" + (record.claimed ? "" : " is-unclaimed"));
-			var image = el("img", "record-art");
-			image.src = "assets/world/" + (RECORD_ART[record.key] || "medal-void.png");
-			image.alt = "";
-			image.loading = "lazy";
-			card.appendChild(image);
+			if (recordsAnimated || reduceMotion) card.style.animation = "none";
+			else card.style.animationDelay = Math.min(index * 60, 480) + "ms";
+			var artWrap = el("span", "record-art-wrap");
+			var art = RECORD_ART[record.key] || { art: "assets/world/medal-void.png" };
+			var image;
+			if (art.sprite) {
+				image = pixelImg("assets/npc-database/item/" + art.sprite + ".png", art.scale || 2, "record-art");
+			} else {
+				image = el("img", "record-art");
+				image.src = art.art;
+				image.alt = "";
+				image.loading = "lazy";
+			}
+			artWrap.appendChild(image);
+			card.appendChild(artWrap);
 			card.appendChild(el("p", "record-label", record.label));
 			var holder = el("h3", "record-holder");
 			decoratedName(holder, { player: record.holder, honorific: record.honorific, epithet: record.epithet }, "record-player");
@@ -439,23 +617,50 @@
 	}
 
 	function renderEconomy(world) {
-		$("economy-total").textContent = fmt(world.economy.totalGp);
-		$("economy-total").title = fmt(world.economy.totalGp);
-		$("economy-sub").textContent = world.economy.gpPerHead ? fmt(world.economy.gpPerHead) + " gp per eligible adventurer" : "No saved coin holdings have been counted yet.";
+		var totalNode = $("economy-total");
+		if (pulseRendered && totalNode.dataset.counted) countUp(totalNode, world.economy.totalGp);
+		else countWhenVisible(totalNode, world.economy.totalGp);
+		totalNode.title = fmt(world.economy.totalGp);
+		$("economy-sub").textContent = world.economy.gpPerHead
+			? "That is " + fmt(world.economy.gpPerHead) + " gp for every eligible soul in the world — if it were shared, which it never will be."
+			: "No saved coin holdings have been counted yet.";
 		var list = $("hoard-list");
 		list.replaceChildren();
 		if (!world.economy.topItems.length) {
 			list.appendChild(el("li", "hoard-empty", "The vault inventory is quiet."));
 			return;
 		}
+		var max = number(world.economy.topItems[0].count) || 1;
 		world.economy.topItems.forEach(function (item, index) {
 			var row = el("li", "hoard-row");
 			row.appendChild(el("span", "hoard-rank", String(index + 1)));
-			row.appendChild(pixelImg("assets/npc-database/item/" + item.itemId + ".png", 2, "hoard-sprite"));
-			row.appendChild(el("span", "hoard-name", item.name));
-			row.appendChild(el("strong", "hoard-count", fmt(item.count)));
+			row.appendChild(pixelImg("assets/npc-database/item/" + item.itemId + ".png", 1, "hoard-sprite"));
+			var meta = el("span", "hoard-meta");
+			var name = el("span", "hoard-name", item.name);
+			name.title = item.name;
+			meta.appendChild(name);
+			var bar = el("span", "hoard-bar");
+			var fill = el("i");
+			var ratio = Math.max(0.04, Math.sqrt(number(item.count) / max));
+			if (reduceMotion || hoardAnimated) {
+				fill.style.transition = "none";
+				fill.style.transform = "scaleX(" + ratio + ")";
+			} else {
+				fill.style.transform = "scaleX(0)";
+				window.requestAnimationFrame(function () {
+					window.requestAnimationFrame(function () { fill.style.transform = "scaleX(" + ratio + ")"; });
+				});
+			}
+			bar.appendChild(fill);
+			meta.appendChild(bar);
+			row.appendChild(meta);
+			var count = el("strong", "hoard-count", compact(item.count));
+			count.title = fmt(item.count);
+			row.appendChild(count);
 			list.appendChild(row);
 		});
+		hoardAnimated = true;
+		recordsAnimated = true;
 	}
 
 	function renderWilderness(world) {
@@ -481,8 +686,9 @@
 		world.wilderness.recent.forEach(function (kill) {
 			var item = el("li", "wild-entry");
 			item.appendChild(el("span", "wild-killer", text(kill.killer, "Unknown")));
-			item.appendChild(el("span", "wild-versus", "defeated"));
+			item.appendChild(el("span", "wild-versus", "slew"));
 			item.appendChild(el("span", "wild-victim", text(kill.victim, "Unknown")));
+			if (number(kill.wildernessLevel)) item.appendChild(el("span", "wild-level", "in level-" + number(kill.wildernessLevel)));
 			item.appendChild(el("time", "wild-time", ago(kill.at)));
 			list.appendChild(item);
 		});
@@ -495,7 +701,7 @@
 		});
 	}
 
-	function showFact(index) {
+	function showFact(index, animate) {
 		if (!currentFacts.length) {
 			$("almanac-fact").textContent = "The Almanac has no verified entry to show right now.";
 			$("almanac-source").textContent = "";
@@ -505,9 +711,18 @@
 		factIndex = ((index % currentFacts.length) + currentFacts.length) % currentFacts.length;
 		var fact = currentFacts[factIndex];
 		var factNode = $("almanac-fact");
-		factNode.replaceChildren();
-		appendMarkedFact(factNode, fact.text);
-		$("almanac-source").textContent = fact.source;
+		function paint() {
+			factNode.replaceChildren();
+			appendMarkedFact(factNode, fact.text);
+			$("almanac-source").textContent = fact.source;
+			factNode.classList.remove("is-swapping");
+		}
+		if (animate && !reduceMotion) {
+			factNode.classList.add("is-swapping");
+			window.setTimeout(paint, 300);
+		} else {
+			paint();
+		}
 		$("almanac-btn").disabled = currentFacts.length < 2;
 	}
 
@@ -517,9 +732,30 @@
 		showFact(factIndex);
 	}
 
+	/* The hero line cycles through the feed like a herald reading the ledger aloud. */
 	function renderLiveLine(world) {
-		var message = world.feed.length ? feedDescription(world.feed[0]) + " · " + ago(world.feed[0].at) : "The ledger is open. New deeds will appear after the next world save.";
-		$("live-line-text").textContent = message;
+		var node = $("live-line-text");
+		if (liveLineTimer) window.clearInterval(liveLineTimer);
+		liveLineTimer = null;
+		if (!world.feed.length) {
+			node.textContent = "The ledger is open. New deeds will appear after the next world save.";
+			return;
+		}
+		liveLineIndex = 0;
+		function paint() {
+			node.replaceChildren(feedSentence(world.feed[liveLineIndex % world.feed.length]));
+			liveLineIndex += 1;
+		}
+		function swap() {
+			if (reduceMotion) { paint(); return; }
+			node.classList.add("is-swapping");
+			window.setTimeout(function () {
+				paint();
+				node.classList.remove("is-swapping");
+			}, 360);
+		}
+		paint();
+		if (world.feed.length > 1) liveLineTimer = window.setInterval(swap, 5200);
 	}
 
 	function formatLaunch(iso) {
@@ -627,7 +863,10 @@
 		});
 	}
 
-	$("almanac-btn").addEventListener("click", function () { showFact(factIndex + 1); });
+	$("almanac-btn").addEventListener("click", function () { showFact(factIndex + 1, true); });
+	if (smallStage.addEventListener) smallStage.addEventListener("change", function () {
+		if (lastGoodWorld) renderMonument(lastGoodWorld);
+	});
 	var motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 	if (motionQuery.addEventListener) motionQuery.addEventListener("change", function (event) { reduceMotion = event.matches; });
 	if (reduceMotion) document.documentElement.classList.add("reduce-motion");
