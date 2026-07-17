@@ -198,7 +198,8 @@ public class CombatEvent extends GameTickEvent {
 			int attackerMaxHit;
 			try {
 				if (proofSession != null) {
-					if (getWorld().getServer().getConfig().OSRS_COMBAT_MELEE
+					if (getWorld().getServer().getConfig().OPENRSC_CLASSIC_COMBAT_BASELINE
+						|| getWorld().getServer().getConfig().OSRS_COMBAT_MELEE
 						|| !hitter.isPlayer() || !target.isPlayer()) {
 						throw new IllegalStateException("proof combat left classic player melee");
 					}

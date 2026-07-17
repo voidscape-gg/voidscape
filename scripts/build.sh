@@ -49,6 +49,15 @@ python3 "$SCRIPT_DIR/test-duel-xp-controls-contract.py"
 echo "==> Testing production regular-player command lockdown"
 python3 "$SCRIPT_DIR/test-production-regular-command-lockdown.py"
 
+echo "==> Testing Home Teleport safety policy"
+python3 "$SCRIPT_DIR/test-home-teleport-policy.py"
+
+echo "==> Testing Void Dungeon population policy"
+python3 "$SCRIPT_DIR/test-void-dungeon-population.py"
+
+echo "==> Testing local OpenRSC combat baseline policy"
+python3 "$SCRIPT_DIR/test-openrsc-combat-baseline.py"
+
 echo "==> Testing PvE physical roll multipliers"
 python3 "$REPO_ROOT/tools/combat-sim/test_pve_multipliers.py"
 

@@ -2334,6 +2334,10 @@ class Daemon:
                 self.send("CAST_ON_SCENERY", P.BitWriter().u16(int(a["spell"]))
                           .u16(int(a["x"])).u16(int(a["y"])).b)
                 return {"ok": True, "spell": int(a["spell"]), "x": int(a["x"]), "y": int(a["y"])}
+            if cmd == "cast-self":
+                spell = int(a["spell"])
+                self.send("CAST_ON_SELF", P.BitWriter().u16(spell).b)
+                return {"ok": True, "spell": spell}
             if cmd == "cast-player":
                 spell = int(a["spell"])
                 server_index = int(a["server_index"])

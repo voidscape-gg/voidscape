@@ -411,8 +411,8 @@ def spread_points(room_rect, count, wander, step):
 
 
 SPAWN_PACKS = [
-    ("riftworks", "riftworks_spider_works", "spider", 17, 2, 3),
-    ("riftworks", "riftworks_wolf_foundry", "wolf", 7, 2, 3),
+    ("riftworks", "riftworks_spider_works", "spider", 7, 2, 3),
+    ("riftworks", "riftworks_wolf_foundry", "wolf", 5, 2, 3),
     ("broken_menagerie", "menagerie_unicorn_west", "unicorn", 3, 2, 3),
     ("broken_menagerie", "menagerie_unicorn_east", "unicorn", 2, 2, 3),
     ("broken_menagerie", "menagerie_ogre_west", "ogre", 3, 2, 3),

@@ -32,6 +32,7 @@ OUT = {
     "ITEM_USE_ITEM": 91,             # use one inventory item on another (combine/craft)
     "GROUND_ITEM_USE_ITEM": 53,      # use a carried item on a ground item (e.g. light logs)
     "PLAYER_ATTACK": 171,
+    "CAST_ON_SELF": 137,
     "CAST_ON_NPC": 50,
     "PLAYER_CAST_PVP": 229,
     "PLAYER_FOLLOW": 165,

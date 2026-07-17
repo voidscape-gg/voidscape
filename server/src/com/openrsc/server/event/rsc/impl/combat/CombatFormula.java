@@ -189,11 +189,12 @@ public class CombatFormula {
 	}
 
 	private static boolean calculatePhysicalAccuracy(final double baseAccuracy, final Mob source, final Mob victim) {
-		final double accuracy = source instanceof Npc && victim instanceof Player
+		final boolean openRscBaseline = usesOpenRscClassicBaseline(source, victim);
+		final double accuracy = !openRscBaseline && source instanceof Npc && victim instanceof Player
 			? baseAccuracy * NPC_VS_PLAYER_PHYSICAL_ACCURACY_MULTIPLIER
 			: baseAccuracy;
 		final double baseDefence = getMeleeDefence(victim);
-		final double defence = source instanceof Player && victim instanceof Npc
+		final double defence = !openRscBaseline && source instanceof Player && victim instanceof Npc
 			? baseDefence * NPC_PHYSICAL_DEFENCE_AGAINST_PLAYERS_MULTIPLIER
 			: baseDefence;
 		return calculateAccuracy(accuracy, defence);
@@ -218,6 +219,11 @@ public class CombatFormula {
 	 */
 	public static MeleeHitResult doMeleeHit(final Mob source, final Mob victim) {
 		final boolean isPvpMelee = source instanceof Player && victim instanceof Player;
+		final boolean usePvpMeleeMomentum = isPvpMelee
+			&& !usesOpenRscClassicBaseline(source, victim);
+		if (isPvpMelee && !usePvpMeleeMomentum) {
+			clearPvpMeleeMomentum(source);
+		}
 		boolean isHit = calculateMeleeAccuracy(source, victim);
 		boolean wasHit = isHit;
 		if (source instanceof Player) {
@@ -230,7 +236,8 @@ public class CombatFormula {
 
 		int damage = 0;
 		if (isHit) {
-			damage = rollMeleeDamage(source, victim, isPvpMelee && consumePvpMeleeMomentum(source, victim));
+			damage = rollMeleeDamage(source, victim,
+				usePvpMeleeMomentum && consumePvpMeleeMomentum(source, victim));
 		} else if (isPvpMelee) {
 			clearPvpMeleeMomentum(source);
 		}
@@ -259,7 +266,7 @@ public class CombatFormula {
 				((Player) source).message("@ora@Your Strength cape has granted you a critical hit");
 			}
 		}
-		if (isPvpMelee && isHit) {
+		if (usePvpMeleeMomentum && isHit) {
 			updatePvpMeleeMomentum(source, victim, damage);
 		}
 
@@ -270,8 +277,9 @@ public class CombatFormula {
 
 	/** Resolves one proof-eligible PvP swing entirely through the committed replay stream. */
 	public static MeleeHitResult doMeleeHit(final Player source, final Player victim,
-											 final DuelProofSession proofSession) {
-		if (source == null || victim == null || proofSession == null || source == victim) {
+										 final DuelProofSession proofSession) {
+		if (source == null || victim == null || proofSession == null || source == victim
+			|| usesOpenRscClassicBaseline(source, victim)) {
 			throw new IllegalArgumentException("verified melee requires two players and a proof session");
 		}
 		final DuelProofMeleeInput input = new DuelProofMeleeInput(
@@ -376,7 +384,8 @@ public class CombatFormula {
 
 	private static int getMeleeDamage(final Mob source, final Mob victim) {
 		int maxRoll = getMeleeDamage(source);
-		if (source instanceof Npc && victim instanceof Player) {
+		if (!usesOpenRscClassicBaseline(source, victim)
+			&& source instanceof Npc && victim instanceof Player) {
 			final int styleBonus = styleBonus(source, Skill.STRENGTH.id());
 			final double prayerBonus = addPrayers(source, Prayers.BURST_OF_STRENGTH,
 				Prayers.SUPERHUMAN_STRENGTH,
@@ -421,11 +430,14 @@ public class CombatFormula {
 	}
 
 	private static double getArmourAccuracyPoints(final Mob defender) {
-		return 64 + (defender.getArmourPoints() * VOIDSCAPE_ARMOUR_ACCURACY_SCALE);
+		final double scale = usesOpenRscClassicBaseline(defender, null)
+			? 1.0D : VOIDSCAPE_ARMOUR_ACCURACY_SCALE;
+		return 64 + (defender.getArmourPoints() * scale);
 	}
 
 	private static double getPhysicalDamageReduction(final Mob victim) {
-		if (victim == null || victim.getArmourPoints() <= 1) {
+		if (victim == null || usesOpenRscClassicBaseline(victim, null)
+			|| victim.getArmourPoints() <= 1) {
 			return 0.0D;
 		}
 		return Math.min(VOIDSCAPE_PHYSICAL_MITIGATION_CAP, victim.getArmourPoints() / VOIDSCAPE_PHYSICAL_MITIGATION_DIVISOR);
@@ -451,7 +463,9 @@ public class CombatFormula {
 			&& playerVictim.getPrayers().isPrayerActivated(Prayers.PROTECT_FROM_MAGIC)) {
 			return 0;
 		}
-		return Math.max(1, (int)Math.floor(damage * VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE));
+		final double scale = usesOpenRscClassicBaseline(source, victim)
+			? 1.0D : VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE;
+		return Math.max(1, (int)Math.floor(damage * scale));
 	}
 
 	private static boolean isProtectFromMagicBlockableSource(final Mob source) {
@@ -590,7 +604,8 @@ public class CombatFormula {
 
 	private static double getMeleeAccuracy(final Mob attacker, final Mob defender) {
 		double accuracy = getMeleeAccuracy(attacker);
-		if (attacker instanceof Npc && defender instanceof Player) {
+		if (!usesOpenRscClassicBaseline(attacker, defender)
+			&& attacker instanceof Npc && defender instanceof Player) {
 			final int styleBonus = styleBonus(attacker, Skill.ATTACK.id());
 			final double prayerBonus = addPrayers(attacker, Prayers.CLARITY_OF_THOUGHT,
 				Prayers.IMPROVED_REFLEXES,
@@ -599,6 +614,11 @@ public class CombatFormula {
 			accuracy = (Math.floor(effectiveAttack * prayerBonus) + styleBonus) * (attacker.getWeaponAimPoints() + 64);
 		}
 		return accuracy * voidMeleeMultiplier(attacker, defender);
+	}
+
+	private static boolean usesOpenRscClassicBaseline(final Mob first, final Mob second) {
+		final Mob context = first != null ? first : second;
+		return context != null && context.getConfig().OPENRSC_CLASSIC_COMBAT_BASELINE;
 	}
 
 	private static int npcVsPlayerMeleeLevel(final Mob npc, final int skillId) {

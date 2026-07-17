@@ -27,6 +27,10 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-16 - Server-only teleport safety, Void Dungeon population tuning, and OpenRSC combat trial
+
+Level-0 Home Teleport is now denied anywhere in the Wilderness, during an active duel, or while actively fighting another player, while NPC combat remains eligible and no post-combat timer was added. The authored Void Dungeon population is reduced from 53 to 41 ordinary locations—7 spiders and 5 wolves, with every other count unchanged—and existing Void Knights and Void Unicorns are now aggressive; terrain, rooms, drops, admission, and PvP policy are unchanged. A default-off `openrsc_classic_combat_baseline` server switch supports the approved local comparison by bypassing Voidscape armour avoidance/damage mitigation, player-magic scaling, PvP momentum, NPC effective-level boosts, and both `1.10` PvE physical roll multipliers while preserving custom Void gear, prayers/capes, boss exceptions, damage floors, scripts, and XP policy. Baseline No-Magic stake duels deliberately skip the frozen Voidscape replay-proof contract and fail closed if a proof session somehow survives. Source contracts, simulator comparisons, the canonical build, live 41-location boot, voidbot NPC-aggression checks, and an ordinary local baseline duel pass. The switch is enabled only in ignored `server/local.conf`; the launch contract leaves it off, and nothing was deployed. Server gameplay/configuration and local QA tooling only: no shipped client source/artifact, landscape, cache, opcode, packet shape, client version, database schema, APK, web client, launcher, Play Store build, or production process changed.
+
 ### 2026-07-16 - Curated production command access for regular users
 
 Production command lockdown now rejects the reviewed 46-token command and alias set

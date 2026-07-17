@@ -55,6 +55,7 @@ public final class DuelProofService {
 	public static boolean requiresProof(final Player first, final Player second) {
 		return first != null && second != null
 			&& first.getDuel().getDuelSetting(1) && second.getDuel().getDuelSetting(1)
+			&& !first.getWorld().getServer().getConfig().OPENRSC_CLASSIC_COMBAT_BASELINE
 			&& !first.getWorld().getServer().getConfig().OSRS_COMBAT_MELEE;
 	}
 

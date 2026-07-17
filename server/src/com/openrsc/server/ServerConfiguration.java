@@ -362,6 +362,7 @@ public class ServerConfiguration {
 	public boolean CANT_DYE_CAPES;
 	public boolean RETRO_RANGED_DAMAGE;
 
+	public boolean OPENRSC_CLASSIC_COMBAT_BASELINE;
 	public boolean OSRS_COMBAT_MELEE;
 	public boolean OSRS_COMBAT_RANGED;
 	public boolean SANTA_GIVES_PRESENTS;
@@ -524,6 +525,7 @@ public class ServerConfiguration {
 		RESTRICT_ITEM_ID = tryReadInt("restrict_item_id").orElse(1289);
 		RESTRICT_SCENERY_ID = tryReadInt("restrict_scenery_id").orElse(1188);
 		COMBAT_LEVEL_NON_MELEE_MASK = tryReadInt("combat_level_non_melee_mask").orElse(7);
+		OPENRSC_CLASSIC_COMBAT_BASELINE = tryReadBool("openrsc_classic_combat_baseline").orElse(false);
 		OSRS_COMBAT_MELEE = tryReadBool("osrs_combat_melee").orElse(false);
 		OSRS_COMBAT_RANGED = tryReadBool("osrs_combat_ranged").orElse(false);
 		SANTA_GIVES_PRESENTS = tryReadBool("santa_gives_presents").orElse(false);

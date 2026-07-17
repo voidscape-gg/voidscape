@@ -1953,6 +1953,21 @@ public class SpellHandler implements PayloadProcessor<SpellStruct, OpcodeIn> {
 	}
 
 	private boolean canTeleport(Player player, SpellDef spell, Spells spellEnum) {
+		if (spellEnum == Spells.HOME_TELEPORT) {
+			if (player.getLocation().inWilderness()) {
+				player.message("A mysterious force blocks your Home Teleport in the Wilderness.");
+				return false;
+			}
+			if (player.getDuel().isDuelActive()) {
+				player.message("You can't use Home Teleport during a duel.");
+				return false;
+			}
+			if (player.inCombat() && player.getOpponent() instanceof Player) {
+				player.message("You can't use Home Teleport while fighting another player.");
+				return false;
+			}
+		}
+
 		boolean canTeleport = true;
 		if (player.getLocation().wildernessLevel() >= 20 || player.getLocation().isInFisherKingRealm()
 			|| player.getLocation().isInsideGrandTreeGround()

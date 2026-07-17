@@ -16,7 +16,7 @@ The three dungeon exit rifts and feature-disabled login recovery use the adjacen
 
 Every generated ladder has an exact reverse transition. Rift and ladder interactions snapshot the player tile and instance, delay for the normal animation, then revalidate login, death, combat, movement, source object, and instance before teleporting. The final demon seal is a destination room, not a disguised entrance to retired content.
 
-The route retains 53 ordinary NPC spawns: 17 spiders, 7 wolves, 5 unicorns, 5 ogres, 5 giants, 6 knights, 6 wizards, and 2 demons. Their definitions and ordinary supply drops remain unchanged; only the complete Void-gear unique slots are retuned below.
+The route retains 41 ordinary NPC spawns: 7 spiders, 5 wolves, 5 unicorns, 5 ogres, 5 giants, 6 knights, 6 wizards, and 2 demons. Void Knights and Void Unicorns are aggressive; the other NPC behavior and ordinary supply drops remain unchanged. Only the complete Void-gear unique slots are retuned below.
 
 ## Traversal Grace
 

@@ -88,6 +88,7 @@ contract; it must not rely on an ignored `server/local.conf` value.
 | `combat_exp_rate` / `skilling_exp_rate` | `10` / `1.5` | `10` / `1.5` | `10` / `1.5` | Subscription adds +1x to each, normally 11x combat / 2.5x skills while active. |
 | `melee_gives_xp_hit` | `true` | `true` | `true` | Voidscape keeps the tested successful-hit XP timing instead of silently reverting to authentic death-time payout. |
 | `ranged_gives_xp_hit` | `true` | `true` | `true` | Kept paired with melee hit XP for the launch profile. |
+| `openrsc_classic_combat_baseline` | `true` only for the current local trial | `false` / omitted | `false` / omitted | Server-only comparison switch for the inherited OpenRSC classic formula. Keep `osrs_combat_melee: false`; launch remains on Voidscape's tuned classic rules until the trial is explicitly accepted. |
 | `launch_subscription_card_until` | unset unless testing packet registration | launch + 24h UTC | `2026-07-19T18:00:00Z` | Required while release packet registration is enabled so desktop-created characters receive `launch_24h_card` before the cutoff; characters created at or after it do not. Env `VOIDSCAPE_LAUNCH_SUBSCRIPTION_CARD_UNTIL` overrides it. |
 | `idle_timer` | `600000` | `600000` | `600000` | Regular players get a 10-minute movement-idle warning window; authentic presets keep their own/default value. |
 | `idle_timer_subscriber` | `900000` | `900000` | `900000` | Active Void subscribers get a 15-minute movement-idle warning window; omitted configs fall back to `idle_timer`. |

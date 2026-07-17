@@ -79,6 +79,8 @@ def main():
             args["which"] = pos[2]
     elif cmd == "cast-object" and len(pos) >= 3:
         args["spell"], args["x"], args["y"] = pos[0], pos[1], pos[2]
+    elif cmd == "cast-self" and pos:
+        args["spell"] = pos[0]
     elif cmd in ("cast-player", "cast-npc") and pos:
         args["spell"] = pos[0]
         if len(pos) >= 2 and "server_index" not in args:
