@@ -26,8 +26,14 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-098 is verified; held-v14 remains rejected and release
-  integration continues with a fresh clean held-v15 successor candidate.
+- **Active bug:** none — VS-099 is verified; release integration can resume its prior
+  held-v15 successor work.
+- **Session preflight 2026-07-16 (VS-099):** branch
+  `codex/release-10139-integration`; portal files are clean. Unrelated combat/build
+  work from another active chat remains dirty and is out of scope. The pre-change
+  build passed compilation and portal boundary checks before the shared disk filled
+  during a packaged-portal fixture; Ryan directed this narrow portal fix to proceed
+  without touching or waiting on that work.
 - **Session preflight 2026-07-16 (VS-098):** branch
   `codex/release-10139-integration`; held-v14 is clean and locally promotable at
   `54e58294`, and exact Java 8 server, desktop, web, portal, launcher, Android APK,
@@ -213,11 +219,11 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — promoted VS-096 after reproducing the full ownership
-  collision, not only an orphaned username. An interrupted game-first signup leaves its
-  numeric account ID reusable; a later signup and native backfill can silently transfer
-  the stranded character to the wrong email account. V12 remains rejected; no live
-  system changed.
+- **Last session:** 2026-07-16 — fixed VS-099's misleading pending-verification state.
+  Pending signup now exposes only honest verification/resend copy, and successful
+  verification keeps its session while returning to the authenticated download
+  chooser. Portal API/schema and focused browser assertions pass; no live system
+  changed.
 - **Next action:** build and rehearse clean held-v15 as the successor to rejected v14.
   Do not push, publish source, or deploy any
   game/server/client artifact.
@@ -1126,6 +1132,32 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-099 — Pending email verification looked completed and exposed downloads (FIXED)
+- Status: verified · Severity: P2 · Area: web-portal / launch surface
+- Root cause: pending and completed signup reused one success block. Its static heading
+  claimed the name “is yours,” and the pending handler populated the same
+  Web/launcher/Android ready links even though the account and character did not exist
+  until explicit email verification. Verification already issued and stored a session,
+  but then opened the download-less account dashboard.
+- Fix: pending signup has an explicit “Check your email to finish reserving” heading,
+  says the reservation is incomplete until verification, keeps resend/expiry controls,
+  and hides the entire ready section. Successful verification preserves the existing
+  scanner-safe POST and stored bearer session, then redirects to `/`, whose authenticated
+  landing already validates that session and shows Manage Account plus all download
+  actions. Backend verification and public download access are unchanged.
+- Verified 2026-07-16: an isolated real launch signup returned HTTP 202 and rendered
+  the incomplete heading with zero visible ready links; the mocked successful browser
+  confirmation retained the session, redirected to `/`, showed Manage Account, and
+  exposed four chooser actions. Evidence is
+  `/tmp/voidscape-vs099.1zzpG1/visual/summary.json` and
+  `03-desktop-signup-success.png`. Portal API/schema, JavaScript/shell syntax, and
+  scoped whitespace checks pass. The complete visual run's only failures are its two
+  pre-existing AGPL-source-link assertions. The canonical build reached and passed
+  portal static-boundary coverage but could not finish its later packaged fixture
+  because the shared disk had only about 270 MiB free; no code failure was observed.
+- Log: 2026-07-16 reported by Ryan, code-confirmed, fixed, and focused-verified without
+  touching the concurrent combat/build work or any live system.
 
 ### VS-098 — Packaged server jar fails at startup on JDK 11+ (FIXED)
 - Status: verified · Severity: P1 · Area: server packaging / runtime compatibility

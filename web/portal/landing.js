@@ -58,7 +58,9 @@
 		googleSignupMessage: document.getElementById("google-signup-message"),
 		captchaWidget: document.getElementById("captcha-widget"),
 		successBlock: document.getElementById("success-block"),
+		successTitlePrefix: document.getElementById("success-title-prefix"),
 		successName: document.getElementById("success-name"),
+		successTitleSuffix: document.getElementById("success-title-suffix"),
 		successSub: document.querySelector(".success-sub"),
 		successCodeCard: document.getElementById("success-code-card"),
 		successCode: document.getElementById("success-code"),
@@ -68,6 +70,7 @@
 		verificationHelp: document.getElementById("verification-help"),
 		resendVerification: document.getElementById("resend-verification"),
 		verificationStatus: document.getElementById("verification-status"),
+		readyBlock: document.getElementById("ready-block"),
 		readyWeb: document.getElementById("ready-web"),
 		readyLauncher: document.getElementById("ready-launcher"),
 		readyAndroid: document.getElementById("ready-android"),
@@ -485,7 +488,7 @@
 		var signup = result && result.signup || {};
 		if (els.reserveBlock) els.reserveBlock.hidden = true;
 		if (els.successBlock) els.successBlock.hidden = false;
-		if (els.successName) els.successName.textContent = founder.username || normalizeName(els.reserveName && els.reserveName.value || "") || "-";
+		setSuccessHeading(founder.username || normalizeName(els.reserveName && els.reserveName.value || "") || "-", false);
 		if (els.successSub) {
 			els.successSub.textContent = signup.code
 				? "Your code is saved. Your free week is reserved for the Lumbridge vendor on launch day."
@@ -495,6 +498,7 @@
 		if (signup.code && els.successCode) els.successCode.textContent = signup.code;
 		if (signup.redeemHint && els.successCodeHelp) els.successCodeHelp.textContent = signup.redeemHint;
 		setVerificationActionsVisible(false);
+		if (els.readyBlock) els.readyBlock.hidden = false;
 		updateDownloadLinks();
 		els.successBlock.scrollIntoView({ behavior: "smooth", block: "center" });
 	}
@@ -502,11 +506,12 @@
 	function showEmailVerificationSent(state, name) {
 		if (els.reserveBlock) els.reserveBlock.hidden = true;
 		if (els.successBlock) els.successBlock.hidden = false;
-		if (els.successName) els.successName.textContent = state.username || name || normalizeName(els.reserveName && els.reserveName.value || "") || "-";
+		setSuccessHeading(state.username || name || normalizeName(els.reserveName && els.reserveName.value || "") || "-", true);
 		if (els.successSub) {
-			els.successSub.textContent = "Check your email to verify. Complete verification before 11:00 AM PT (18:00 UTC) on July 19, 2026 to receive the starter card.";
+			els.successSub.textContent = "Your reservation is not complete yet. Verify your email to create your account and reserve this username. Verify before 11:00 AM PT (18:00 UTC) on July 19, 2026 to receive the starter card.";
 		}
 		if (els.successCodeCard) els.successCodeCard.hidden = true;
+		if (els.readyBlock) els.readyBlock.hidden = true;
 		pendingVerificationEmail = String(state.email || (els.reserveEmail && els.reserveEmail.value) || "").trim();
 		setVerificationActionsVisible(true, state.expiresAt);
 		updateDownloadLinks();
@@ -779,7 +784,7 @@
 		var firstCharacter = state && Array.isArray(state.characters) && state.characters[0];
 		if (els.reserveBlock) els.reserveBlock.hidden = true;
 		if (els.successBlock) els.successBlock.hidden = false;
-		if (els.successName) els.successName.textContent = founder.username || (firstCharacter && firstCharacter.name) || fallbackName || "-";
+		setSuccessHeading(founder.username || (firstCharacter && firstCharacter.name) || fallbackName || "-", false);
 		if (els.successSub) {
 			els.successSub.textContent = starterCardWaiting(state)
 				? "Your account and first character are ready. Your starter card is waiting for launch."
@@ -787,7 +792,16 @@
 		}
 		if (els.successCodeCard) els.successCodeCard.hidden = true;
 		setVerificationActionsVisible(false);
+		if (els.readyBlock) els.readyBlock.hidden = false;
 		updateDownloadLinks();
+	}
+
+	function setSuccessHeading(name, verificationPending) {
+		if (els.successTitlePrefix) {
+			els.successTitlePrefix.textContent = verificationPending ? "Check your email to finish reserving" : "The name";
+		}
+		if (els.successName) els.successName.textContent = name;
+		if (els.successTitleSuffix) els.successTitleSuffix.textContent = verificationPending ? "." : " is yours.";
 	}
 
 	function setupVerificationResend() {

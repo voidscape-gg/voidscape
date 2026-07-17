@@ -27,6 +27,23 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-16 - Email verification gates reservation success and downloads (VS-099)
+
+Password signups waiting on email verification now show an explicit incomplete
+reservation state instead of claiming the username is already theirs, and the shared
+Web/launcher/Android ready section stays hidden until verification. The existing
+scanner-safe explicit verification POST and bearer-session design are unchanged;
+after the returned session is stored, the browser now returns to the authenticated
+landing chooser where all available download actions and Manage Account are shown.
+The visual smoke covers both pending and completed states; its VS-099 assertions pass
+with evidence at `/tmp/voidscape-vs099.1zzpG1/visual/summary.json` and
+`03-desktop-signup-success.png`, while the complete run retains its two unrelated
+pre-existing AGPL-source-link failures. Portal API/schema, JavaScript/shell syntax,
+and scoped whitespace checks pass. This changes portal presentation and navigation
+only: account creation, token consumption, session lifetime/storage, public download
+access, game data, protocol, clients, and live deployment are unchanged. Reverting
+the landing state split and post-verification redirect restores the prior behavior.
+
 ### 2026-07-16 - Standalone server jar preserves multi-release logging
 
 The Ant-built executable server jar now declares `Multi-Release: true` because it

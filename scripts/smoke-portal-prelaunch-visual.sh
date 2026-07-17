@@ -443,6 +443,31 @@ async function assertSignInCta(page) {
 	await page.goto(new URL("/portal?auth=verify#verify=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", portalUrl).href, { waitUntil: "domcontentloaded" });
 	await page.locator('[data-auth-panel="verify"]').waitFor({ state: "visible", timeout: 5000 });
 	assertCheck("email verification requires an explicit browser confirmation", await page.locator("#email-verification-submit").isVisible(), page.url());
+	const verifiedAccountState = {
+		token: "visual-verified-session",
+		account: { displayName: "VerifiedHero", email: "verified@example.com" },
+		characters: [],
+		rewards: {}
+	};
+	await page.route("**/api/accounts/verify-email", async (route) => {
+		await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(verifiedAccountState) });
+	});
+	await page.route("**/api/account", async (route) => {
+		await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(verifiedAccountState) });
+	});
+	await page.locator("#email-verification-submit").click();
+	await page.waitForURL((url) => url.pathname === "/", { timeout: 5000 });
+	await page.waitForFunction(() => !document.querySelector("#play-block")?.hidden, null, { timeout: 5000 });
+	const verifiedLandingState = await page.evaluate(() => ({
+		path: window.location.pathname,
+		tokenPresent: localStorage.getItem("voidscape.portal.sessionToken") === "visual-verified-session",
+		signIn: document.querySelector("[data-signin]")?.textContent?.trim() || "",
+		downloadActions: Array.from(document.querySelectorAll("#play-block > .play-row > a")).filter((link) => Boolean(link.getBoundingClientRect().height)).length
+	}));
+	assertCheck("email verification keeps the browser signed in and opens downloads", verifiedLandingState.path === "/" && verifiedLandingState.tokenPresent && /manage account/i.test(verifiedLandingState.signIn) && verifiedLandingState.downloadActions >= 3, JSON.stringify(verifiedLandingState));
+	await page.evaluate(() => localStorage.removeItem("voidscape.portal.sessionToken"));
+	await page.unroute("**/api/accounts/verify-email");
+	await page.unroute("**/api/account");
 	await page.goto(new URL("/portal?auth=claim-confirm#claim=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", portalUrl).href, { waitUntil: "domcontentloaded" });
 	await page.locator('[data-auth-panel="claim-confirm"]').waitFor({ state: "visible", timeout: 5000 });
 	assertCheck("older-account claim requires an explicit browser confirmation", await page.locator("#legacy-claim-confirm-submit").isVisible(), page.url());
@@ -647,18 +672,22 @@ async function runSignupFlow(page) {
 	await screenshot(page, "03-desktop-signup-success");
 	const state = await page.evaluate(() => ({
 		name: document.querySelector("#success-name")?.textContent?.trim() || "",
+		heading: document.querySelector("#success-block .success-title")?.textContent?.trim() || "",
 		message: document.querySelector("#success-block .success-sub")?.textContent?.trim() || "",
 		codeHidden: document.querySelector("#success-code-card")?.hidden,
 		tokenPresent: Boolean(localStorage.getItem("voidscape.portal.sessionToken")),
 		resendVisible: Boolean(document.querySelector("#verification-actions")?.getBoundingClientRect().height),
-		resendHelp: document.querySelector("#verification-help")?.textContent?.trim() || ""
+		resendHelp: document.querySelector("#verification-help")?.textContent?.trim() || "",
+		readyHidden: document.querySelector("#ready-block")?.hidden,
+		visibleReadyLinks: Array.from(document.querySelectorAll("#ready-block .ready-link")).filter((link) => Boolean(link.getBoundingClientRect().height)).length
 	}));
 	assertCheck("signup success character shown", state.name === signup.username, JSON.stringify(state));
 	assertCheck("signup does not expose a subscription bearer code", state.codeHidden === true, JSON.stringify(state));
 
 	if (responseBody.verificationRequired) {
 		signupVerificationPending = true;
-		assertCheck("verification-required signup stays signed out", state.tokenPresent === false && /check your email/i.test(state.message), JSON.stringify(state));
+		assertCheck("verification-required signup is clearly incomplete", state.tokenPresent === false && /check your email/i.test(state.heading) && /not complete.*verify/i.test(state.message), JSON.stringify(state));
+		assertCheck("verification-required signup hides downloads", state.readyHidden === true && state.visibleReadyLinks === 0, JSON.stringify(state));
 		assertCheck("verification-required signup offers a 48-hour resend path", state.resendVisible && /48 hours/i.test(state.resendHelp), JSON.stringify(state));
 		await page.route("**/api/accounts/verify-email/resend", async (route) => {
 			await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ accepted: true }) });

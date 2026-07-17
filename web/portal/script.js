@@ -1259,8 +1259,7 @@
 			emailVerificationToken = "";
 			applyAccountState(state);
 			setAuthStatus("authenticated");
-			cleanPortalDashboardUrl();
-			activateView("dashboard");
+			window.location.replace("/");
 		} catch (error) {
 			if (error.status === 410) {
 				emailVerificationMessage.textContent = "That verification link expired. Create the account again to request a new one.";
