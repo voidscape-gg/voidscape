@@ -60,6 +60,7 @@ else:
 - Melee accuracy: `(AttackLevel + bonusConstant + styleBonus) * (weaponAim + 64)`
 - Defence: `(DefenseLevel * prayerBonus + bonusConstant + styleBonus) * (64 + armourPoints * 0.60)`
 - For NPCs attacking players, the same floor/scaling described under melee max hit is applied to the NPC Attack level before the accuracy roll.
+- In player-versus-NPC physical combat, the final NPC attack roll is multiplied by `1.10` when the NPC attacks the player, and the final NPC defence roll is multiplied by `1.10` when the player attacks the NPC. These are roll multipliers rather than percentage-point hit-chance changes; PvP, NPC-vs-NPC, damage, and Magic are unchanged.
 
 **Physical armour mitigation**:
 ```

@@ -32,6 +32,8 @@ public class CombatFormula {
 	private static final double VOIDSCAPE_PHYSICAL_MITIGATION_DIVISOR = 1200.0D;
 	private static final double VOIDSCAPE_PHYSICAL_MITIGATION_CAP = 0.24D;
 	private static final double VOIDSCAPE_MAGIC_PLAYER_DAMAGE_SCALE = 0.92D;
+	private static final double NPC_VS_PLAYER_PHYSICAL_ACCURACY_MULTIPLIER = 1.10D;
+	private static final double NPC_PHYSICAL_DEFENCE_AGAINST_PLAYERS_MULTIPLIER = 1.10D;
 	private static final int NPC_VS_PLAYER_MELEE_FLOOR = 15;
 	private static final int NPC_VS_PLAYER_OFFENCE_BONUS_START_LEVEL = 40;
 	private static final int NPC_VS_PLAYER_OFFENCE_BONUS_LEVELS_PER_POINT = 8;
@@ -171,7 +173,7 @@ public class CombatFormula {
 	 * @return True if the attack is a hit, false if the attack is a miss
 	 */
 	private static boolean calculateMeleeAccuracy(final Mob source, final Mob victim) {
-		return calculateAccuracy(getMeleeAccuracy(source, victim), getMeleeDefence(victim));
+		return calculatePhysicalAccuracy(getMeleeAccuracy(source, victim), source, victim);
 	}
 
 	/**
@@ -183,7 +185,18 @@ public class CombatFormula {
 	 * @return True if the attack is a hit, false if the attack is a miss
 	 */
 	private static boolean calculateRangedAccuracy(final Mob source, final int bowId, final Mob victim) {
-		return calculateAccuracy(getRangedAccuracy(source, bowId, victim), getMeleeDefence(victim));
+		return calculatePhysicalAccuracy(getRangedAccuracy(source, bowId, victim), source, victim);
+	}
+
+	private static boolean calculatePhysicalAccuracy(final double baseAccuracy, final Mob source, final Mob victim) {
+		final double accuracy = source instanceof Npc && victim instanceof Player
+			? baseAccuracy * NPC_VS_PLAYER_PHYSICAL_ACCURACY_MULTIPLIER
+			: baseAccuracy;
+		final double baseDefence = getMeleeDefence(victim);
+		final double defence = source instanceof Player && victim instanceof Npc
+			? baseDefence * NPC_PHYSICAL_DEFENCE_AGAINST_PLAYERS_MULTIPLIER
+			: baseDefence;
+		return calculateAccuracy(accuracy, defence);
 	}
 
 	/**

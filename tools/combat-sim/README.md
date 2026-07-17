@@ -24,7 +24,7 @@ Rulesets:
 - `voidscape` is the default and should match live server behavior.
 - `openrsc` preserves the pre-tuning formula for before/after comparisons.
 
-Voidscape PvP melee momentum is active only when both combatants are players. A melee hit at or above 68% of the target-adjusted max hit makes that attacker's next successful melee hit against the same target roll damage twice and keep the higher result. NPCs attacking players use the live server's early melee floor and high-level offence scaling, so low-level PvM pressure is represented in the built-in starter scenarios.
+Voidscape PvP melee momentum is active only when both combatants are players. A melee hit at or above 68% of the target-adjusted max hit makes that attacker's next successful melee hit against the same target roll damage twice and keep the higher result. NPCs attacking players use the live server's early melee floor and high-level offence scaling, followed by the `1.10` NPC physical accuracy-roll multiplier. Player attacks against NPCs use the matching `1.10` NPC physical defence-roll multiplier, so low-level PvM pressure is represented in the built-in starter scenarios.
 
 Important limits:
 

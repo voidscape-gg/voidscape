@@ -125,6 +125,8 @@ class Ruleset:
     npc_vs_player_bonus_start: int = 0
     npc_vs_player_bonus_levels_per_point: int = 1
     npc_vs_player_bonus_cap: int = 0
+    npc_vs_player_physical_accuracy_multiplier: float = 1.0
+    npc_physical_defence_against_players_multiplier: float = 1.0
 
 
 RULESETS: Dict[str, Ruleset] = {
@@ -141,6 +143,8 @@ RULESETS: Dict[str, Ruleset] = {
         npc_vs_player_bonus_start=40,
         npc_vs_player_bonus_levels_per_point=8,
         npc_vs_player_bonus_cap=12,
+        npc_vs_player_physical_accuracy_multiplier=1.10,
+        npc_physical_defence_against_players_multiplier=1.10,
     ),
 }
 
@@ -193,7 +197,10 @@ def melee_accuracy(attacker: Combatant, defender: Combatant, rules: Ruleset) -> 
         + attacker.player_bonus
         + style_bonus(attacker, SKILL_ATTACK)
     )
-    return effective * (attacker.weapon_aim + 64)
+    accuracy = effective * (attacker.weapon_aim + 64)
+    if not attacker.is_player and defender.is_player:
+        accuracy *= rules.npc_vs_player_physical_accuracy_multiplier
+    return accuracy
 
 
 def armour_for_accuracy(defender: Combatant, rules: Ruleset) -> float:
@@ -230,6 +237,13 @@ def melee_defence(defender: Combatant, rules: Ruleset) -> float:
     return effective * armour_for_accuracy(defender, rules)
 
 
+def physical_defence(attacker: Combatant, defender: Combatant, rules: Ruleset) -> float:
+    defence = melee_defence(defender, rules)
+    if attacker.is_player and not defender.is_player:
+        defence *= rules.npc_physical_defence_against_players_multiplier
+    return defence
+
+
 def hit_chance(accuracy: float, defence: float) -> float:
     if accuracy > defence:
         return 1.0 - ((defence + 2.0) / (2.0 * (accuracy + 1.0)))
@@ -246,8 +260,11 @@ def melee_max_roll(attacker: Combatant, defender: Combatant, rules: Ruleset) -> 
     return int(effective * (attacker.weapon_power + 64))
 
 
-def ranged_accuracy(attacker: Combatant, setup: RangedSetup) -> float:
-    return (attacker.ranged + attacker.player_bonus) * (setup.bow_aim + 1 + 64)
+def ranged_accuracy(attacker: Combatant, defender: Combatant, setup: RangedSetup, rules: Ruleset) -> float:
+    accuracy = (attacker.ranged + attacker.player_bonus) * (setup.bow_aim + 1 + 64)
+    if not attacker.is_player and defender.is_player:
+        accuracy *= rules.npc_vs_player_physical_accuracy_multiplier
+    return accuracy
 
 
 def ranged_max_roll(attacker: Combatant, setup: RangedSetup) -> int:
@@ -281,7 +298,7 @@ def expected_damage(max_roll: int) -> Tuple[int, float]:
 
 def summarize_melee(attacker: Combatant, defender: Combatant, rules: Ruleset) -> RollSummary:
     attack_roll = melee_accuracy(attacker, defender, rules)
-    defence_roll = melee_defence(defender, rules)
+    defence_roll = physical_defence(attacker, defender, rules)
     chance = hit_chance(attack_roll, defence_roll)
     max_roll = melee_max_roll(attacker, defender, rules)
     max_hit, avg_on_hit = expected_damage(max_roll)
@@ -302,8 +319,8 @@ def summarize_melee(attacker: Combatant, defender: Combatant, rules: Ruleset) ->
 
 
 def summarize_ranged(attacker: Combatant, defender: Combatant, setup: RangedSetup, rules: Ruleset) -> RollSummary:
-    attack_roll = ranged_accuracy(attacker, setup)
-    defence_roll = melee_defence(defender, rules)
+    attack_roll = ranged_accuracy(attacker, defender, setup, rules)
+    defence_roll = physical_defence(attacker, defender, rules)
     chance = hit_chance(attack_roll, defence_roll)
     max_hit, avg_on_hit = expected_damage(ranged_max_roll(attacker, setup))
     reduction = physical_damage_reduction(defender, rules)
@@ -369,7 +386,7 @@ def roll_melee_damage(
     rules: Ruleset,
     has_momentum: bool = False,
 ) -> Tuple[int, bool]:
-    chance = hit_chance(melee_accuracy(attacker, defender, rules), melee_defence(defender, rules))
+    chance = hit_chance(melee_accuracy(attacker, defender, rules), physical_defence(attacker, defender, rules))
     is_hit = rng.random() <= chance
 
     while attacker.attack_cape and not is_hit and rng.randint(1, 99) <= 35:
@@ -401,7 +418,7 @@ def roll_ranged_damage(
     rng: random.Random,
     rules: Ruleset,
 ) -> int:
-    chance = hit_chance(ranged_accuracy(attacker, setup), melee_defence(defender, rules))
+    chance = hit_chance(ranged_accuracy(attacker, defender, setup, rules), physical_defence(attacker, defender, rules))
     if rng.random() > chance:
         return 0
     return mitigate_physical_damage(roll_bucket_damage(ranged_max_roll(attacker, setup), rng), defender, rules)
