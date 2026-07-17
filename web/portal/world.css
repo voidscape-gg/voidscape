@@ -36,11 +36,21 @@
 	50% { transform: translateY(-46px) scale(1.06); }
 }
 
-/* ---- sprite scaling helpers ---- */
+/* ---- sprite scaling helpers ----
+   Pixel sprites are sized to real integer multiples of their source pixels
+   (world.js sets width/height from naturalWidth x data-px). Never scale a
+   sprite with transform inside a layout: the paint bleeds out of the box. */
 .px { image-rendering: pixelated; }
-.px2 { transform: scale(2); transform-origin: center; }
-.px3 { transform: scale(3); transform-origin: center; }
-.art-icon { width: 26px; height: 26px; object-fit: contain; }
+.art-icon { width: 28px; height: 28px; object-fit: contain; }
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
 
 /* landing.css references `rise` but never defines it; the Chronicle supplies it,
    so every entrance it names (hero, pulse, live-line, feed rows) actually plays. */
@@ -180,6 +190,52 @@
 
 .fiction-notice strong { color: #d5c2ee; font-weight: 600; }
 
+.fiction-countdown { color: var(--gold-hi); font-weight: 600; white-space: nowrap; }
+
+/* ---- since your last reading ---- */
+.since-strip { max-width: 1160px; margin: 12px auto 0; padding: 0 28px; position: relative; z-index: 1; }
+.since-strip[hidden] { display: none; }
+
+.since-inner {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 16px;
+	border: 1px solid rgba(201, 164, 91, .32);
+	border-radius: 10px;
+	background:
+		linear-gradient(90deg, rgba(201, 164, 91, .08), transparent 40%),
+		var(--panel);
+	padding: 10px 16px;
+	font-size: 13px;
+	color: var(--muted);
+	animation: rise .5s ease-out .1s backwards;
+}
+
+.since-label {
+	font-family: var(--display);
+	font-size: 13px;
+	color: var(--gold-hi);
+	letter-spacing: .04em;
+}
+
+.since-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; }
+.since-chip { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
+.since-chip img { width: 18px; height: 18px; object-fit: contain; image-rendering: pixelated; }
+.since-chip b { color: var(--gold-hi); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.since-dismiss {
+	margin-left: auto;
+	border: 0;
+	background: transparent;
+	color: var(--faint);
+	font: 500 12.5px var(--body);
+	cursor: pointer;
+	padding: 4px 6px;
+}
+
+.since-dismiss:hover, .since-dismiss:focus-visible { color: var(--text); outline: none; text-decoration: underline; text-underline-offset: 3px; }
+
 .live-line-text.is-swapping { opacity: 0; transform: translateY(5px); }
 .live-line-text strong { color: var(--gold-hi); font-weight: 600; }
 .live-line-text em { color: var(--purple-hi); font-style: normal; }
@@ -209,7 +265,16 @@
 
 .pulse-tile:hover { border-color: var(--line-strong); transform: translateY(-2px); }
 
-.pulse-icon { height: 30px; display: flex; align-items: center; justify-content: center; }
+/* The icon stage reserves real space for the largest 2x sprite (bones: 80x56),
+   so art can never collide with the number beneath it. */
+.pulse-icon { height: 58px; display: flex; align-items: center; justify-content: center; }
+
+.pulse-tile strong.is-ticking { animation: count-bloom .9s ease-out; }
+
+@keyframes count-bloom {
+	0% { text-shadow: 0 0 28px rgba(226, 192, 130, .95); }
+	100% { text-shadow: 0 0 20px rgba(143, 85, 223, .4); }
+}
 
 .pulse-dot {
 	width: 10px;
@@ -323,17 +388,29 @@
 
 .feed-list li:first-child { border-top: 0; }
 
+/* Stage fits the widest 1x item sprite (swordfish: 48px). */
 .feed-list .feed-icon {
-	flex: 0 0 30px;
-	width: 30px;
-	height: 30px;
+	flex: 0 0 48px;
+	width: 48px;
+	height: 34px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 }
 
-.feed-icon img { max-width: 30px; max-height: 30px; object-fit: contain; }
+.feed-icon img { max-width: 34px; max-height: 34px; object-fit: contain; }
 .feed-icon img.px { max-width: none; max-height: none; }
+
+.feed-list li.is-new {
+	box-shadow: inset 3px 0 0 var(--gold-hi);
+	border-radius: 6px;
+	animation: feed-arrive 1.8s ease-out;
+}
+
+@keyframes feed-arrive {
+	from { background: rgba(201, 164, 91, .16); }
+	to { background: transparent; }
+}
 
 .feed-copy { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
 .feed-text { flex: 1; min-width: 0; color: var(--text); }
@@ -363,8 +440,16 @@
 	width: 152px;
 	margin: -58px auto 2px;
 	display: block;
+	cursor: pointer;
 	filter: drop-shadow(0 0 26px rgba(143, 85, 223, .5));
 	animation: portal-breathe 7s ease-in-out infinite;
+}
+
+.almanac-portal.is-flaring { animation: portal-flare .9s ease-out; }
+
+@keyframes portal-flare {
+	0% { filter: drop-shadow(0 0 52px rgba(178, 140, 242, .95)); transform: scale(1.05); }
+	100% { filter: drop-shadow(0 0 22px rgba(143, 85, 223, .4)); transform: scale(1); }
 }
 
 @keyframes portal-breathe {
@@ -487,7 +572,13 @@
 
 .pod-rank-1 .pod-avatar { filter: drop-shadow(0 16px 22px rgba(0, 0, 0, .65)) drop-shadow(0 0 26px rgba(143, 85, 223, .45)); }
 
-.pod { animation: pod-rise .5s ease-out backwards; }
+.pod { animation: pod-rise .5s ease-out backwards; transition: transform .18s ease; }
+
+.pod:hover { transform: translateY(-6px); }
+
+.pod:hover .pod-avatar {
+	filter: drop-shadow(0 16px 22px rgba(0, 0, 0, .65)) drop-shadow(0 0 24px rgba(143, 85, 223, .6));
+}
 .pod-rank-1 { animation-delay: .08s; }
 .pod-rank-3 { animation-delay: .16s; }
 
@@ -685,6 +776,28 @@
 
 .record-detail { margin-top: 7px; min-height: 38px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .record-date { margin-top: 10px; font-size: 11.5px; letter-spacing: .04em; color: var(--faint); }
+.record-fresh {
+	position: absolute;
+	top: 14px;
+	right: 0;
+	padding: 3px 12px 3px 14px;
+	font-family: var(--display);
+	font-size: 10.5px;
+	letter-spacing: .12em;
+	text-transform: uppercase;
+	color: var(--gold-hi);
+	background: linear-gradient(90deg, rgba(201, 164, 91, .26), rgba(201, 164, 91, .08));
+	border: 1px solid rgba(201, 164, 91, .42);
+	border-right: 0;
+	border-radius: 5px 0 0 5px;
+	animation: fresh-glint 5s ease-in-out infinite;
+}
+
+@keyframes fresh-glint {
+	0%, 100% { box-shadow: 0 0 0 rgba(226, 192, 130, 0); }
+	50% { box-shadow: 0 0 14px rgba(226, 192, 130, .35); }
+}
+
 .record-card.is-unclaimed { background: linear-gradient(180deg, rgba(23, 18, 35, .72), rgba(12, 9, 20, .72)); }
 .record-card.is-unclaimed .record-art { opacity: .42; filter: grayscale(.65); }
 .record-card.is-unclaimed .record-holder { color: var(--faint); text-shadow: none; }
@@ -795,7 +908,12 @@
 
 .wild-crest { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 
-.wild-crest img { width: 128px; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .6)); }
+.wild-crest img { width: 128px; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .6)); animation: skull-pulse 3.6s ease-in-out infinite; }
+
+@keyframes skull-pulse {
+	0%, 100% { filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .6)); }
+	50% { filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .6)) drop-shadow(0 0 24px rgba(207, 83, 83, .5)); }
+}
 
 .wild-crest strong {
 	font-family: var(--display);
@@ -847,6 +965,16 @@
 .footer-note { font-size: 12.5px; color: var(--faint); text-align: center; flex: 1; }
 
 /* ======================= responsive ======================= */
+/* Short viewports (landscape phones, in-app browsers with heavy chrome):
+   compact the hero so the ledger reaches the first fold. */
+@media (max-height: 760px) {
+	.chronicle-hero { padding-top: 10px; padding-bottom: 10px; }
+	.hero-title { font-size: clamp(40px, 5.6vw, 60px); }
+	.chronicle-status { margin-top: 12px; }
+	.live-line { margin-top: 14px; }
+	.fiction-notice { margin-top: 12px; }
+}
+
 @media (max-width: 700px) {
 	.board-scroll-cue { display: block; }
 }

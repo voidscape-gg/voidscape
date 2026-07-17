@@ -50,7 +50,7 @@
 			<div>
 				<p class="fiction-notice-eyebrow">A vision before the gates open</p>
 				<h2 id="fiction-notice-title">Every name and number below is fictional.</h2>
-				<p>The Chronicle is imagining a busy world so you can explore what will be remembered here. <strong id="fiction-launch-copy">At launch, this vision clears and real player deeds take its place.</strong></p>
+				<p>The Chronicle is imagining a busy world so you can explore what will be remembered here. <strong id="fiction-launch-copy">At launch, this vision clears and real player deeds take its place.</strong> <span class="fiction-countdown" id="fiction-countdown"></span></p>
 			</div>
 		</aside>
 
@@ -63,7 +63,7 @@
 					<span class="pulse-label">Adventurers online</span>
 				</div>
 				<div class="pulse-tile" data-pulse="totalGp">
-					<span class="pulse-icon"><img src="assets/npc-database/item/10.png" alt="" class="px px2"></span>
+					<span class="pulse-icon"><img src="assets/npc-database/item/10.png" alt="" class="px" data-px="2"></span>
 					<strong data-count class="is-gold">0</strong>
 					<span class="pulse-label">Coins in circulation</span>
 				</div>
@@ -78,7 +78,7 @@
 					<span class="pulse-label">Monsters slain</span>
 				</div>
 				<div class="pulse-tile" data-pulse="deaths">
-					<span class="pulse-icon"><img src="assets/npc-database/item/20.png" alt="" class="px px2"></span>
+					<span class="pulse-icon"><img src="assets/npc-database/item/20.png" alt="" class="px" data-px="2"></span>
 					<strong data-count>0</strong>
 					<span class="pulse-label">Wilderness deaths</span>
 				</div>
@@ -89,6 +89,14 @@
 				</div>
 			</div>
 		</section>
+
+		<aside class="since-strip" id="since-strip" hidden aria-label="Changes since your last reading">
+			<div class="since-inner">
+				<span class="since-label">Since your last reading</span>
+				<span class="since-chips" id="since-chips"></span>
+				<button class="since-dismiss" id="since-dismiss" type="button">Dismiss</button>
+			</div>
+		</aside>
 
 		<!-- ======================= happening now ======================= -->
 		<section class="section" id="feed">
@@ -112,8 +120,9 @@
 				<aside class="almanac" aria-label="From the Void Almanac">
 					<img class="almanac-portal" src="assets/world/portal.png" alt="" loading="lazy" decoding="async">
 					<p class="almanac-eyebrow">From the Void Almanac</p>
-					<p class="almanac-fact" id="almanac-fact" aria-live="polite" aria-atomic="true">The Void is thinking...</p>
+					<p class="almanac-fact" id="almanac-fact">The Void is thinking...</p>
 					<p class="almanac-source" id="almanac-source"></p>
+					<span class="sr-only" id="almanac-announce" aria-live="polite"></span>
 					<button class="btn-quiet almanac-btn" id="almanac-btn" type="button">Consult the Void again</button>
 				</aside>
 			</div>
@@ -176,7 +185,7 @@
 			</header>
 			<div class="economy-grid">
 				<div class="economy-hero">
-					<img class="economy-coins px px3" src="assets/npc-database/item/10.png" alt="">
+					<img class="economy-coins px" data-px="3" src="assets/npc-database/item/10.png" alt="">
 					<strong class="economy-total is-gold" id="economy-total" data-count>0</strong>
 					<span class="pulse-label">coins in the world</span>
 					<p class="economy-sub" id="economy-sub"></p>

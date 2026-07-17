@@ -18,6 +18,12 @@
 	var feedAnimated = false;
 	var recordsAnimated = false;
 	var monumentAnimate = true;
+	var seenFeedKeys = null;
+	var fictionCountdownTimer = null;
+	var factAutoTimer = null;
+	var factAutoPaused = false;
+	var SINCE_STORE_KEY = "chronicle-last-reading";
+	var SINCE_DISMISS_KEY = "chronicle-since-dismissed";
 	var liveLineTimer = null;
 	var liveLineIndex = 0;
 	var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -129,6 +135,21 @@
 		if (entry.honorific) parent.appendChild(el("span", "honorific", entry.honorific + " "));
 		parent.appendChild(el("span", nameClass || "", entry.player));
 		if (entry.epithet) parent.appendChild(el("span", "epithet", " " + entry.epithet));
+	}
+
+	/* Static sprites declared in the HTML carry data-px; give them real
+	   integer-scaled layout boxes so nothing can bleed over neighbors. */
+	function sizeStaticPixelSprites() {
+		Array.prototype.forEach.call(document.querySelectorAll("img[data-px]"), function (image) {
+			var scale = Math.max(1, parseInt(image.getAttribute("data-px"), 10) || 1);
+			function apply() {
+				if (!image.naturalWidth) return;
+				image.style.width = image.naturalWidth * scale + "px";
+				image.style.height = image.naturalHeight * scale + "px";
+			}
+			if (image.complete) apply();
+			else image.addEventListener("load", apply);
+		});
 	}
 
 	function pixelImg(src, scale, className) {
@@ -322,8 +343,14 @@
 		Array.prototype.forEach.call(document.querySelectorAll("[data-pulse]"), function (tile) {
 			var value = number(pulse[tile.getAttribute("data-pulse")]);
 			var target = tile.querySelector("[data-count]");
+			var changed = !firstPaint && target.dataset.counted && target.dataset.counted !== String(value);
 			if (firstPaint) countWhenVisible(target, value);
 			else countUp(target, value);
+			if (changed && !reduceMotion) {
+				target.classList.remove("is-ticking");
+				void target.offsetWidth;
+				target.classList.add("is-ticking");
+			}
 			target.setAttribute("aria-label", fmt(value));
 			target.title = fmt(value);
 		});
@@ -408,9 +435,14 @@
 			$("feed-showcase").hidden = true;
 			return;
 		}
+		var previouslySeen = seenFeedKeys;
+		var nowSeen = new Set();
 		world.feed.forEach(function (entry, index) {
-			var item = el("li", "feed-entry feed-" + text(entry.type, "event"));
-			if (feedAnimated || reduceMotion) item.style.animation = "none";
+			var key = text(entry.type) + "|" + text(entry.player) + "|" + number(entry.at);
+			nowSeen.add(key);
+			var isNew = previouslySeen !== null && !previouslySeen.has(key);
+			var item = el("li", "feed-entry feed-" + text(entry.type, "event") + (isNew && !reduceMotion ? " is-new" : ""));
+			if (feedAnimated || reduceMotion) item.style.animation = isNew && !reduceMotion ? "" : "none";
 			else item.style.animationDelay = Math.min(index * 55, 550) + "ms";
 			item.appendChild(feedIcon(entry));
 			var copy = el("span", "feed-copy");
@@ -444,6 +476,7 @@
 			showcase.hidden = true;
 		}
 		feedAnimated = true;
+		seenFeedKeys = nowSeen;
 	}
 
 	/* Built once, then only the active state is synced — periodic refreshes must
@@ -612,6 +645,9 @@
 			card.appendChild(el("p", "record-value", record.value));
 			card.appendChild(el("p", "record-detail", record.detail));
 			card.appendChild(el("p", "record-date", record.claimed && record.etchedAt ? "Etched " + ago(record.etchedAt) : "Waiting for its first claimant"));
+			if (record.claimed && record.etchedAt && world.generatedAt - record.etchedAt < 7 * 86400) {
+				card.appendChild(el("span", "record-fresh", "Freshly etched"));
+			}
 			grid.appendChild(card);
 		});
 	}
@@ -664,7 +700,10 @@
 	}
 
 	function renderWilderness(world) {
-		$("wild-kills").textContent = fmt(world.wilderness.killsWeek);
+		var killsNode = $("wild-kills");
+		if (killsNode.dataset.counted) countUp(killsNode, world.wilderness.killsWeek);
+		else countWhenVisible(killsNode, world.wilderness.killsWeek);
+		killsNode.title = fmt(world.wilderness.killsWeek);
 		var deadliest = object(world.wilderness.deadliest);
 		var deadliestName = $("wild-deadliest");
 		deadliestName.replaceChildren();
@@ -726,10 +765,27 @@
 		$("almanac-btn").disabled = currentFacts.length < 2;
 	}
 
+	/* Auto-turn the Almanac's page every so often; silent for screen readers
+	   (only an explicit consult announces), paused while the reader lingers. */
+	function stopFactRotation() {
+		if (factAutoTimer) window.clearInterval(factAutoTimer);
+		factAutoTimer = null;
+	}
+
+	function startFactRotation() {
+		stopFactRotation();
+		if (reduceMotion || currentFacts.length < 2) return;
+		factAutoTimer = window.setInterval(function () {
+			if (factAutoPaused || document.hidden) return;
+			showFact(factIndex + 1, true);
+		}, 14000);
+	}
+
 	function renderAlmanac(world) {
 		currentFacts = world.facts;
 		factIndex = currentFacts.length ? world.generatedAt % currentFacts.length : 0;
 		showFact(factIndex);
+		startFactRotation();
 	}
 
 	/* The hero line cycles through the feed like a herald reading the ledger aloud. */
@@ -766,11 +822,82 @@
 		});
 	}
 
+	function shortDuration(ms) {
+		var minutes = Math.max(1, Math.round(ms / 60000));
+		if (minutes < 60) return minutes + "m";
+		var hours = Math.floor(minutes / 60);
+		if (hours < 48) return hours + "h " + (minutes % 60) + "m";
+		return Math.floor(hours / 24) + "d " + (hours % 24) + "h";
+	}
+
 	function renderFictionNotice(world) {
 		var notice = $("fiction-notice");
 		notice.hidden = !world.demo;
+		if (fictionCountdownTimer) window.clearInterval(fictionCountdownTimer);
+		fictionCountdownTimer = null;
 		if (!world.demo) return;
 		$("fiction-launch-copy").textContent = formatLaunch(world.launchAt) + ", this vision clears and real player deeds take its place.";
+		var launchMs = Date.parse(world.launchAt);
+		if (!Number.isFinite(launchMs)) return;
+		function tick() {
+			var remaining = launchMs - Date.now();
+			$("fiction-countdown").textContent = remaining > 0 ? "The gates open in " + shortDuration(remaining) + "." : "";
+		}
+		tick();
+		fictionCountdownTimer = window.setInterval(tick, 30000);
+	}
+
+	/* ---- since your last reading (return-visit delta, stored locally) ---- */
+
+	var SINCE_CHIPS = [
+		{ key: "npcKills", label: "monsters slain", icon: "assets/world/skills/skill-attack.png" },
+		{ key: "deaths", label: "deaths", icon: "assets/npc-database/item/20.png" },
+		{ key: "questsCompleted", label: "quests completed", icon: "assets/world/mini-gold.png" },
+		{ key: "accounts", label: "souls forged", icon: "assets/world/title-marker.png" },
+		{ key: "totalGp", label: "coins minted", icon: "assets/npc-database/item/10.png" }
+	];
+
+	function readSinceSnapshot() {
+		try {
+			var raw = window.localStorage.getItem(SINCE_STORE_KEY);
+			return raw ? JSON.parse(raw) : null;
+		} catch (error) { return null; }
+	}
+
+	function writeSinceSnapshot(world) {
+		try {
+			window.localStorage.setItem(SINCE_STORE_KEY, JSON.stringify({
+				at: world.generatedAt, source: world.source, pulse: world.pulse
+			}));
+		} catch (error) { /* private mode: the strip simply never appears */ }
+	}
+
+	function renderSinceStrip(world) {
+		var strip = $("since-strip");
+		var previous = readSinceSnapshot();
+		var dismissed = false;
+		try { dismissed = window.sessionStorage.getItem(SINCE_DISMISS_KEY) === "1"; } catch (error) { /* ignore */ }
+		var show = false;
+		if (previous && previous.source === world.source && previous.pulse
+			&& world.generatedAt - number(previous.at) > 600 && !dismissed) {
+			var chips = $("since-chips");
+			chips.replaceChildren();
+			SINCE_CHIPS.forEach(function (item) {
+				var delta = number(world.pulse[item.key]) - number(previous.pulse[item.key]);
+				if (delta <= 0) return;
+				var chip = el("span", "since-chip");
+				var icon = el("img");
+				icon.src = item.icon;
+				icon.alt = "";
+				chip.appendChild(icon);
+				chip.appendChild(el("b", "", "+" + fmt(delta)));
+				chip.appendChild(document.createTextNode(" " + item.label));
+				chips.appendChild(chip);
+				show = true;
+			});
+		}
+		strip.hidden = !show;
+		writeSinceSnapshot(world);
 	}
 
 	function armLaunchTransition(world) {
@@ -791,6 +918,7 @@
 	function render(world) {
 		renderFictionNotice(world);
 		renderPulse(world);
+		renderSinceStrip(world);
 		renderFeed(world);
 		renderMonument(world);
 		renderRecords(world);
@@ -863,12 +991,45 @@
 		});
 	}
 
-	$("almanac-btn").addEventListener("click", function () { showFact(factIndex + 1, true); });
+	function consultTheVoid(flare) {
+		showFact(factIndex + 1, true);
+		if (flare && !reduceMotion) {
+			var portal = document.querySelector(".almanac-portal");
+			portal.classList.remove("is-flaring");
+			void portal.offsetWidth;
+			portal.classList.add("is-flaring");
+		}
+		var fact = currentFacts[factIndex];
+		if (fact) $("almanac-announce").textContent = fact.text.replace(/\*/g, "");
+		startFactRotation();
+	}
+
+	$("almanac-btn").addEventListener("click", function () { consultTheVoid(true); });
+	/* pointer-only delight: the portal itself answers; the button remains the accessible path */
+	document.querySelector(".almanac-portal").addEventListener("click", function () { consultTheVoid(true); });
+
+	var almanacBox = document.querySelector(".almanac");
+	almanacBox.addEventListener("mouseenter", function () { factAutoPaused = true; });
+	almanacBox.addEventListener("mouseleave", function () { factAutoPaused = false; });
+	almanacBox.addEventListener("focusin", function () { factAutoPaused = true; });
+	almanacBox.addEventListener("focusout", function () { factAutoPaused = false; });
+
+	$("since-dismiss").addEventListener("click", function () {
+		$("since-strip").hidden = true;
+		try { window.sessionStorage.setItem(SINCE_DISMISS_KEY, "1"); } catch (error) { /* ignore */ }
+	});
+
+	sizeStaticPixelSprites();
+
 	if (smallStage.addEventListener) smallStage.addEventListener("change", function () {
 		if (lastGoodWorld) renderMonument(lastGoodWorld);
 	});
 	var motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-	if (motionQuery.addEventListener) motionQuery.addEventListener("change", function (event) { reduceMotion = event.matches; });
+	if (motionQuery.addEventListener) motionQuery.addEventListener("change", function (event) {
+		reduceMotion = event.matches;
+		if (reduceMotion) stopFactRotation();
+		else startFactRotation();
+	});
 	if (reduceMotion) document.documentElement.classList.add("reduce-motion");
 
 	refresh();
