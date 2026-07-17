@@ -26,8 +26,19 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-095 is verified; next promote the general cross-store
-  signup collision finding from Intake to VS-096.
+- **Active bug:** none — VS-096 is verified; release integration continues with a clean
+  held-v13 package build, not another bug-ledger claim.
+- **Session preflight 2026-07-16 (VS-096):** branch
+  `codex/release-10139-integration`; VS-095 is committed and verified at `ffc035e1`,
+  the worktree is clean, and the pre-change `scripts/build.sh` plus full portal API
+  suite pass. The built-in post-mutator store-pause fault independently reproduces a
+  committed game player/`web_account_id=1` with no durable portal account or character.
+  A subsequent unrelated signup reuses portal account ID 1, and current native backfill
+  then attaches the stranded player to that unrelated account with zero reported
+  conflicts. Scope is a durable pre-game portal provisioning row using the existing
+  store shape, idempotent retry/startup reconciliation, sequence/invariant checks, and
+  backfill refusal for unexplained prelinked rows. No new datastore or broad account
+  rewrite; no deployment, upload, push, or source publication is authorized.
 - **Session preflight 2026-07-16 (VS-095):** branch
   `codex/release-10139-integration`; VS-094 is committed and verified at `201fcd3e`,
   the worktree is clean, and the pre-change `scripts/build.sh` passes. Exact v12
@@ -178,15 +189,14 @@ to resume from these two files alone. Keep every entry self-contained.
   world-walk responses 5172/5173/5177/5181/5182/5191/5192 returned busy reason 6,
   two more logs arrived at the same node, and only response 5198 was accepted before
   movement.
-- **Last session:** 2026-07-16 — completed and verified VS-095 locally. The portal now
-  consumes a private source-free 65-title definition mirror, validates game definition
-  inputs before listening and again before a game write, and no longer reads Java source
-  at runtime. Bundle-shaped missing/complete cases, private-path containment, the full
-  verified-email portal API suite, and the canonical build pass. V12 remains rejected;
-  no live system changed.
-- **Next action:** promote and fix the separately reproduced cross-store signup ID
-  collision as VS-096 before building and fully rehearsing held v13. Do not push,
-  publish source, or deploy any game/server/client artifact.
+- **Last session:** 2026-07-16 — promoted VS-096 after reproducing the full ownership
+  collision, not only an orphaned username. An interrupted game-first signup leaves its
+  numeric account ID reusable; a later signup and native backfill can silently transfer
+  the stranded character to the wrong email account. V12 remains rejected; no live
+  system changed.
+- **Next action:** implement and verify VS-096 as one bounded provisioning/reconciliation
+  fix before building and fully rehearsing held v13. Do not push, publish source, or
+  deploy any game/server/client artifact.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -393,13 +403,6 @@ to resume from these two files alone. Keep every entry self-contained.
 ---
 
 ## Intake — dump raw bug reports here
-- Portal account/character creation still has a general cross-store commit window after
-  the OpenRSC SQLite transaction commits and before the portal JSON temp file is renamed.
-  A built-in post-mutator store-pause timeout reproduced one game player plus
-  `web_account_id` with zero durable portal account/character/founder even when all
-  definition files were present. This is distinct from VS-095's deterministic missing
-  package input and needs durable intent/reconciliation or another bounded recovery
-  design; do not claim VS-095 makes arbitrary crashes/disk failures atomic.
 - Headless Karamja traveller death recovery can strand a session in
   `journey-funding-missing`: Ultraz respawned at `(120,648)` with only item ids
   466/473/476, no coins or sellable starter sword, and an empty bank. The controller
@@ -1099,6 +1102,31 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-096 — Interrupted portal signup can transfer a character to the next account (FIXED)
+- Status: verified · Severity: P1 · Area: web-portal / account ownership / durability
+- Root cause: `createOpenRscPlayer()` independently committed a game player, stat rows,
+  `web_account_id`, and launch marker before the enclosing portal JSON mutation was
+  saved. A hard failure therefore left the portal account sequence reusable. The next
+  unrelated account could receive that same numeric ID, and native backfill trusted the
+  marker alone and silently attached the stranded player to it.
+- Fix: every portal-created game character now has a synced, credential-free
+  `openrsc-sqlite-provisioning` ownership anchor saved before the game write and a second
+  durable exact linked phase afterward. New launch accounts remain inactive until their
+  caller completes. Retry/startup reconciliation accepts only one matching player,
+  account, canonical email, name, and ownership marker; IDs are unique/monotonic;
+  provisioning rows cannot be deleted or replaced; committed password semantics are
+  preserved; and native backfill refuses unexplained or legacy numeric-only prelinks.
+- Verified 2026-07-16: deterministic SIGKILL fixtures cover before-anchor, durable-anchor,
+  post-game/pre-link, post-link/lost-response, and authenticated additional-character
+  recovery. A real local RS256/JWKS Google flow proves a wrong retry password is rejected
+  and the original completes exactly once. An email-corrupted clone exits before health
+  with both portal and game hashes unchanged. Verified-email SQLite failure/retry, native
+  backfill refusal, duplicate/stale ID startup rejection, full `scripts/test-portal-api.sh`,
+  `scripts/test-portal-store-safety.sh`, source-free packaged character flow, syntax/diff
+  gates, and final `scripts/build.sh` all pass. Adversarial re-review found no remaining
+  code-level blocker. No deployment, upload, push, source publication, schema, protocol,
+  client artifact, or live-data change occurred.
 
 ### VS-095 — Minimized portal package breaks character lookup after game-side creation (FIXED)
 - Status: verified · Severity: P1 · Area: web-portal / release packaging / accounts

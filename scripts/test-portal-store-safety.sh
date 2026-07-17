@@ -147,6 +147,65 @@ for fixture in null array empty-object accounts-object; do
 	expect_unchanged_startup_failure "$dir" "store_invalid_shape" "$fixture"
 done
 
+# Canonical public stores with ambiguous or recyclable account/character IDs fail
+# before bind, without repairing or replacing the protected bytes.
+for fixture in duplicate-account-ids duplicate-character-ids stale-next-account stale-next-character; do
+	dir="$TMP_DIR/$fixture"
+	initialize_store "$dir" >"$TMP_DIR/${fixture}-init.log"
+	node - "$dir/dev-store.json" "$fixture" <<'NODE'
+const fs = require("node:fs");
+const path = process.argv[2];
+const fixture = process.argv[3];
+const store = JSON.parse(fs.readFileSync(path, "utf8"));
+const account = (id, email) => ({
+	id,
+	emailCanonical: email,
+	emailDisplay: email,
+	status: "active",
+	createdAt: "2026-07-16T00:00:00.000Z",
+	updatedAt: "2026-07-16T00:00:00.000Z"
+});
+const character = (id, accountId, name) => ({
+	id,
+	accountId,
+	name,
+	normalizedName: name.toLowerCase(),
+	playerId: null,
+	linkStatus: "preview",
+	source: "portal-preview",
+	createdAt: "2026-07-16T00:00:00.000Z",
+	updatedAt: "2026-07-16T00:00:00.000Z"
+});
+
+switch (fixture) {
+	case "duplicate-account-ids":
+		store.accounts.push(account(1, "first@example.test"), account(1, "second@example.test"));
+		store.nextIds.account = 2;
+		break;
+	case "duplicate-character-ids":
+		store.accounts.push(account(1, "owner@example.test"));
+		store.nextIds.account = 2;
+		store.characters.push(character(1, 1, "First"), character(1, 1, "Second"));
+		store.nextIds.character = 2;
+		break;
+	case "stale-next-account":
+		store.accounts.push(account(7, "owner@example.test"));
+		store.nextIds.account = 7;
+		break;
+	case "stale-next-character":
+		store.accounts.push(account(1, "owner@example.test"));
+		store.nextIds.account = 2;
+		store.characters.push(character(9, 1, "Ninth"));
+		store.nextIds.character = 9;
+		break;
+	default:
+		throw new Error(`unknown fixture: ${fixture}`);
+}
+fs.writeFileSync(path, `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
+NODE
+	expect_unchanged_startup_failure "$dir" "store_invalid_ids" "$fixture"
+done
+
 # Non-regular and symlink stores fail closed.
 NONREGULAR_DIR="$TMP_DIR/nonregular"
 mkdir -p "$NONREGULAR_DIR/dev-store.json"

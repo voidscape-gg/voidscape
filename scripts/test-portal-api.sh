@@ -25,6 +25,9 @@ verify_pid=""
 drain_pid=""
 drain_restart_pid=""
 drain_request_pid=""
+vs096_pid=""
+vs096_request_pid=""
+vs096_google_jwks_pid=""
 
 cleanup() {
 	if [[ -n "$server_pid" ]]; then
@@ -66,6 +69,18 @@ cleanup() {
 	if [[ -n "$drain_restart_pid" ]]; then
 		kill "$drain_restart_pid" >/dev/null 2>&1 || true
 		wait "$drain_restart_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$vs096_request_pid" ]]; then
+		kill "$vs096_request_pid" >/dev/null 2>&1 || true
+		wait "$vs096_request_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$vs096_pid" ]]; then
+		kill "$vs096_pid" >/dev/null 2>&1 || true
+		wait "$vs096_pid" >/dev/null 2>&1 || true
+	fi
+	if [[ -n "$vs096_google_jwks_pid" ]]; then
+		kill "$vs096_google_jwks_pid" >/dev/null 2>&1 || true
+		wait "$vs096_google_jwks_pid" >/dev/null 2>&1 || true
 	fi
 	rm -rf "$tmp_dir"
 }
@@ -933,6 +948,942 @@ kill -TERM "$drain_restart_pid"
 wait "$drain_restart_pid"
 drain_restart_pid=""
 
+# A hard crash can land on either side of the two durable portal writes used by
+# launch provisioning. Each case starts from the same empty public store and
+# retries the exact same direct-password signup after a clean restart.
+run_vs096_signup_crash_case() {
+	local slug="$1"
+	local offset="$2"
+	local pause_phase="$3"
+	local pause_at="$4"
+	local username="$5"
+	local next_username="$6"
+	local expected_game_rows="$7"
+	local store_dir="$tmp_dir/vs096-${slug}-store"
+	local db="$tmp_dir/vs096-${slug}.db"
+	local marker="$tmp_dir/vs096-${slug}-pause"
+	local release="$tmp_dir/vs096-${slug}-release"
+	local response="$tmp_dir/vs096-${slug}-response.json"
+	local status_file="$tmp_dir/vs096-${slug}-status"
+	local curl_log="$tmp_dir/vs096-${slug}-curl.log"
+	local log="$tmp_dir/vs096-${slug}.log"
+	local port=$((PORT + offset))
+	local email="vs096-${slug}@example.com"
+	local next_email="vs096-${slug}-next@example.com"
+	local password="Crashpass1"
+	local next_password="Nextpass1"
+	local expected_crash_source="openrsc-sqlite-provisioning"
+	local anchor_ids
+	local anchor_account_id
+	local anchor_character_id
+	local retry_status
+	local next_status
+
+	if [[ "$pause_phase" == "before" && "$pause_at" == "1" ]]; then
+		expected_crash_source="none"
+	elif [[ "$pause_phase" == "after" && "$pause_at" == "2" ]]; then
+		expected_crash_source="openrsc-sqlite-created"
+	fi
+	cp "$base_fixture_db" "$db"
+	initialize_public_store "$store_dir"
+	PORT="$port" \
+	PORTAL_DATA_DIR="$store_dir" \
+	PORTAL_OPENRSC_DB="$db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	PORTAL_ENABLE_TEST_FAULTS=1 \
+	PORTAL_TEST_STORE_PAUSE_MARKER="$marker" \
+	PORTAL_TEST_STORE_PAUSE_RELEASE="$release" \
+	PORTAL_TEST_STORE_PAUSE_PHASE="$pause_phase" \
+	PORTAL_TEST_STORE_PAUSE_AT="$pause_at" \
+	PORTAL_TEST_STORE_PAUSE_TIMEOUT_MS=10000 \
+	node web/portal/dev-server.mjs >"$log" 2>&1 &
+	vs096_pid="$!"
+	for _ in {1..60}; do
+		if curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then break; fi
+		if ! kill -0 "$vs096_pid" >/dev/null 2>&1; then
+			echo "VS-096 ${slug} fixture exited during startup"
+			cat "$log"
+			exit 1
+		fi
+		sleep 0.1
+	done
+	if ! curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
+		echo "VS-096 ${slug} fixture did not become healthy"
+		cat "$log"
+		exit 1
+	fi
+
+	curl -sS -o "$response" -w '%{http_code}' \
+		-X POST "http://127.0.0.1:${port}/api/accounts/register" \
+		-H 'content-type: application/json' \
+		-d "{\"username\":\"${username}\",\"email\":\"${email}\",\"password\":\"${password}\",\"termsAccepted\":true,\"termsVersion\":\"2026-07-16\"}" \
+		>"$status_file" 2>"$curl_log" &
+	vs096_request_pid="$!"
+	for _ in {1..300}; do
+		[[ -f "$marker" ]] && break
+		if ! kill -0 "$vs096_pid" >/dev/null 2>&1; then
+			echo "VS-096 ${slug} fixture exited before its crash boundary"
+			cat "$log"
+			exit 1
+		fi
+		sleep 0.02
+	done
+	if [[ ! -f "$marker" ]]; then
+		echo "VS-096 ${slug} fixture did not reach ${pause_phase} store write ${pause_at}"
+		cat "$log"
+		exit 1
+	fi
+	kill -KILL "$vs096_pid"
+	wait "$vs096_pid" >/dev/null 2>&1 || true
+	vs096_pid=""
+	wait "$vs096_request_pid" >/dev/null 2>&1 || true
+	vs096_request_pid=""
+
+	anchor_ids="$(node - "$store_dir/dev-store.json" "$email" "$username" "$password" "$expected_crash_source" <<'NODE'
+const fs = require("fs");
+const store = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const email = process.argv[3];
+const username = process.argv[4];
+const password = process.argv[5];
+const expectedSource = process.argv[6];
+const accounts = (store.accounts || []).filter((row) => row.emailCanonical === email);
+if (expectedSource === "none") {
+	if (accounts.length !== 0 || (store.characters || []).some((row) => row.name === username)
+		|| Number(store.nextIds.account) !== 1 || Number(store.nextIds.character) !== 1) {
+		throw new Error("pre-intent crash changed the empty portal store");
+	}
+	if (JSON.stringify(store).includes(password)) throw new Error("pre-intent store retained the plaintext game password");
+	process.stdout.write("1 1");
+	process.exit(0);
+}
+if (accounts.length !== 1 || accounts[0].status !== "provisioning") {
+	throw new Error("crash must retain exactly one provisioning account: " + JSON.stringify(accounts));
+}
+const characters = (store.characters || []).filter((row) => Number(row.accountId) === Number(accounts[0].id));
+if (characters.length !== 1 || characters[0].name !== username || !characters[0].initialSignup) {
+	throw new Error("crash must retain exactly one initial-character ownership anchor: " + JSON.stringify(characters));
+}
+if (characters[0].source !== expectedSource
+	|| characters[0].linkStatus !== (expectedSource === "openrsc-sqlite-created" ? "linked" : "provisioning")) {
+	throw new Error("crash retained the wrong provisioning phase: " + JSON.stringify(characters[0]));
+}
+if (JSON.stringify(store).includes(password)) throw new Error("portal store retained the plaintext game password");
+if (Number(store.nextIds.account) <= Number(accounts[0].id)
+	|| Number(store.nextIds.character) <= Number(characters[0].id)) {
+	throw new Error("durable ownership IDs were not advanced past their reserved values");
+}
+process.stdout.write(`${accounts[0].id} ${characters[0].id}`);
+NODE
+)"
+	read -r anchor_account_id anchor_character_id <<<"$anchor_ids"
+	if [[ "$(sqlite3 "$db" "SELECT COUNT(*) FROM players WHERE username='${username}';")" != "$expected_game_rows" ]]; then
+		echo "VS-096 ${slug} crash left an unexpected number of game players"
+		exit 1
+	fi
+
+	PORT="$port" \
+	PORTAL_DATA_DIR="$store_dir" \
+	PORTAL_OPENRSC_DB="$db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	node web/portal/dev-server.mjs >>"$log" 2>&1 &
+	vs096_pid="$!"
+	for _ in {1..60}; do
+		if curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then break; fi
+		if ! kill -0 "$vs096_pid" >/dev/null 2>&1; then
+			echo "VS-096 ${slug} replacement refused a valid ownership anchor"
+			cat "$log"
+			exit 1
+		fi
+		sleep 0.1
+	done
+	if ! curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
+		echo "VS-096 ${slug} replacement did not become healthy"
+		cat "$log"
+		exit 1
+	fi
+
+	node - "$store_dir/dev-store.json" "$email" "$username" "$expected_game_rows" "$expected_crash_source" <<'NODE'
+const store = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
+const account = (store.accounts || []).find((row) => row.emailCanonical === process.argv[3]);
+const character = account && (store.characters || []).find((row) => Number(row.accountId) === Number(account.id) && row.name === process.argv[4]);
+if (process.argv[6] === "none") {
+	if (account || character || Number(store.nextIds.account) !== 1 || Number(store.nextIds.character) !== 1) {
+		throw new Error("restart changed a pre-intent empty store");
+	}
+	process.exit(0);
+}
+if (!account || !character) throw new Error("restart lost the durable ownership anchor");
+const gameWasCommitted = process.argv[5] === "1";
+if (gameWasCommitted && (character.source !== "openrsc-sqlite-created" || character.linkStatus !== "linked" || !Number(character.playerId))) {
+	throw new Error("startup did not reconcile the committed game player: " + JSON.stringify(character));
+}
+if (!gameWasCommitted && (character.source !== "openrsc-sqlite-provisioning" || character.linkStatus !== "provisioning" || character.playerId !== null)) {
+	throw new Error("startup changed a retryable intent with no game player: " + JSON.stringify(character));
+}
+NODE
+
+	retry_status="$(curl -sS -o "$response" -w '%{http_code}' \
+		-X POST "http://127.0.0.1:${port}/api/accounts/register" \
+		-H 'content-type: application/json' \
+		-d "{\"username\":\"${username}\",\"email\":\"${email}\",\"password\":\"${password}\",\"termsAccepted\":true,\"termsVersion\":\"2026-07-16\"}")"
+	if [[ "$retry_status" != "201" ]]; then
+		echo "VS-096 ${slug} retry should complete with HTTP 201, got $retry_status"
+		cat "$response"
+		cat "$log"
+		exit 1
+	fi
+	next_status="$(curl -sS -o "$tmp_dir/vs096-${slug}-next.json" -w '%{http_code}' \
+		-X POST "http://127.0.0.1:${port}/api/accounts/register" \
+		-H 'content-type: application/json' \
+		-d "{\"username\":\"${next_username}\",\"email\":\"${next_email}\",\"password\":\"${next_password}\",\"termsAccepted\":true,\"termsVersion\":\"2026-07-16\"}")"
+	if [[ "$next_status" != "201" ]]; then
+		echo "VS-096 ${slug} follow-up signup should complete with HTTP 201, got $next_status"
+		cat "$tmp_dir/vs096-${slug}-next.json"
+		exit 1
+	fi
+
+	node - "$store_dir/dev-store.json" "$db" "$email" "$username" "$anchor_account_id" "$anchor_character_id" "$next_email" "$next_username" "$password" "$next_password" <<'NODE'
+const fs = require("fs");
+const { execFileSync } = require("child_process");
+const storePath = process.argv[2];
+const db = process.argv[3];
+const email = process.argv[4];
+const username = process.argv[5];
+const anchorAccountId = Number(process.argv[6]);
+const anchorCharacterId = Number(process.argv[7]);
+const nextEmail = process.argv[8];
+const nextUsername = process.argv[9];
+const passwords = process.argv.slice(10);
+const storeText = fs.readFileSync(storePath, "utf8");
+const store = JSON.parse(storeText);
+for (const password of passwords) {
+	if (storeText.includes(password)) throw new Error("portal store retained a plaintext game password");
+}
+const accounts = (store.accounts || []).filter((row) => row.emailCanonical === email);
+if (accounts.length !== 1 || Number(accounts[0].id) !== anchorAccountId || accounts[0].status !== "active") {
+	throw new Error("retry changed or duplicated the anchored account: " + JSON.stringify(accounts));
+}
+const characters = (store.characters || []).filter((row) => Number(row.accountId) === anchorAccountId && row.name === username);
+if (characters.length !== 1 || Number(characters[0].id) !== anchorCharacterId
+	|| characters[0].source !== "openrsc-sqlite-created" || characters[0].linkStatus !== "linked"
+	|| !Number(characters[0].playerId)) {
+	throw new Error("retry changed or duplicated the anchored character: " + JSON.stringify(characters));
+}
+const nextAccount = (store.accounts || []).find((row) => row.emailCanonical === nextEmail);
+const nextCharacter = nextAccount && (store.characters || []).find((row) => Number(row.accountId) === Number(nextAccount.id) && row.name === nextUsername);
+if (!nextAccount || !nextCharacter || Number(nextAccount.id) <= anchorAccountId || Number(nextCharacter.id) <= anchorCharacterId) {
+	throw new Error("a later signup reused a durably reserved account or character ID");
+}
+for (const [rows, nextKey] of [[store.accounts || [], "account"], [store.characters || [], "character"]]) {
+	const ids = rows.map((row) => Number(row.id));
+	if (new Set(ids).size !== ids.length || Number(store.nextIds[nextKey]) <= Math.max(...ids)) {
+		throw new Error(`${nextKey} IDs are duplicated or their sequence was not advanced`);
+	}
+}
+const sql = (statement) => execFileSync("sqlite3", [db, statement], { encoding: "utf8" }).trim();
+const escapedUsername = username.replaceAll("'", "''");
+const playerRows = sql(`SELECT id FROM players WHERE username='${escapedUsername}'`).split(/\s+/).filter(Boolean);
+if (playerRows.length !== 1 || Number(playerRows[0]) !== Number(characters[0].playerId)) {
+	throw new Error("retry did not preserve exactly one matching game player");
+}
+const playerId = Number(playerRows[0]);
+for (const table of ["curstats", "maxstats", "experience", "capped_experience"]) {
+	if (sql(`SELECT COUNT(*) FROM ${table} WHERE playerID=${playerId}`) !== "1") {
+		throw new Error(`retry did not preserve exactly one ${table} row`);
+	}
+}
+const markers = sql(`SELECT value FROM player_cache WHERE playerID=${playerId} AND key='web_account_id'`).split(/\s+/).filter(Boolean);
+if (markers.length !== 1 || Number(markers[0]) !== anchorAccountId) {
+	throw new Error("retry did not preserve exactly one matching ownership marker");
+}
+NODE
+
+	if [[ "$slug" == "final" ]]; then
+		sqlite3 "$db" <<SQL
+INSERT INTO players (id, username, group_id, email, pass, salt, creation_date)
+VALUES (997, 'AlienLink', 10, 'alien-link@example.com', 'fixture-pass', '', strftime('%s', 'now'));
+INSERT INTO player_cache (playerID, type, key, value)
+VALUES (997, 0, 'web_account_id', '${anchor_account_id}');
+SQL
+		local backfill_dry_run
+		local store_hash_before
+		local store_hash_after
+		local backfill_apply_status
+		backfill_dry_run="$(curl -fsS -X POST "http://127.0.0.1:${port}/api/admin/accounts/backfill-native" \
+			-H "x-portal-admin-token: ${public_admin_token}" \
+			-H 'content-type: application/json' \
+			-d '{"dryRun":true}')"
+		node -e '
+const payload = JSON.parse(process.argv[1]);
+const conflict = (payload.conflicts || []).find((row) => Number(row.playerId) === 997);
+if (!conflict || conflict.reason !== "web_account_link_unexplained") {
+	throw new Error("dry-run must report the unexplained pre-link conflict: " + JSON.stringify(payload.conflicts));
+}
+' "$backfill_dry_run"
+		store_hash_before="$(shasum -a 256 "$store_dir/dev-store.json" | awk '{print $1}')"
+		backfill_apply_status="$(curl -sS -o "$tmp_dir/vs096-backfill-apply.json" -w '%{http_code}' \
+			-X POST "http://127.0.0.1:${port}/api/admin/accounts/backfill-native" \
+			-H "x-portal-admin-token: ${public_admin_token}" \
+			-H 'content-type: application/json' \
+			-d '{"apply":true}')"
+		if [[ "$backfill_apply_status" != "409" ]]; then
+			echo "native backfill apply must refuse an unexplained pre-link, got HTTP ${backfill_apply_status}"
+			cat "$tmp_dir/vs096-backfill-apply.json"
+			exit 1
+		fi
+		store_hash_after="$(shasum -a 256 "$store_dir/dev-store.json" | awk '{print $1}')"
+		if [[ "$store_hash_before" != "$store_hash_after" ]]; then
+			echo "refused native backfill changed the portal store"
+			exit 1
+		fi
+		node - "$store_dir/dev-store.json" <<'NODE'
+const store = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
+if ((store.characters || []).some((row) => row.name === "AlienLink" || Number(row.playerId) === 997)) {
+	throw new Error("refused native backfill silently attached the unexplained game player");
+}
+NODE
+	fi
+
+	kill -TERM "$vs096_pid"
+	wait "$vs096_pid"
+	vs096_pid=""
+}
+
+run_vs096_signup_crash_case "preintent" 19 "before" 1 "CrashBefore" "NextBefore" 0
+run_vs096_signup_crash_case "intent" 20 "after" 1 "CrashIntent" "NextIntent" 0
+run_vs096_signup_crash_case "game" 21 "before" 2 "CrashGame" "NextGame" 1
+run_vs096_signup_crash_case "final" 22 "after" 2 "CrashFinal" "NextFinal" 1
+
+# Additional-character retries have a different public contract from initial
+# signup recovery: the retry confirms the already-created game player with 409
+# after durably clearing its private completion marker.
+run_vs096_additional_character_crash_case() {
+	local store_dir="$tmp_dir/vs096-additional-store"
+	local db="$tmp_dir/vs096-additional.db"
+	local marker="$tmp_dir/vs096-additional-pause"
+	local release="$tmp_dir/vs096-additional-release"
+	local response="$tmp_dir/vs096-additional-response.json"
+	local status_file="$tmp_dir/vs096-additional-status"
+	local log="$tmp_dir/vs096-additional.log"
+	local account_file="$tmp_dir/vs096-additional-account.json"
+	local port=$((PORT + 23))
+	local email="vs096-additional@example.com"
+	local account_name="ExtraBase"
+	local account_password="Basepass1"
+	local character_name="ExtraCrash"
+	local character_password="Extrapass1"
+	local signup_status
+	local login_payload
+	local token
+	local retry_status
+
+	cp "$base_fixture_db" "$db"
+	initialize_public_store "$store_dir"
+	PORT="$port" \
+	PORTAL_DATA_DIR="$store_dir" \
+	PORTAL_OPENRSC_DB="$db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	node web/portal/dev-server.mjs >"$log" 2>&1 &
+	vs096_pid="$!"
+	for _ in {1..60}; do
+		if curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then break; fi
+		if ! kill -0 "$vs096_pid" >/dev/null 2>&1; then
+			echo "VS-096 additional-character base fixture exited during startup"
+			cat "$log"
+			exit 1
+		fi
+		sleep 0.1
+	done
+	if ! curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
+		echo "VS-096 additional-character base fixture did not become healthy"
+		cat "$log"
+		exit 1
+	fi
+
+	signup_status="$(curl -sS -o "$response" -w '%{http_code}' \
+		-X POST "http://127.0.0.1:${port}/api/accounts/register" \
+		-H 'content-type: application/json' \
+		-d "{\"username\":\"${account_name}\",\"email\":\"${email}\",\"password\":\"${account_password}\",\"termsAccepted\":true,\"termsVersion\":\"2026-07-16\"}")"
+	if [[ "$signup_status" != "201" ]]; then
+		echo "VS-096 additional-character base signup should return HTTP 201, got ${signup_status}"
+		cat "$response"
+		exit 1
+	fi
+	login_payload="$(curl -fsS -X POST "http://127.0.0.1:${port}/api/accounts/login" \
+		-H 'content-type: application/json' \
+		-d "{\"email\":\"${email}\",\"password\":\"${account_password}\"}")"
+	token="$(node -e 'const p=JSON.parse(process.argv[1]); if(!p.token) throw new Error("base login did not issue a session"); process.stdout.write(p.token);' "$login_payload")"
+	kill -TERM "$vs096_pid"
+	wait "$vs096_pid"
+	vs096_pid=""
+
+	PORT="$port" \
+	PORTAL_DATA_DIR="$store_dir" \
+	PORTAL_OPENRSC_DB="$db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	PORTAL_ENABLE_TEST_FAULTS=1 \
+	PORTAL_TEST_STORE_PAUSE_MARKER="$marker" \
+	PORTAL_TEST_STORE_PAUSE_RELEASE="$release" \
+	PORTAL_TEST_STORE_PAUSE_PHASE=after \
+	PORTAL_TEST_STORE_PAUSE_AT=2 \
+	PORTAL_TEST_STORE_PAUSE_TIMEOUT_MS=10000 \
+	node web/portal/dev-server.mjs >>"$log" 2>&1 &
+	vs096_pid="$!"
+	for _ in {1..60}; do
+		if curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then break; fi
+		if ! kill -0 "$vs096_pid" >/dev/null 2>&1; then
+			echo "VS-096 additional-character fault fixture exited during startup"
+			cat "$log"
+			exit 1
+		fi
+		sleep 0.1
+	done
+
+	curl -sS -o "$response" -w '%{http_code}' \
+		-X POST "http://127.0.0.1:${port}/api/characters" \
+		-H "authorization: Bearer ${token}" \
+		-H 'content-type: application/json' \
+		-d "{\"name\":\"${character_name}\",\"gamePassword\":\"${character_password}\"}" \
+		>"$status_file" 2>/dev/null &
+	vs096_request_pid="$!"
+	for _ in {1..300}; do
+		[[ -f "$marker" ]] && break
+		if ! kill -0 "$vs096_pid" >/dev/null 2>&1; then
+			echo "VS-096 additional-character fixture exited before its linked-save boundary"
+			cat "$log"
+			exit 1
+		fi
+		sleep 0.02
+	done
+	if [[ ! -f "$marker" ]]; then
+		echo "VS-096 additional-character fixture did not reach after store write 2"
+		cat "$log"
+		exit 1
+	fi
+	kill -KILL "$vs096_pid"
+	wait "$vs096_pid" >/dev/null 2>&1 || true
+	vs096_pid=""
+	wait "$vs096_request_pid" >/dev/null 2>&1 || true
+	vs096_request_pid=""
+
+	node - "$store_dir/dev-store.json" "$email" "$character_name" "$account_password" "$character_password" <<'NODE'
+const fs = require("fs");
+const text = fs.readFileSync(process.argv[2], "utf8");
+const store = JSON.parse(text);
+const account = (store.accounts || []).find((row) => row.emailCanonical === process.argv[3]);
+const matches = account && (store.characters || []).filter((row) =>
+	Number(row.accountId) === Number(account.id) && row.name === process.argv[4]);
+if (!account || matches.length !== 1 || matches[0].source !== "openrsc-sqlite-created"
+	|| matches[0].linkStatus !== "linked" || !Number(matches[0].playerId)
+	|| matches[0].provisioningCompletionPending !== true) {
+	throw new Error("crash did not retain exactly one linked pending additional character: " + JSON.stringify(matches));
+}
+if (text.includes(process.argv[5]) || text.includes(process.argv[6])) {
+	throw new Error("additional-character crash store retained a plaintext password");
+}
+NODE
+
+	PORT="$port" \
+	PORTAL_DATA_DIR="$store_dir" \
+	PORTAL_OPENRSC_DB="$db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	node web/portal/dev-server.mjs >>"$log" 2>&1 &
+	vs096_pid="$!"
+	for _ in {1..60}; do
+		if curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then break; fi
+		if ! kill -0 "$vs096_pid" >/dev/null 2>&1; then
+			echo "VS-096 additional-character replacement refused the valid linked save"
+			cat "$log"
+			exit 1
+		fi
+		sleep 0.1
+	done
+	if ! curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
+		echo "VS-096 additional-character replacement did not become healthy"
+		cat "$log"
+		exit 1
+	fi
+
+	retry_status="$(curl -sS -o "$response" -w '%{http_code}' \
+		-X POST "http://127.0.0.1:${port}/api/characters" \
+		-H "authorization: Bearer ${token}" \
+		-H 'content-type: application/json' \
+		-d "{\"name\":\"${character_name}\",\"gamePassword\":\"${character_password}\"}")"
+	if [[ "$retry_status" != "409" ]]; then
+		echo "recovered additional-character retry should return HTTP 409, got ${retry_status}"
+		cat "$response"
+		exit 1
+	fi
+	node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(p.error!=="character_already_created") throw new Error("retry returned the wrong conflict: "+JSON.stringify(p));' "$response"
+	curl -fsS -H "authorization: Bearer ${token}" "http://127.0.0.1:${port}/api/account" >"$account_file"
+
+	node - "$store_dir/dev-store.json" "$account_file" "$db" "$email" "$character_name" "$account_password" "$character_password" <<'NODE'
+const fs = require("fs");
+const { execFileSync } = require("child_process");
+const storeText = fs.readFileSync(process.argv[2], "utf8");
+const store = JSON.parse(storeText);
+const publicState = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+const db = process.argv[4];
+const email = process.argv[5];
+const characterName = process.argv[6];
+if (storeText.includes(process.argv[7]) || storeText.includes(process.argv[8])) {
+	throw new Error("recovered additional-character store retained a plaintext password");
+}
+const account = (store.accounts || []).find((row) => row.emailCanonical === email);
+const stored = account && (store.characters || []).filter((row) =>
+	Number(row.accountId) === Number(account.id) && row.name === characterName);
+if (!account || stored.length !== 1 || stored[0].source !== "openrsc-sqlite-created"
+	|| stored[0].linkStatus !== "linked" || !Number(stored[0].playerId)
+	|| Object.prototype.hasOwnProperty.call(stored[0], "provisioningCompletionPending")) {
+	throw new Error("retry did not durably complete exactly one additional character: " + JSON.stringify(stored));
+}
+const exposed = (publicState.characters || []).filter((row) => row.name === characterName);
+if (exposed.length !== 1 || exposed[0].source !== "openrsc-sqlite-created"
+	|| exposed[0].linkStatus !== "linked" || Number(exposed[0].playerId) !== Number(stored[0].playerId)) {
+	throw new Error("GET /api/account did not expose exactly one linked additional character: " + JSON.stringify(exposed));
+}
+const sql = (statement) => execFileSync("sqlite3", [db, statement], { encoding: "utf8" }).trim();
+const escapedName = characterName.replaceAll("'", "''");
+const playerIds = sql(`SELECT id FROM players WHERE username='${escapedName}'`).split(/\s+/).filter(Boolean);
+if (playerIds.length !== 1 || Number(playerIds[0]) !== Number(stored[0].playerId)) {
+	throw new Error("recovered additional character does not have exactly one game player");
+}
+const playerId = Number(playerIds[0]);
+for (const table of ["curstats", "maxstats", "experience", "capped_experience"]) {
+	if (sql(`SELECT COUNT(*) FROM ${table} WHERE playerID=${playerId}`) !== "1") {
+		throw new Error(`recovered additional character does not have exactly one ${table} row`);
+	}
+}
+const markers = sql(`SELECT value FROM player_cache WHERE playerID=${playerId} AND key='web_account_id'`).split(/\s+/).filter(Boolean);
+if (markers.length !== 1 || Number(markers[0]) !== Number(account.id)) {
+	throw new Error("recovered additional character does not have exactly one ownership marker");
+}
+NODE
+
+	kill -TERM "$vs096_pid"
+	wait "$vs096_pid"
+	vs096_pid=""
+}
+
+run_vs096_additional_character_crash_case
+
+mint_vs096_google_token() {
+	local private_jwk="$1"
+	local nonce="$2"
+	local client_id="$3"
+	local subject="$4"
+	local email="$5"
+	local display_name="$6"
+	node -- - "$private_jwk" "$nonce" "$client_id" "$subject" "$email" "$display_name" <<'NODE'
+const fs = require("fs");
+const { createPrivateKey, sign } = require("crypto");
+const privateJwk = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+const issuedAt = Math.floor(Date.now() / 1000);
+const header = encode({ alg: "RS256", typ: "JWT", kid: privateJwk.kid });
+const claims = encode({
+	iss: "https://accounts.google.com",
+	aud: process.argv[4],
+	sub: process.argv[5],
+	email: process.argv[6],
+	email_verified: true,
+	name: process.argv[7],
+	nonce: process.argv[3],
+	iat: issuedAt,
+	exp: issuedAt + 600
+});
+const signed = `${header}.${claims}`;
+const signature = sign("RSA-SHA256", Buffer.from(signed), createPrivateKey({ key: privateJwk, format: "jwk" }));
+process.stdout.write(`${signed}.${signature.toString("base64url")}`);
+NODE
+}
+
+# Exercise the real Google launch-signup route with a local RS256 issuer. The
+# nonce save is store write 1, the ownership anchor is write 2, and the linked
+# character save is write 3; killing before write 3 leaves a committed game row
+# whose portal ownership can be reconciled and retried without trusting an ID.
+run_vs096_google_signup_crash_case() {
+	local store_dir="$tmp_dir/vs096-google-store"
+	local db="$tmp_dir/vs096-google.db"
+	local marker="$tmp_dir/vs096-google-pause"
+	local release="$tmp_dir/vs096-google-release"
+	local response="$tmp_dir/vs096-google-response.json"
+	local status_file="$tmp_dir/vs096-google-status"
+	local request_log="$tmp_dir/vs096-google-curl.log"
+	local log="$tmp_dir/vs096-google.log"
+	local port=$((PORT + 24))
+	local jwks_port=$((PORT + 25))
+	local mismatch_port=$((PORT + 26))
+	local private_jwk="$tmp_dir/vs096-google-private.jwk"
+	local jwks_ready="$tmp_dir/vs096-google-jwks-ready"
+	local jwks_log="$tmp_dir/vs096-google-jwks.log"
+	local google_client_id="vs096-google-client"
+	local google_subject="vs096-google-subject"
+	local email="vs096-google@example.com"
+	local username="GoogleCrash"
+	local original_password="GooglePass1"
+	local wrong_password="WrongPass2"
+	local nonce_payload
+	local nonce
+	local credential
+	local player_id
+	local mismatch_store_dir="$tmp_dir/vs096-google-mismatch-store"
+	local mismatch_db="$tmp_dir/vs096-google-mismatch.db"
+	local mismatch_log="$tmp_dir/vs096-google-mismatch.log"
+	local store_hash_before
+	local store_hash_after
+	local db_hash_before
+	local db_hash_after
+	local db_logical_hash_before
+	local db_logical_hash_after
+	local mismatch_exit
+	local wrong_status
+	local success_status
+
+	cp "$base_fixture_db" "$db"
+	initialize_public_store "$store_dir"
+	node -- - "$jwks_port" "$private_jwk" "$jwks_ready" >"$jwks_log" 2>&1 <<'NODE' &
+const fs = require("fs");
+const http = require("http");
+const { generateKeyPairSync } = require("crypto");
+const port = Number(process.argv[2]);
+const privatePath = process.argv[3];
+const readyPath = process.argv[4];
+const kid = "vs096-google-key";
+const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const privateJwk = { ...privateKey.export({ format: "jwk" }), kid, alg: "RS256", use: "sig" };
+const publicJwk = { ...publicKey.export({ format: "jwk" }), kid, alg: "RS256", use: "sig" };
+fs.writeFileSync(privatePath, `${JSON.stringify(privateJwk)}\n`, { mode: 0o600 });
+const server = http.createServer((_request, response) => {
+	response.writeHead(200, {
+		"content-type": "application/json",
+		"cache-control": "public, max-age=60"
+	});
+	response.end(JSON.stringify({ keys: [publicJwk] }));
+});
+server.listen(port, "127.0.0.1", () => fs.writeFileSync(readyPath, `${process.pid}\n`));
+process.on("SIGTERM", () => server.close(() => process.exit(0)));
+NODE
+	vs096_google_jwks_pid="$!"
+	for _ in {1..60}; do
+		[[ -f "$jwks_ready" ]] && break
+		if ! kill -0 "$vs096_google_jwks_pid" >/dev/null 2>&1; then
+			echo "VS-096 Google JWKS fixture exited before readiness"
+			cat "$jwks_log"
+			exit 1
+		fi
+		sleep 0.05
+	done
+	if [[ ! -f "$jwks_ready" ]]; then
+		echo "VS-096 Google JWKS fixture did not become ready"
+		cat "$jwks_log"
+		exit 1
+	fi
+
+	PORT="$port" \
+	PORTAL_DATA_DIR="$store_dir" \
+	PORTAL_OPENRSC_DB="$db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	PORTAL_GOOGLE_CLIENT_ID="$google_client_id" \
+	PORTAL_GOOGLE_JWKS_URL="http://127.0.0.1:${jwks_port}/jwks" \
+	PORTAL_ENABLE_TEST_FAULTS=1 \
+	PORTAL_TEST_STORE_PAUSE_MARKER="$marker" \
+	PORTAL_TEST_STORE_PAUSE_RELEASE="$release" \
+	PORTAL_TEST_STORE_PAUSE_PHASE=before \
+	PORTAL_TEST_STORE_PAUSE_AT=3 \
+	PORTAL_TEST_STORE_PAUSE_TIMEOUT_MS=10000 \
+	node web/portal/dev-server.mjs >"$log" 2>&1 &
+	vs096_pid="$!"
+	for _ in {1..60}; do
+		if curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then break; fi
+		if ! kill -0 "$vs096_pid" >/dev/null 2>&1; then
+			echo "VS-096 Google crash fixture exited during startup"
+			cat "$log"
+			exit 1
+		fi
+		sleep 0.1
+	done
+	if ! curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
+		echo "VS-096 Google crash fixture did not become healthy"
+		cat "$log"
+		exit 1
+	fi
+
+	nonce_payload="$(curl -fsS -X POST "http://127.0.0.1:${port}/api/oauth/google/nonce" -H 'content-type: application/json' -d '{}')"
+	nonce="$(node -e 'const p=JSON.parse(process.argv[1]); if(!p.nonce) throw new Error("nonce missing"); process.stdout.write(p.nonce);' "$nonce_payload")"
+	credential="$(mint_vs096_google_token "$private_jwk" "$nonce" "$google_client_id" "$google_subject" "$email" "$username")"
+	curl -sS -o "$response" -w '%{http_code}' \
+		-X POST "http://127.0.0.1:${port}/api/accounts/google" \
+		-H 'content-type: application/json' \
+		-d "$(node -e 'process.stdout.write(JSON.stringify({credential:process.argv[1],nonce:process.argv[2],username:process.argv[3],gamePassword:process.argv[4],termsAccepted:true,termsVersion:"2026-07-16"}))' "$credential" "$nonce" "$username" "$original_password")" \
+		>"$status_file" 2>"$request_log" &
+	vs096_request_pid="$!"
+	for _ in {1..300}; do
+		[[ -f "$marker" ]] && break
+		if ! kill -0 "$vs096_pid" >/dev/null 2>&1; then
+			echo "VS-096 Google fixture exited before the post-game crash boundary"
+			cat "$log"
+			exit 1
+		fi
+		sleep 0.02
+	done
+	if [[ ! -f "$marker" ]]; then
+		echo "VS-096 Google fixture did not reach before store write 3"
+		cat "$log"
+		exit 1
+	fi
+	kill -KILL "$vs096_pid"
+	wait "$vs096_pid" >/dev/null 2>&1 || true
+	vs096_pid=""
+	wait "$vs096_request_pid" >/dev/null 2>&1 || true
+	vs096_request_pid=""
+
+	node - "$store_dir/dev-store.json" "$email" "$username" "$google_subject" "$original_password" <<'NODE'
+const fs = require("fs");
+const text = fs.readFileSync(process.argv[2], "utf8");
+const store = JSON.parse(text);
+const email = process.argv[3];
+const username = process.argv[4];
+const subject = process.argv[5];
+const accounts = (store.accounts || []).filter((row) => row.emailCanonical === email);
+if (accounts.length !== 1 || accounts[0].status !== "provisioning" || accounts[0].passwordHash !== null) {
+	throw new Error("Google crash must retain one passwordless provisioning account: " + JSON.stringify(accounts));
+}
+const accountId = Number(accounts[0].id);
+const identities = (store.identities || []).filter((row) => Number(row.accountId) === accountId);
+if (identities.length !== 1 || identities[0].provider !== "google" || identities[0].providerSubject !== subject) {
+	throw new Error("Google crash must retain exactly one matching identity: " + JSON.stringify(identities));
+}
+const characters = (store.characters || []).filter((row) => Number(row.accountId) === accountId);
+if (characters.length !== 1 || characters[0].name !== username
+	|| characters[0].source !== "openrsc-sqlite-provisioning"
+	|| characters[0].linkStatus !== "provisioning" || characters[0].playerId !== null
+	|| characters[0].initialSignup !== true) {
+	throw new Error("Google crash must retain exactly one ownership anchor: " + JSON.stringify(characters));
+}
+if ((store.founders || []).filter((row) => row.emailCanonical === email).length !== 1) {
+	throw new Error("Google crash must retain exactly one matching founder reservation");
+}
+if ((store.sessions || []).some((row) => Number(row.accountId) === accountId)) {
+	throw new Error("crashed Google signup must not issue a session");
+}
+if (text.includes(process.argv[6])) throw new Error("Google crash store retained the plaintext game password");
+NODE
+	player_id="$(sqlite3 "$db" "SELECT id FROM players WHERE username='${username}';")"
+	if [[ ! "$player_id" =~ ^[1-9][0-9]*$ ]]; then
+		echo "VS-096 Google crash did not retain exactly one game player"
+		exit 1
+	fi
+	if [[ "$(sqlite3 "$db" "SELECT COUNT(*) FROM player_cache WHERE playerID=${player_id} AND key='web_account_id' AND value='1';")" != "1" ]]; then
+		echo "VS-096 Google crash did not retain the anchored ownership marker"
+		exit 1
+	fi
+
+	# A mismatched clone must fail before binding the listener and must not mutate
+	# either durable store while diagnosing the ownership conflict.
+	cp -R "$store_dir" "$mismatch_store_dir"
+	sqlite3 "$db" ".backup '$mismatch_db'"
+	sqlite3 "$mismatch_db" "UPDATE players SET email='mismatch-owner@example.com' WHERE id=${player_id};"
+	store_hash_before="$(shasum -a 256 "$mismatch_store_dir/dev-store.json" | awk '{print $1}')"
+	db_hash_before="$(shasum -a 256 "$mismatch_db" | awk '{print $1}')"
+	db_logical_hash_before="$(sqlite3 "$mismatch_db" .dump | shasum -a 256 | awk '{print $1}')"
+	PORT="$mismatch_port" \
+	PORTAL_DATA_DIR="$mismatch_store_dir" \
+	PORTAL_OPENRSC_DB="$mismatch_db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	node web/portal/dev-server.mjs >"$mismatch_log" 2>&1 &
+	vs096_pid="$!"
+	for _ in {1..60}; do
+		if curl -fsS "http://127.0.0.1:${mismatch_port}/api/health" >/dev/null 2>&1; then
+			echo "ownership-mismatched Google clone bound its public listener"
+			kill "$vs096_pid" >/dev/null 2>&1 || true
+			wait "$vs096_pid" >/dev/null 2>&1 || true
+			vs096_pid=""
+			exit 1
+		fi
+		if ! kill -0 "$vs096_pid" >/dev/null 2>&1; then break; fi
+		sleep 0.1
+	done
+	if kill -0 "$vs096_pid" >/dev/null 2>&1; then
+		echo "ownership-mismatched Google clone did not fail startup"
+		kill "$vs096_pid" >/dev/null 2>&1 || true
+		wait "$vs096_pid" >/dev/null 2>&1 || true
+		vs096_pid=""
+		exit 1
+	fi
+	if wait "$vs096_pid"; then mismatch_exit=0; else mismatch_exit="$?"; fi
+	vs096_pid=""
+	if [[ "$mismatch_exit" == "0" ]]; then
+		echo "ownership-mismatched Google clone exited successfully"
+		exit 1
+	fi
+	grep -q 'portal_ownership_reconciliation_failed' "$mismatch_log" || { cat "$mismatch_log"; echo "mismatched Google clone did not report ownership reconciliation failure"; exit 1; }
+	grep -q 'provisioning_link_mismatch' "$mismatch_log" || { cat "$mismatch_log"; echo "mismatched Google clone reported the wrong reconciliation reason"; exit 1; }
+	store_hash_after="$(shasum -a 256 "$mismatch_store_dir/dev-store.json" | awk '{print $1}')"
+	db_hash_after="$(shasum -a 256 "$mismatch_db" | awk '{print $1}')"
+	db_logical_hash_after="$(sqlite3 "$mismatch_db" .dump | shasum -a 256 | awk '{print $1}')"
+	if [[ "$store_hash_before" != "$store_hash_after" || "$db_hash_before" != "$db_hash_after" || "$db_logical_hash_before" != "$db_logical_hash_after" ]]; then
+		echo "failed ownership reconciliation mutated its portal store or game database"
+		exit 1
+	fi
+
+	PORT="$port" \
+	PORTAL_DATA_DIR="$store_dir" \
+	PORTAL_OPENRSC_DB="$db" \
+	PORTAL_ADMIN_TOKEN="$public_admin_token" \
+	PORTAL_ABUSE_HASH_SALT="$public_abuse_salt" \
+	PORTAL_PUBLIC_MODE=1 \
+	PORTAL_LAUNCH_SIGNUP_MODE=1 \
+	PORTAL_LAUNCH_AT="2099-07-18T18:00:00Z" \
+	PORTAL_PUBLIC_ORIGIN="https://voidscape.gg" \
+	PORTAL_GOOGLE_CLIENT_ID="$google_client_id" \
+	PORTAL_GOOGLE_JWKS_URL="http://127.0.0.1:${jwks_port}/jwks" \
+	node web/portal/dev-server.mjs >>"$log" 2>&1 &
+	vs096_pid="$!"
+	for _ in {1..60}; do
+		if curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then break; fi
+		if ! kill -0 "$vs096_pid" >/dev/null 2>&1; then
+			echo "VS-096 Google replacement refused a valid ownership anchor"
+			cat "$log"
+			exit 1
+		fi
+		sleep 0.1
+	done
+	if ! curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
+		echo "VS-096 Google replacement did not become healthy"
+		cat "$log"
+		exit 1
+	fi
+
+	nonce_payload="$(curl -fsS -X POST "http://127.0.0.1:${port}/api/oauth/google/nonce" -H 'content-type: application/json' -d '{}')"
+	nonce="$(node -e 'const p=JSON.parse(process.argv[1]); if(!p.nonce) throw new Error("nonce missing"); process.stdout.write(p.nonce);' "$nonce_payload")"
+	credential="$(mint_vs096_google_token "$private_jwk" "$nonce" "$google_client_id" "$google_subject" "$email" "$username")"
+	wrong_status="$(curl -sS -o "$response" -w '%{http_code}' \
+		-X POST "http://127.0.0.1:${port}/api/accounts/google" \
+		-H 'content-type: application/json' \
+		-d "$(node -e 'process.stdout.write(JSON.stringify({credential:process.argv[1],nonce:process.argv[2],username:process.argv[3],gamePassword:process.argv[4],termsAccepted:true,termsVersion:"2026-07-16"}))' "$credential" "$nonce" "$username" "$wrong_password")")"
+	if [[ "$wrong_status" != "409" ]]; then
+		echo "Google retry with a different game password should return HTTP 409, got ${wrong_status}"
+		cat "$response"
+		exit 1
+	fi
+	node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(p.error!=="game_password_mismatch") throw new Error("wrong Google retry error: "+JSON.stringify(p));' "$response"
+	node - "$store_dir/dev-store.json" "$email" "$username" <<'NODE'
+const store = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
+const account = (store.accounts || []).find((row) => row.emailCanonical === process.argv[3]);
+const characters = account && (store.characters || []).filter((row) => Number(row.accountId) === Number(account.id) && row.name === process.argv[4]);
+if (!account || account.status !== "provisioning" || characters.length !== 1
+	|| characters[0].source !== "openrsc-sqlite-created" || characters[0].linkStatus !== "linked"
+	|| characters[0].provisioningCompletionPending !== true) {
+	throw new Error("mismatched-password retry changed the provisioning state: " + JSON.stringify({ account, characters }));
+}
+NODE
+
+	nonce_payload="$(curl -fsS -X POST "http://127.0.0.1:${port}/api/oauth/google/nonce" -H 'content-type: application/json' -d '{}')"
+	nonce="$(node -e 'const p=JSON.parse(process.argv[1]); if(!p.nonce) throw new Error("nonce missing"); process.stdout.write(p.nonce);' "$nonce_payload")"
+	credential="$(mint_vs096_google_token "$private_jwk" "$nonce" "$google_client_id" "$google_subject" "$email" "$username")"
+	success_status="$(curl -sS -o "$response" -w '%{http_code}' \
+		-X POST "http://127.0.0.1:${port}/api/accounts/google" \
+		-H 'content-type: application/json' \
+		-d "$(node -e 'process.stdout.write(JSON.stringify({credential:process.argv[1],nonce:process.argv[2],username:process.argv[3],gamePassword:process.argv[4],termsAccepted:true,termsVersion:"2026-07-16"}))' "$credential" "$nonce" "$username" "$original_password")")"
+	if [[ "$success_status" != "200" ]]; then
+		echo "Google retry with the original game password should return HTTP 200, got ${success_status}"
+		cat "$response"
+		cat "$log"
+		exit 1
+	fi
+	node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(!p.token || !p.auth || p.auth.googleConnected!==true || !p.account || p.account.status!=="active" || !(p.characters||[]).some((row)=>row.name===process.argv[2])) throw new Error("completed Google retry did not return an active Google session");' "$response" "$username"
+
+	node - "$store_dir/dev-store.json" "$db" "$email" "$username" "$google_subject" "$original_password" "$wrong_password" <<'NODE'
+const fs = require("fs");
+const { execFileSync } = require("child_process");
+const storeText = fs.readFileSync(process.argv[2], "utf8");
+const store = JSON.parse(storeText);
+const db = process.argv[3];
+const email = process.argv[4];
+const username = process.argv[5];
+const subject = process.argv[6];
+if (storeText.includes(process.argv[7]) || storeText.includes(process.argv[8])) {
+	throw new Error("completed Google retry retained a plaintext game password");
+}
+const accounts = (store.accounts || []).filter((row) => row.emailCanonical === email);
+if (accounts.length !== 1 || accounts[0].status !== "active" || accounts[0].passwordHash !== null) {
+	throw new Error("completed Google retry did not preserve one passwordless active account: " + JSON.stringify(accounts));
+}
+const accountId = Number(accounts[0].id);
+const identities = (store.identities || []).filter((row) => Number(row.accountId) === accountId);
+if (identities.length !== 1 || identities[0].provider !== "google" || identities[0].providerSubject !== subject) {
+	throw new Error("completed Google retry did not preserve one identity: " + JSON.stringify(identities));
+}
+const characters = (store.characters || []).filter((row) => Number(row.accountId) === accountId && row.name === username);
+if (characters.length !== 1 || characters[0].source !== "openrsc-sqlite-created"
+	|| characters[0].linkStatus !== "linked" || !Number(characters[0].playerId)
+	|| Object.prototype.hasOwnProperty.call(characters[0], "provisioningCompletionPending")) {
+	throw new Error("completed Google retry did not preserve one linked character: " + JSON.stringify(characters));
+}
+const sql = (statement) => execFileSync("sqlite3", [db, statement], { encoding: "utf8" }).trim();
+const escapedUsername = username.replaceAll("'", "''");
+const playerIds = sql(`SELECT id FROM players WHERE username='${escapedUsername}'`).split(/\s+/).filter(Boolean);
+if (playerIds.length !== 1 || Number(playerIds[0]) !== Number(characters[0].playerId)) {
+	throw new Error("completed Google retry did not preserve one matching game player");
+}
+const playerId = Number(playerIds[0]);
+for (const table of ["curstats", "maxstats", "experience", "capped_experience"]) {
+	if (sql(`SELECT COUNT(*) FROM ${table} WHERE playerID=${playerId}`) !== "1") {
+		throw new Error(`completed Google retry did not preserve one ${table} row`);
+	}
+}
+const markers = sql(`SELECT value FROM player_cache WHERE playerID=${playerId} AND key='web_account_id'`).split(/\s+/).filter(Boolean);
+if (markers.length !== 1 || Number(markers[0]) !== accountId) {
+	throw new Error("completed Google retry did not preserve one ownership marker");
+}
+NODE
+
+	kill -TERM "$vs096_pid"
+	wait "$vs096_pid"
+	vs096_pid=""
+	kill -TERM "$vs096_google_jwks_pid"
+	wait "$vs096_google_jwks_pid"
+	vs096_google_jwks_pid=""
+}
+
+run_vs096_google_signup_crash_case
+
 # the one public write path still works and mints a code
 public_signup="$(curl -fsS -X POST "http://127.0.0.1:${public_port}/api/founder/reservations" -H 'content-type: application/json' -d '{"username":"PublicGuy","email":"public-guy@example.com"}')"
 grep -q '"code": "VOID-' <<<"$public_signup" || { echo "public-mode signup should mint a code"; exit 1; }
@@ -1571,6 +2522,14 @@ if [[ "$launch_extra_link_count" != "1" ]]; then
 	echo "second launch OpenRSC player should be linked to the same web account"
 	exit 1
 fi
+expect_status 409 -X POST "http://127.0.0.1:${launch_port}/api/characters" \
+	-H "authorization: Bearer ${launch_token}" \
+	-H 'content-type: application/json' \
+	-d '{"name":"LaunchAlt","gamePassword":"A1b2"}'
+if [[ "$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM players WHERE username='LaunchAlt';")" != "1" ]]; then
+	echo "completed additional-character duplicates must not create another game player"
+	exit 1
+fi
 launch_starter_marker_count_after_extra="$(sqlite3 "$launch_fixture_db" "SELECT COUNT(*) FROM player_cache WHERE playerID=0 AND key LIKE 'starter:1:%';")"
 if [[ "$launch_starter_marker_count_after_extra" != "0" ]]; then
 	echo "second launch character creation must not enter the frozen founder-card manifest"
@@ -2177,9 +3136,28 @@ if [[ "$verify_failure_status" != "503" ]] || ! grep -q '"openrsc_db_unavailable
 	echo "injected SQLite write failure should return retryable openrsc_db_unavailable"
 	exit 1
 fi
-verify_after_failure_state="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const p=(s.emailVerifications||[]).find(x=>x.emailCanonical==='verify-guy@example.com'); process.stdout.write(JSON.stringify({pending:p&&p.status,accounts:(s.accounts||[]).filter(x=>x.emailCanonical==='verify-guy@example.com').length}));" "$tmp_dir/verify-store/dev-store.json")"
-if [[ "$verify_after_failure_state" != '{"pending":"pending","accounts":0}' ]] || [[ "$(sqlite3 "$verify_db" "SELECT COUNT(*) FROM players WHERE username='VerifyGuy';")" != "0" ]]; then
-	echo "injected SQLite write failure should leave the pending signup retryable with no partial account or player"
+node - "$tmp_dir/verify-store/dev-store.json" <<'NODE'
+const store = JSON.parse(require("fs").readFileSync(process.argv[2], "utf8"));
+const pending = (store.emailVerifications || []).find((row) => row.emailCanonical === "verify-guy@example.com");
+const accounts = (store.accounts || []).filter((row) => row.emailCanonical === "verify-guy@example.com");
+const characters = accounts.length
+	? (store.characters || []).filter((row) => Number(row.accountId) === Number(accounts[0].id))
+	: [];
+if (!pending || pending.status !== "pending"
+	|| accounts.length !== 1 || accounts[0].status !== "provisioning"
+	|| characters.length !== 1
+	|| characters[0].source !== "openrsc-sqlite-provisioning"
+	|| characters[0].linkStatus !== "provisioning"
+	|| characters[0].playerId !== null) {
+	throw new Error("SQLite failure should retain one retryable ownership anchor: "
+		+ JSON.stringify({ pending, accounts, characters }));
+}
+if (JSON.stringify(characters[0]).includes("VerifyPass1")) {
+	throw new Error("provisioning anchor retained the game password");
+}
+NODE
+if [[ "$(sqlite3 "$verify_db" "SELECT COUNT(*) FROM players WHERE username='VerifyGuy';")" != "0" ]]; then
+	echo "injected SQLite write failure should leave no game player before retry"
 	exit 1
 fi
 verify_complete="$(curl -fsS -X POST "http://127.0.0.1:${verify_port}/api/accounts/verify-email" \

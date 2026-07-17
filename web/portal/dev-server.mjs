@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { chmod, lstat, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { execFile as execFileCallback, spawn } from "node:child_process";
 import { createCipheriv, createDecipheriv, createHash, createPublicKey, randomBytes, scrypt as scryptCallback, timingSafeEqual, verify as verifySignature } from "node:crypto";
 import { promisify } from "node:util";
@@ -53,6 +53,7 @@ const testStoreFaultsEnabled = process.env.PORTAL_ENABLE_TEST_FAULTS === "1";
 const testStorePauseMarkerPath = String(process.env.PORTAL_TEST_STORE_PAUSE_MARKER || "").trim();
 const testStorePauseReleasePath = String(process.env.PORTAL_TEST_STORE_PAUSE_RELEASE || "").trim();
 const testStorePauseAt = Number(process.env.PORTAL_TEST_STORE_PAUSE_AT || 1);
+const testStorePausePhase = String(process.env.PORTAL_TEST_STORE_PAUSE_PHASE || "before").trim();
 const testStorePauseTimeoutMs = Number(process.env.PORTAL_TEST_STORE_PAUSE_TIMEOUT_MS || 30000);
 const shutdownTimeoutMs = configuredPositiveInteger("PORTAL_SHUTDOWN_TIMEOUT_MS", process.env.PORTAL_SHUTDOWN_TIMEOUT_MS || "30000");
 let storePauseAttempts = 0;
@@ -64,6 +65,7 @@ if (testStorePauseMarkerPath || testStorePauseReleasePath) {
 		|| !testStorePauseReleasePath
 		|| !Number.isInteger(testStorePauseAt)
 		|| testStorePauseAt <= 0
+		|| !["before", "after"].includes(testStorePausePhase)
 		|| !Number.isInteger(testStorePauseTimeoutMs)
 		|| testStorePauseTimeoutMs <= 0) {
 		throw new Error("invalid PORTAL_TEST_STORE_PAUSE configuration");
@@ -84,6 +86,8 @@ const oauthStateTtlMs = 1000 * 60 * 10;
 const linkChallengeTtlMs = 1000 * 60 * 15;
 const scryptParams = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const openRscAccountIdCacheKey = "web_account_id";
+const openRscProvisioningSource = "openrsc-sqlite-provisioning";
+const openRscCreatedSource = "openrsc-sqlite-created";
 const starterCardCachePrefix = "starter:";
 const legacyStarterCardCachePrefix = "starter_card:";
 const starterCardAvailable = 1;
@@ -588,6 +592,14 @@ class PortalStoreError extends Error {
 	}
 }
 
+class PortalOwnershipError extends Error {
+	constructor(reason) {
+		super(reason);
+		this.reason = reason;
+		this.status = 409;
+	}
+}
+
 const sqliteOperationLabels = new Set([
 	"create_openrsc_player",
 	"delete_openrsc_player",
@@ -638,6 +650,7 @@ function openRscDatabaseUnavailable(error, operation) {
 }
 
 let portalStoreReady = false;
+let startupStore = null;
 if (portalCliArgs.length && !initializeStoreOnly) {
 	console.error("portal_startup_failed", JSON.stringify({ reason: "invalid_arguments" }));
 	process.exit(1);
@@ -655,7 +668,7 @@ if (initializeStoreOnly) {
 	}
 }
 try {
-	await loadStore({ requireCanonical: publicMode });
+	startupStore = await loadStore({ requireCanonical: publicMode });
 	portalStoreReady = true;
 } catch (error) {
 	console.error("portal_store_startup_failed", JSON.stringify({
@@ -669,6 +682,17 @@ if (openRscDbPath) {
 	} catch (_error) {
 		console.error("portal_runtime_dependency_failed", JSON.stringify({
 			reason: "game_definitions_unavailable"
+		}));
+		process.exit(1);
+	}
+	try {
+		const reconciliation = await reconcileOpenRscOwnership(startupStore);
+		if (reconciliation.changed) {
+			await persistStore(startupStore);
+		}
+	} catch (error) {
+		console.error("portal_ownership_reconciliation_failed", JSON.stringify({
+			reason: error instanceof PortalOwnershipError ? error.reason : "reconciliation_unavailable"
 		}));
 		process.exit(1);
 	}
@@ -1103,13 +1127,12 @@ async function handleApi(request, response, url) {
 			if (optionalSession(request, store)) {
 				throw new HttpError(409, "already_signed_in");
 			}
-			assertAccountSignupIpAllowed(store, request);
 			const emailCanonical = canonicalEmail(payload.email || "");
 			if (!emailCanonical) throw new HttpError(400, "invalid_email");
-			if (store.accounts.some((account) => account.emailCanonical === emailCanonical)) {
-				throw new HttpError(409, "account_exists");
-			}
+			const existingAccount = store.accounts.find((account) => account.emailCanonical === emailCanonical) || null;
 			if (emailVerificationRequired) {
+				assertAccountSignupIpAllowed(store, request);
+				if (existingAccount) throw new HttpError(409, "account_exists");
 				if (!emailConfigured()) throw new HttpError(503, "email_verification_not_configured");
 				assertEmailVerificationRequestAllowed(store, emailCanonical, request);
 				const pendingResult = await queuePendingEmailVerificationSignup(store, payload, passwordHash, password, request);
@@ -1131,39 +1154,62 @@ async function handleApi(request, response, url) {
 				};
 			}
 
-			const founder = await reserveFounder(store, payload);
-			const account = {
-				id: nextId(store, "account"),
-				emailCanonical,
-				emailDisplay: String(payload.email || "").trim(),
-				passwordHash,
-				status: "active",
-				communityTermsVersion: currentCommunityTermsVersion,
-				communityTermsAcceptedAt: now(),
-				subscriptionExpiresAt: 0,
-				createdAt: now(),
-				updatedAt: now()
-			};
-			store.accounts.push(account);
-			recordSignupSignals(store, account, request, {
-				emailCanonical,
-				provider: "password"
-			});
+			let account = existingAccount;
+			let founder = account ? findFounderForAccount(store, account) : null;
+			const resuming = Boolean(account)
+				&& launchSignupMode
+				&& isResumableInitialSignup(store, account, payload.username || "")
+				&& await verifyPassword(password, account.passwordHash);
+			if (account && !resuming) {
+				assertAccountSignupIpAllowed(store, request);
+				throw new HttpError(409, "account_exists");
+			}
+			if (!account) {
+				assertAccountSignupIpAllowed(store, request);
+				founder = await reserveFounder(store, payload);
+				account = {
+					id: nextId(store, "account"),
+					emailCanonical,
+					emailDisplay: String(payload.email || "").trim(),
+					passwordHash,
+					status: launchSignupMode ? "provisioning" : "active",
+					communityTermsVersion: currentCommunityTermsVersion,
+					communityTermsAcceptedAt: now(),
+					subscriptionExpiresAt: 0,
+					createdAt: now(),
+					updatedAt: now()
+				};
+				store.accounts.push(account);
+				recordSignupSignals(store, account, request, {
+					emailCanonical,
+					provider: "password"
+				});
+				if (launchSignupMode) {
+					await grantStarterCardIfEligible(store, account, founder, "prelaunch_signup", request, {
+						emailCanonical,
+						provider: "password",
+						signupSignalsRecorded: true
+					});
+				}
+			}
 			if (launchSignupMode) {
-				await createLaunchFirstCharacter(store, account, {
+				const character = await createLaunchFirstCharacter(store, account, {
 					username: founder.username,
 					gamePassword: password
 				}, request);
+				completeOpenRscProvisioningCharacter(character);
+				account.status = "active";
 			} else {
 				const reservedCharacter = createCharacter(store, account.id, founder.username, "warrior");
 				reservedCharacter.source = "founder-reserved";
 				reservedCharacter.status = "Reserved username";
+				await grantStarterCardIfEligible(store, account, founder, "prelaunch_signup", request, {
+					emailCanonical,
+					provider: "password",
+					signupSignalsRecorded: true
+				});
 			}
-			await grantStarterCardIfEligible(store, account, founder, "prelaunch_signup", request, {
-				emailCanonical,
-				provider: "password",
-				signupSignalsRecorded: true
-			});
+			account.updatedAt = now();
 			const token = createSession(store, account.id);
 			const queuedEmail = queueAccountEmail(store, account, signupConfirmationEmailType, {
 				origin: requestPublicOrigin(request)
@@ -1250,19 +1296,28 @@ async function handleApi(request, response, url) {
 		await requireCaptcha(request, payload, "signup");
 		const profile = await googleProfileFromCredential(payload);
 		const result = await updateStore(async (store) => {
-				consumeGoogleNonce(store, payload.nonce || "", request);
-				const wasNewAccount = !findGoogleAccount(store, profile);
-				const account = await upsertGoogleAccount(store, profile, payload, request);
-				recordCommunityTermsAcceptance(account);
-				if (account.status !== "active") throw new HttpError(401, "invalid_account");
-				if (launchSignupMode || payload.gamePassword || payload.characterPassword) {
-					await createLaunchFirstCharacter(store, account, {
-						username: payload.username || payload.reservedUsername || profile.username,
+			consumeGoogleNonce(store, payload.nonce || "", request);
+			const wasNewAccount = !findGoogleAccount(store, profile);
+			const account = await upsertGoogleAccount(store, profile, payload, request);
+			recordCommunityTermsAcceptance(account);
+			const createGameCharacter = Boolean(launchSignupMode || payload.gamePassword || payload.characterPassword);
+			const canResume = account.status === "provisioning"
+				&& isResumableInitialSignup(store, account, payload.username || payload.reservedUsername || profile.username);
+			const completingProvisionedSignup = account.status === "provisioning" && canResume;
+			if (wasNewAccount && createGameCharacter) account.status = "provisioning";
+			if (account.status !== "active" && !wasNewAccount && !canResume) {
+				throw new HttpError(401, "invalid_account");
+			}
+			if (createGameCharacter) {
+				const character = await createLaunchFirstCharacter(store, account, {
+					username: payload.username || payload.reservedUsername || profile.username,
 					gamePassword: payload.gamePassword || payload.characterPassword
 				}, request);
+				completeOpenRscProvisioningCharacter(character);
+				account.status = "active";
 			}
 			const token = createSession(store, account.id);
-			const queuedEmail = wasNewAccount
+			const queuedEmail = wasNewAccount || completingProvisionedSignup
 				? queueAccountEmail(store, account, signupConfirmationEmailType, {
 					origin: requestPublicOrigin(request)
 				})
@@ -1779,14 +1834,26 @@ async function handleApi(request, response, url) {
 	if (method === "POST" && url.pathname === "/api/characters") {
 		const payload = await readJson(request);
 		await requireCaptcha(request, payload, "character");
-		const result = await updateStore(async (store) => {
+		const outcome = await updateStore(async (store) => {
 			const account = requireAccount(request, store);
-			await createAccountCharacter(store, account, payload, request);
+			const character = await createAccountCharacter(store, account, payload, request);
+			const recoveredExistingGame = character._provisioningRecoveredExistingGame === true;
+			completeOpenRscProvisioningCharacter(character);
 			account.updatedAt = now();
-			audit(store, "character_created", { accountId: account.id });
-			return accountState(store, account);
+			audit(store, recoveredExistingGame ? "character_creation_recovered" : "character_created", {
+				accountId: account.id,
+				characterId: character.id,
+				playerId: character.playerId || null
+			});
+			return {
+				recoveredExistingGame,
+				state: await accountState(store, account)
+			};
 		});
-		json(response, 201, result);
+		if (outcome.recoveredExistingGame) {
+			throw new HttpError(409, "character_already_created");
+		}
+		json(response, 201, outcome.state);
 		return;
 	}
 
@@ -2711,50 +2778,67 @@ async function verifyEmailSignupToken(token, request) {
 			pending.updatedAt = now();
 			throw new HttpError(410, "email_verification_expired");
 		}
-		if (store.accounts.some((account) => account.emailCanonical === pending.emailCanonical)) {
+		let account = store.accounts.find((entry) => entry.emailCanonical === pending.emailCanonical) || null;
+		let founder = account ? findFounderForAccount(store, account) : null;
+		const resuming = Boolean(account)
+			&& launchSignupMode
+			&& account.passwordHash === pending.passwordHash
+			&& isResumableInitialSignup(store, account, pending.username);
+		if (account && !resuming) {
 			pending.status = "used";
 			pending.updatedAt = now();
 			throw new HttpError(409, "account_exists");
 		}
-
-		const founder = await reserveFounder(store, {
-			username: pending.username,
-			email: pending.emailDisplay || pending.emailCanonical,
-			referrerCode: pending.referrerCode || ""
-		});
-		const account = {
-			id: nextId(store, "account"),
-			emailCanonical: pending.emailCanonical,
-			emailDisplay: pending.emailDisplay || pending.emailCanonical,
-			passwordHash: pending.passwordHash,
-			status: "active",
-			communityTermsVersion: pending.communityTermsVersion,
-			communityTermsAcceptedAt: pending.communityTermsAcceptedAt,
-			emailVerifiedAt: now(),
-			subscriptionExpiresAt: 0,
-			createdAt: now(),
-			updatedAt: now()
-		};
-		store.accounts.push(account);
-		recordSignupSignals(store, account, request, {
-			emailCanonical: pending.emailCanonical,
-			provider: "password_email_verified"
-		});
+		if (!account) {
+			founder = await reserveFounder(store, {
+				username: pending.username,
+				email: pending.emailDisplay || pending.emailCanonical,
+				referrerCode: pending.referrerCode || ""
+			});
+			account = {
+				id: nextId(store, "account"),
+				emailCanonical: pending.emailCanonical,
+				emailDisplay: pending.emailDisplay || pending.emailCanonical,
+				passwordHash: pending.passwordHash,
+				status: launchSignupMode ? "provisioning" : "active",
+				communityTermsVersion: pending.communityTermsVersion,
+				communityTermsAcceptedAt: pending.communityTermsAcceptedAt,
+				emailVerifiedAt: now(),
+				subscriptionExpiresAt: 0,
+				createdAt: now(),
+				updatedAt: now()
+			};
+			store.accounts.push(account);
+			recordSignupSignals(store, account, request, {
+				emailCanonical: pending.emailCanonical,
+				provider: "password_email_verified"
+			});
+			if (launchSignupMode) {
+				await grantStarterCardIfEligible(store, account, founder, "email_verified_signup", request, {
+					emailCanonical: pending.emailCanonical,
+					provider: "password_email_verified",
+					signupSignalsRecorded: true
+				});
+			}
+		}
 		if (launchSignupMode) {
-			await createLaunchFirstCharacter(store, account, {
+			const character = await createLaunchFirstCharacter(store, account, {
 				username: founder.username,
 				gamePassword: unsealText(pending.gamePasswordSealed || "")
 			}, request);
+			completeOpenRscProvisioningCharacter(character);
+			account.status = "active";
 		} else {
 			const reservedCharacter = createCharacter(store, account.id, founder.username, "warrior");
 			reservedCharacter.source = "founder-reserved";
 			reservedCharacter.status = "Reserved username";
+			await grantStarterCardIfEligible(store, account, founder, "email_verified_signup", request, {
+				emailCanonical: pending.emailCanonical,
+				provider: "password_email_verified",
+				signupSignalsRecorded: true
+			});
 		}
-		await grantStarterCardIfEligible(store, account, founder, "email_verified_signup", request, {
-			emailCanonical: pending.emailCanonical,
-			provider: "password_email_verified",
-			signupSignalsRecorded: true
-		});
+		account.updatedAt = now();
 		const confirmation = queueAccountEmail(store, account, signupConfirmationEmailType, {
 			origin: requestPublicOrigin(request)
 		});
@@ -3197,6 +3281,19 @@ function revokeRecoveryCodes(store, accountId, revokedAt = now(), exceptId = nul
 
 function findFounderForAccount(store, account) {
 	return account ? store.founders.find((entry) => entry.emailCanonical === account.emailCanonical) || null : null;
+}
+
+function isResumableInitialSignup(store, account, requestedUsername) {
+	if (!account || account.status !== "provisioning") return false;
+	const founder = findFounderForAccount(store, account);
+	const normalizedName = normalizeUsername(requestedUsername || (founder && founder.username) || "");
+	if (!founder || !normalizedName || normalizeUsername(founder.username) !== normalizedName) return false;
+	return store.characters.some((character) =>
+		Number(character.accountId) === Number(account.id)
+		&& character.normalizedName === normalizedName
+		&& Boolean(character.initialSignup)
+		&& (isOpenRscProvisioningCharacter(character) || character.source === openRscCreatedSource)
+	);
 }
 
 function findGoogleAccount(store, profile) {
@@ -4753,16 +4850,24 @@ function createCharacter(store, accountId, name, path) {
 
 async function createLaunchFirstCharacter(store, account, payload, request) {
 	const existingCharacters = store.characters.filter((character) => character.accountId === account.id);
-	const linkedCharacter = existingCharacters.find((character) => character.source === "openrsc-sqlite-created");
-	if (linkedCharacter) return linkedCharacter;
+	const provisioningCharacter = existingCharacters.find((character) => isOpenRscProvisioningCharacter(character));
+	const linkedCharacter = existingCharacters.find((character) => character.source === openRscCreatedSource);
+	if (linkedCharacter && !provisioningCharacter) {
+		if (account.status === "provisioning") {
+			const password = launchSignupMode
+				? requireLaunchFirstGamePassword(payload.gamePassword || payload.characterPassword || "")
+				: requireGamePassword(payload.gamePassword || payload.characterPassword || "");
+			await requireMatchingOpenRscGamePassword(store, linkedCharacter, account, password);
+		}
+		return linkedCharacter;
+	}
 	const reservedCharacter = existingCharacters.find((character) => character.source === "founder-reserved");
-	const username = cleanUsername(payload.username || payload.name || (reservedCharacter && reservedCharacter.name) || "");
-	const gamePassword = launchSignupMode
-		? requireLaunchFirstGamePassword(payload.gamePassword || payload.characterPassword || "")
-		: requireGamePassword(payload.gamePassword || payload.characterPassword || "");
+	const username = cleanUsername(payload.username || payload.name
+		|| (provisioningCharacter && provisioningCharacter.name)
+		|| (reservedCharacter && reservedCharacter.name) || "");
 	return await createAccountCharacter(store, account, {
 		name: username,
-		gamePassword
+		gamePassword: payload.gamePassword || payload.characterPassword || ""
 	}, request, { initialSignup: true });
 }
 
@@ -4776,14 +4881,36 @@ async function createAccountCharacter(store, account, payload, request, options 
 		throw new HttpError(409, "username_reserved");
 	}
 	const existingCharacter = store.characters.find((character) => character.normalizedName === normalizedName);
+	const provisioningForAccount = existingCharacter
+		&& existingCharacter.accountId === account.id
+		&& isOpenRscProvisioningCharacter(existingCharacter)
+		? existingCharacter
+		: null;
+	const linkedCreatedForAccount = existingCharacter
+		&& existingCharacter.accountId === account.id
+		&& existingCharacter.source === openRscCreatedSource
+		&& existingCharacter.linkStatus === "linked"
+		&& !Boolean(existingCharacter.initialSignup)
+		&& existingCharacter.provisioningCompletionPending === true
+		? existingCharacter
+		: null;
 	const reservedForAccount = existingCharacter
 		&& existingCharacter.accountId === account.id
 		&& existingCharacter.source === "founder-reserved";
-	if (existingCharacter && !reservedForAccount) {
+	if (linkedCreatedForAccount && !options.initialSignup) {
+		if (!openRscDbPath) throw new HttpError(503, "openrsc_db_not_configured");
+		const gamePlayer = await requireExactProvisionedPlayer(store, linkedCreatedForAccount, account);
+		if (Number(gamePlayer.playerId) !== Number(linkedCreatedForAccount.playerId)) {
+			throw new PortalOwnershipError("provisioning_link_mismatch");
+		}
+		markRecoveredExistingGame(linkedCreatedForAccount);
+		return linkedCreatedForAccount;
+	}
+	if (existingCharacter && !reservedForAccount && !provisioningForAccount) {
 		throw new HttpError(409, "character_name_taken");
 	}
 	const currentCount = store.characters.filter((character) => character.accountId === account.id).length;
-	if (!reservedForAccount && currentCount >= maxCharacters) {
+	if (!reservedForAccount && !provisioningForAccount && currentCount >= maxCharacters) {
 		throw new HttpError(409, "character_limit_reached");
 	}
 
@@ -4817,14 +4944,9 @@ async function createAccountCharacter(store, account, payload, request, options 
 		return createCharacter(store, account.id, username, "warrior");
 	}
 
-	const password = requireGamePassword(payload.gamePassword || payload.characterPassword || "");
-	if (await openRscPlayerExists(normalizedName)) {
+	const existingGamePlayer = await openRscProvisioningPlayer(normalizedName);
+	if (!provisioningForAccount && existingGamePlayer) {
 		throw new HttpError(409, "character_name_taken");
-	}
-	if (options.initialSignup) {
-		assertClientIpNotBlocked(clientAbuseProfile(request));
-	} else {
-		await assertCharacterCreationAllowed(store, account, request);
 	}
 
 	// A new OpenRSC player commits independently of the portal JSON store. Load the
@@ -4832,24 +4954,131 @@ async function createAccountCharacter(store, account, payload, request, options 
 	// a missing or malformed release dependency cannot strand a game-only player.
 	await Promise.all([loadItemDefinitions(), loadTitleDefinitions()]);
 
-	const createdPlayer = await createOpenRscPlayer({
-		accountId: account.id,
-		username,
-		email: account.emailDisplay || account.emailCanonical || "",
-		password,
-		ip: clientIp(request)
-	});
-	const playerId = createdPlayer.playerId;
-	if (createdPlayer.launchCardReserved && !account.launchCardQualifiedAt) {
-		account.launchCardQualifiedAt = new Date(createdPlayer.createdAtMs).toISOString();
+	let provisioning = provisioningForAccount;
+	let recoveredExistingGame = false;
+	if (provisioning && Boolean(provisioning.initialSignup) !== Boolean(options.initialSignup)) {
+		throw new HttpError(409, "character_name_taken");
 	}
-	const snapshot = await openRscCharacterSnapshot(username);
+	if (!provisioning) {
+		const password = options.initialSignup && launchSignupMode
+			? requireLaunchFirstGamePassword(payload.gamePassword || payload.characterPassword || "")
+			: requireGamePassword(payload.gamePassword || payload.characterPassword || "");
+		if (options.initialSignup) {
+			assertClientIpNotBlocked(clientAbuseProfile(request));
+		} else {
+			await assertCharacterCreationAllowed(store, account, request);
+		}
+		provisioning = createOpenRscProvisioningCharacter(store, account, username, {
+			existingCharacter: reservedForAccount ? existingCharacter : null,
+			initialSignup: Boolean(options.initialSignup)
+		});
+		recordCharacterCreationSignal(store, account, 0, username, request, {
+			initialSignup: Boolean(options.initialSignup)
+		});
+		provisioning.creationSignalsRecordedAt = now();
+		// This is the ownership anchor: the account/name/IDs must be durable before
+		// SQLite can independently commit the matching game player.
+		await persistStore(store);
+		await createOpenRscPlayer({
+			accountId: account.id,
+			username,
+			email: account.emailDisplay || account.emailCanonical || "",
+			password,
+			ip: clientIp(request)
+		});
+	} else if (!existingGamePlayer) {
+		const password = options.initialSignup && launchSignupMode
+			? requireLaunchFirstGamePassword(payload.gamePassword || payload.characterPassword || "")
+			: requireGamePassword(payload.gamePassword || payload.characterPassword || "");
+		await createOpenRscPlayer({
+			accountId: account.id,
+			username,
+			email: account.emailDisplay || account.emailCanonical || "",
+			password,
+			ip: clientIp(request)
+		});
+	} else {
+		if (options.initialSignup) {
+			const password = launchSignupMode
+				? requireLaunchFirstGamePassword(payload.gamePassword || payload.characterPassword || "")
+				: requireGamePassword(payload.gamePassword || payload.characterPassword || "");
+			await requireMatchingOpenRscGamePassword(store, provisioning, account, password);
+		} else {
+			await requireExactProvisionedPlayer(store, provisioning, account);
+			recoveredExistingGame = true;
+		}
+	}
+
+	const gamePlayer = await requireExactProvisionedPlayer(store, provisioning, account);
+	const character = await finalizeOpenRscProvisioningCharacter(store, provisioning, account, gamePlayer);
+	if (recoveredExistingGame) markRecoveredExistingGame(character);
+	// The linked character is its own durable phase. Caller-specific work such as
+	// session issuance and email-token consumption remains in the outer transaction.
+	await persistStore(store);
+	return character;
+}
+
+function isOpenRscProvisioningCharacter(character) {
+	return Boolean(character)
+		&& character.source === openRscProvisioningSource
+		&& character.linkStatus === "provisioning"
+		&& !Number(character.playerId);
+}
+
+function createOpenRscProvisioningCharacter(store, account, username, options = {}) {
+	const existing = options.existingCharacter || null;
+	const kit = kits.warrior;
+	const createdAt = existing && existing.createdAt || now();
 	const character = {
-		id: reservedForAccount ? existingCharacter.id : nextId(store, "character"),
+		id: existing ? existing.id : nextId(store, "character"),
 		accountId: account.id,
-		playerId,
+		playerId: null,
+		name: username,
+		normalizedName: normalizeUsername(username),
+		path: kit.path,
+		image: kit.image,
+		combat: kit.combat,
+		total: "34",
+		quest: 0,
+		kills: 0,
+		status: "Creating character",
+		title: "No title equipped",
+		subscription: "Unsubscribed",
+		lastLogin: "New",
+		appearance: kit.appearance,
+		gear: kit.gear.slice(),
+		appearanceData: kit.appearanceData || null,
+		equipment: [],
+		linkStatus: "provisioning",
+		source: openRscProvisioningSource,
+		initialSignup: Boolean(options.initialSignup),
+		createdAt,
+		provisioningStartedAt: now(),
+		updatedAt: now()
+	};
+	if (existing) {
+		const index = store.characters.findIndex((entry) => entry.id === existing.id);
+		store.characters.splice(index, 1, character);
+	} else {
+		store.characters.push(character);
+	}
+	return character;
+}
+
+async function finalizeOpenRscProvisioningCharacter(store, provisioning, account, gamePlayer) {
+	const snapshot = await openRscCharacterSnapshot(provisioning.name);
+	if (Number(snapshot.id) !== Number(gamePlayer.playerId)) {
+		throw new PortalOwnershipError("provisioning_player_mismatch");
+	}
+	if (gamePlayer.launchCardReserved && !account.launchCardQualifiedAt) {
+		account.launchCardQualifiedAt = new Date(gamePlayer.createdAtMs).toISOString();
+	}
+	const character = {
+		id: provisioning.id,
+		accountId: account.id,
+		playerId: gamePlayer.playerId,
 		name: snapshot.name,
-		normalizedName,
+		normalizedName: normalizeUsername(snapshot.name),
 		path: snapshot.path,
 		image: snapshot.image,
 		combat: snapshot.combat,
@@ -4865,21 +5094,32 @@ async function createAccountCharacter(store, account, payload, request, options 
 		appearanceData: snapshot.appearanceData || null,
 		equipment: Array.isArray(snapshot.equipment) ? snapshot.equipment : [],
 		linkStatus: "linked",
-		source: "openrsc-sqlite-created",
-		createdAt: reservedForAccount ? existingCharacter.createdAt : now(),
+		source: openRscCreatedSource,
+		provisioningCompletionPending: true,
+		initialSignup: Boolean(provisioning.initialSignup),
+		createdAt: provisioning.createdAt || now(),
+		provisioningStartedAt: provisioning.provisioningStartedAt || provisioning.createdAt || now(),
 		linkedAt: now(),
 		updatedAt: now()
 	};
-	if (reservedForAccount) {
-		const index = store.characters.findIndex((entry) => entry.id === existingCharacter.id);
-		store.characters.splice(index, 1, character);
-	} else {
-		store.characters.push(character);
-	}
-	recordCharacterCreationSignal(store, account, playerId, snapshot.name, request, {
-		initialSignup: Boolean(options.initialSignup)
-	});
+	const index = store.characters.findIndex((entry) => Number(entry.id) === Number(provisioning.id));
+	if (index < 0) throw new PortalOwnershipError("provisioning_anchor_missing");
+	store.characters.splice(index, 1, character);
 	return character;
+}
+
+function completeOpenRscProvisioningCharacter(character) {
+	if (!character || character.provisioningCompletionPending !== true) return;
+	delete character.provisioningCompletionPending;
+	character.updatedAt = now();
+}
+
+function markRecoveredExistingGame(character) {
+	Object.defineProperty(character, "_provisioningRecoveredExistingGame", {
+		value: true,
+		configurable: true,
+		enumerable: false
+	});
 }
 
 async function deleteAccountCharacter(store, account, characterId) {
@@ -4894,6 +5134,12 @@ async function deleteAccountCharacter(store, account, characterId) {
 	}
 
 	const character = store.characters[index];
+	if (isOpenRscProvisioningCharacter(character)) {
+		// The matching game transaction may already have committed even while this
+		// portal row still has playerId=null. Never discard the durable ownership
+		// anchor; retry/restart reconciliation must resolve it first.
+		throw new HttpError(409, "character_provisioning");
+	}
 	const deleted = {
 		id: character.id,
 		name: character.name,
@@ -6218,6 +6464,9 @@ function startLinkChallenge(store, account, snapshot) {
 		character.accountId === account.id &&
 		(character.playerId === snapshot.id || character.normalizedName === normalizedName)
 	);
+	if (isOpenRscProvisioningCharacter(existingForAccount)) {
+		throw new HttpError(409, "character_provisioning");
+	}
 	const currentCount = store.characters.filter((character) => character.accountId === account.id).length;
 	if (!existingForAccount && currentCount >= maxCharacters) {
 		throw new HttpError(409, "character_limit_reached");
@@ -6344,15 +6593,180 @@ function linkChallengeState(challenge, code) {
 	};
 }
 
-async function openRscPlayerExists(normalizedName) {
-	if (!openRscDbPath) return false;
-	const rows = await sqliteJson(`
-		SELECT id
+async function openRscProvisioningPlayer(normalizedName) {
+	if (!openRscDbPath) return null;
+	const players = await sqliteJson(`
+		SELECT id, username, email, pass, COALESCE(salt, '') AS salt, creation_date
 		FROM players
 		WHERE lower(username) = ${sqlString(normalizedName)}
-		LIMIT 1
+		ORDER BY id
 	`);
-	return rows.length > 0;
+	if (!players.length) return null;
+	const playerIds = Array.from(new Set(players.map((row) => Number(row.id)).filter((id) => id > 0)));
+	if (players.length !== 1 || playerIds.length !== 1) {
+		return { ambiguous: true, playerIds };
+	}
+	const player = players[0];
+	const playerId = Number(player.id);
+	const cacheRows = await sqliteJson(`
+		SELECT dbid, key, value
+		FROM player_cache
+		WHERE playerID = ${playerId}
+		  AND key IN (${sqlString(openRscAccountIdCacheKey)}, 'launch_24h_card')
+		ORDER BY dbid
+	`);
+	return {
+		ambiguous: false,
+		playerId,
+		username: cleanUsername(player.username || ""),
+		normalizedName: normalizeUsername(player.username || ""),
+		emailCanonical: canonicalEmail(player.email || ""),
+		passwordHash: String(player.pass || ""),
+		passwordSalt: String(player.salt || ""),
+		createdAtMs: Number(player.creation_date || 0) * 1000,
+		webAccountMarkers: cacheRows
+			.filter((row) => row.key === openRscAccountIdCacheKey)
+			.map((row) => ({ dbid: Number(row.dbid), value: String(row.value || "") })),
+		launchCardMarkers: cacheRows
+			.filter((row) => row.key === "launch_24h_card")
+			.map((row) => ({ dbid: Number(row.dbid), value: String(row.value || "") })),
+		launchCardReserved: cacheRows.some((row) => row.key === "launch_24h_card")
+	};
+}
+
+async function requireExactProvisionedPlayer(store, provisioning, account) {
+	const player = await openRscProvisioningPlayer(provisioning.normalizedName);
+	const markers = player && Array.isArray(player.webAccountMarkers) ? player.webAccountMarkers : [];
+	const markerAccountId = markers.length === 1 ? Number(markers[0].value) : 0;
+	const accountEmail = canonicalEmail(account && (account.emailCanonical || account.emailDisplay) || "");
+	const duplicatePortalOwner = player && Number(player.playerId) > 0
+		? store.characters.find((character) =>
+			Number(character.id) !== Number(provisioning.id)
+			&& Number(character.playerId) === Number(player.playerId)
+		)
+		: null;
+	if (!player
+		|| player.ambiguous
+		|| player.normalizedName !== provisioning.normalizedName
+		|| markers.length !== 1
+		|| !Number.isSafeInteger(markerAccountId)
+		|| markerAccountId !== Number(account.id)
+		|| (accountEmail && player.emailCanonical !== accountEmail)
+		|| player.launchCardMarkers.length > 1
+		|| duplicatePortalOwner) {
+		throw new PortalOwnershipError("provisioning_link_mismatch");
+	}
+	return player;
+}
+
+async function requireMatchingOpenRscGamePassword(store, character, account, password) {
+	const player = await requireExactProvisionedPlayer(store, character, account);
+	if (Number(character.playerId) > 0 && Number(character.playerId) !== Number(player.playerId)) {
+		throw new PortalOwnershipError("provisioning_link_mismatch");
+	}
+	const matches = await verifyCanonicalGamePassword(password, player.passwordSalt, player.passwordHash);
+	if (!matches) throw new HttpError(409, "game_password_mismatch");
+	return player;
+}
+
+async function reconcileOpenRscOwnership(store) {
+	validatePortalStoreIds(store);
+	let changed = false;
+	const accountsById = new Map(store.accounts.map((account) => [Number(account.id), account]));
+	const provisioningRows = store.characters.filter((character) => isOpenRscProvisioningCharacter(character));
+	const provisioningNames = new Set();
+	for (const provisioning of provisioningRows) {
+		const account = accountsById.get(Number(provisioning.accountId));
+		if (!account || !provisioning.normalizedName || provisioningNames.has(provisioning.normalizedName)) {
+			throw new PortalOwnershipError("provisioning_anchor_invalid");
+		}
+		provisioningNames.add(provisioning.normalizedName);
+		const player = await openRscProvisioningPlayer(provisioning.normalizedName);
+		if (!player) continue;
+		const exactPlayer = await requireExactProvisionedPlayer(store, provisioning, account);
+		await finalizeOpenRscProvisioningCharacter(store, provisioning, account, exactPlayer);
+		changed = true;
+	}
+
+	const markerRows = await sqliteJson(`
+		SELECT pc.playerID, pc.dbid, pc.value, p.username
+		FROM player_cache pc
+		LEFT JOIN players p ON p.id = pc.playerID
+		WHERE pc.key = ${sqlString(openRscAccountIdCacheKey)}
+		ORDER BY pc.playerID, pc.dbid
+	`);
+	const markersByPlayerId = new Map();
+	for (const row of markerRows) {
+		const playerId = Number(row.playerID);
+		if (!Number.isSafeInteger(playerId) || playerId <= 0 || !row.username) {
+			throw new PortalOwnershipError("ownership_marker_orphaned");
+		}
+		const rows = markersByPlayerId.get(playerId) || [];
+		rows.push(row);
+		markersByPlayerId.set(playerId, rows);
+	}
+
+	const linkedByPlayerId = new Map();
+	for (const character of store.characters) {
+		const playerId = Number(character.playerId);
+		if (character.linkStatus !== "linked" || !Number.isSafeInteger(playerId) || playerId <= 0) continue;
+		if (linkedByPlayerId.has(playerId)) {
+			throw new PortalOwnershipError("portal_player_link_duplicated");
+		}
+		linkedByPlayerId.set(playerId, character);
+	}
+
+	for (const [playerId, markers] of markersByPlayerId) {
+		if (markers.length !== 1) throw new PortalOwnershipError("ownership_marker_duplicated");
+		const accountId = Number(markers[0].value);
+		const character = linkedByPlayerId.get(playerId);
+		if (!Number.isSafeInteger(accountId)
+			|| accountId <= 0
+			|| !accountsById.has(accountId)
+			|| !character
+			|| Number(character.accountId) !== accountId
+			|| character.normalizedName !== normalizeUsername(markers[0].username || "")) {
+			throw new PortalOwnershipError("ownership_marker_unexplained");
+		}
+	}
+
+	const linkedPlayerIds = Array.from(linkedByPlayerId.keys());
+	const gamePlayers = linkedPlayerIds.length
+		? await sqliteJson(`
+			SELECT id, username, email
+			FROM players
+			WHERE id IN (${linkedPlayerIds.join(",")})
+			ORDER BY id
+		`)
+		: [];
+	const gamePlayersById = new Map(gamePlayers.map((player) => [Number(player.id), player]));
+	for (const [playerId, character] of linkedByPlayerId) {
+		const player = gamePlayersById.get(playerId);
+		const account = accountsById.get(Number(character.accountId));
+		if (!player || normalizeUsername(player.username || "") !== character.normalizedName) {
+			throw new PortalOwnershipError("portal_player_link_mismatch");
+		}
+		if (character.source === openRscCreatedSource
+			&& canonicalEmail(player.email || "") !== canonicalEmail(account && account.emailCanonical || "")) {
+			throw new PortalOwnershipError("portal_player_link_mismatch");
+		}
+		if (character.source === "openrsc-sqlite-native"
+			&& (!account
+				|| account.source !== "native-client-backfill"
+				|| Number(account.nativePlayerId) !== playerId)) {
+			throw new PortalOwnershipError("portal_player_link_mismatch");
+		}
+		const markers = markersByPlayerId.get(playerId) || [];
+		if (!markers.length && character.source === "openrsc-sqlite-native") {
+			// Native backfill saves its exact portal-side player/name/account evidence
+			// before inserting the game marker. A retry can safely finish that write.
+			continue;
+		}
+		if (markers.length !== 1 || Number(markers[0].value) !== Number(character.accountId)) {
+			throw new PortalOwnershipError("portal_player_link_mismatch");
+		}
+	}
+	return { changed };
 }
 
 async function openRscPlayerOwnerEmail(normalizedName) {
@@ -6392,6 +6806,7 @@ async function backfillNativePortalAccounts(store, options = {}) {
 		ORDER BY dbid
 	`);
 	const webLinks = new Map();
+	const webLinkRows = new Map();
 	const launchCardMarkers = new Map();
 	const playerSubscriptionMarkers = new Map();
 	const accountSubscriptionMarkers = new Map();
@@ -6399,6 +6814,9 @@ async function backfillNativePortalAccounts(store, options = {}) {
 		const playerId = Number(row.playerID);
 		const key = String(row.key || "");
 		if (key === openRscAccountIdCacheKey && playerId > 0) {
+			const rows = webLinkRows.get(playerId) || [];
+			rows.push(row);
+			webLinkRows.set(playerId, rows);
 			const accountId = Number(row.value);
 			if (Number.isInteger(accountId) && accountId > 0) {
 				webLinks.set(playerId, accountId);
@@ -6450,6 +6868,28 @@ async function backfillNativePortalAccounts(store, options = {}) {
 			result.conflicts.push({ playerId, username, reason: "invalid_player_row" });
 			continue;
 		}
+		const playerWebLinkRows = webLinkRows.get(playerId) || [];
+		if (playerWebLinkRows.length > 1) {
+			result.conflicts.push({ playerId, username, reason: "web_account_link_duplicated" });
+			continue;
+		}
+		if (playerWebLinkRows.length === 1 && !webLinks.has(playerId)) {
+			result.conflicts.push({ playerId, username, reason: "web_account_link_invalid" });
+			continue;
+		}
+		const anyProvisioningCharacter = store.characters.find((character) =>
+			isOpenRscProvisioningCharacter(character)
+			&& character.normalizedName === normalizedName
+		) || null;
+		if (anyProvisioningCharacter && !webLinks.has(playerId)) {
+			result.conflicts.push({
+				playerId,
+				username,
+				accountId: Number(anyProvisioningCharacter.accountId),
+				reason: "provisioning_link_mismatch"
+			});
+			continue;
+		}
 
 		let accountId = Number(webLinks.get(playerId) || 0);
 		let account = accountId > 0 ? accountsById.get(accountId) : null;
@@ -6459,6 +6899,44 @@ async function backfillNativePortalAccounts(store, options = {}) {
 		}
 
 		const existingCharacter = charactersByPlayerId.get(playerId);
+		const namedCharacter = accountId > 0
+			? findCharacterByAccountAndName(store, accountId, normalizedName)
+			: null;
+		if (webLinks.has(playerId)) {
+			const exactLinked = existingCharacter
+				&& Number(existingCharacter.accountId) === accountId
+				&& normalizeUsername(existingCharacter.normalizedName || existingCharacter.name || "") === normalizedName
+				&& existingCharacter.linkStatus === "linked";
+			const exactProvisioning = namedCharacter
+				&& isOpenRscProvisioningCharacter(namedCharacter)
+				&& Number(namedCharacter.accountId) === accountId;
+			if (!exactLinked && !exactProvisioning) {
+				result.conflicts.push({
+					playerId,
+					username,
+					accountId,
+					reason: "web_account_link_unexplained"
+				});
+				continue;
+			}
+			if (exactProvisioning) {
+				try {
+					const exactPlayer = await requireExactProvisionedPlayer(store, namedCharacter, account);
+					if (Number(exactPlayer.playerId) !== playerId) {
+						throw new PortalOwnershipError("provisioning_link_mismatch");
+					}
+				} catch (error) {
+					if (!(error instanceof PortalOwnershipError)) throw error;
+					result.conflicts.push({
+						playerId,
+						username,
+						accountId,
+						reason: "provisioning_link_mismatch"
+					});
+					continue;
+				}
+			}
+		}
 		if (!account && existingCharacter) {
 			account = accountsById.get(Number(existingCharacter.accountId)) || null;
 			accountId = account ? Number(account.id) : 0;
@@ -6544,6 +7022,16 @@ async function backfillNativePortalAccounts(store, options = {}) {
 				accountId,
 				characterAccountId: Number(character.accountId),
 				reason: "character_linked_to_different_account"
+			});
+			continue;
+		}
+		if (character && Number(character.playerId) > 0 && Number(character.playerId) !== playerId) {
+			result.conflicts.push({
+				playerId,
+				username,
+				accountId,
+				characterPlayerId: Number(character.playerId),
+				reason: "character_name_linked_to_different_player"
 			});
 			continue;
 		}
@@ -6663,9 +7151,14 @@ function nativeCharacterState(store, player, accountId, existingCharacter) {
 		appearanceData,
 		equipment: [],
 		linkStatus: "linked",
-		source: existingCharacter && existingCharacter.source === "openrsc-sqlite-created"
-			? existingCharacter.source
-			: "openrsc-sqlite-native",
+		source: existingCharacter && [openRscCreatedSource, openRscProvisioningSource].includes(existingCharacter.source)
+			? openRscCreatedSource
+			: existingCharacter && existingCharacter.source === "openrsc-sqlite"
+				? existingCharacter.source
+				: "openrsc-sqlite-native",
+		...(existingCharacter && existingCharacter.source === openRscProvisioningSource
+			? { provisioningCompletionPending: true }
+			: {}),
 		linkedAt: now(),
 		createdAt: existingCharacter && existingCharacter.createdAt || now(),
 		updatedAt: now()
@@ -8756,8 +9249,7 @@ async function updateStore(mutator, options = {}) {
 		const store = await loadStore();
 		recoverInterruptedEmailEvents(store);
 		const result = await mutator(store);
-		await maybePauseTestStoreWrite();
-		await saveStore(store);
+		await persistStore(store);
 		return result;
 	};
 	const next = writeQueue.then(() => options.lockOpenRscWrites
@@ -8767,8 +9259,14 @@ async function updateStore(mutator, options = {}) {
 	return next;
 }
 
-async function maybePauseTestStoreWrite() {
-	if (!testStorePauseMarkerPath) return;
+async function persistStore(store) {
+	await maybePauseTestStoreWrite("before");
+	await saveStore(store);
+	await maybePauseTestStoreWrite("after");
+}
+
+async function maybePauseTestStoreWrite(phase) {
+	if (!testStorePauseMarkerPath || phase !== testStorePausePhase) return;
 	const attempt = ++storePauseAttempts;
 	if (attempt !== testStorePauseAt) return;
 	await mkdir(dirname(testStorePauseMarkerPath), { recursive: true });
@@ -8848,7 +9346,9 @@ async function loadStore({ requireCanonical = publicMode } = {}) {
 		throw new PortalStoreError("store_invalid_json");
 	}
 	validateStoreShape(parsed, { requireCanonical });
-	return normalizeStore(parsed);
+	const normalized = normalizeStore(parsed);
+	validatePortalStoreIds(normalized);
+	return normalized;
 }
 
 async function initializePortalStore() {
@@ -8934,18 +9434,50 @@ function validateStoreShape(store, { requireCanonical = false } = {}) {
 	}
 }
 
+function validatePortalStoreIds(store) {
+	for (const [arrayKey, nextIdKey] of [["accounts", "account"], ["characters", "character"]]) {
+		const seen = new Set();
+		let maximum = 0;
+		for (const entry of store[arrayKey] || []) {
+			const id = Number(entry && entry.id);
+			if (!Number.isSafeInteger(id) || id <= 0 || seen.has(id)) {
+				throw new PortalStoreError("store_invalid_ids");
+			}
+			seen.add(id);
+			maximum = Math.max(maximum, id);
+		}
+		if (!Number.isSafeInteger(store.nextIds[nextIdKey]) || store.nextIds[nextIdKey] <= maximum) {
+			throw new PortalStoreError("store_invalid_ids");
+		}
+	}
+}
+
 async function saveStore(store) {
 	validateStoreShape(store, { requireCanonical: true });
+	validatePortalStoreIds(store);
 	await mkdir(dataDir, { recursive: true, mode: 0o700 });
-	const tmpPath = `${storePath}.${process.pid}.tmp`;
-	await writeFile(tmpPath, `${JSON.stringify(normalizeStore(store), null, 2)}\n`, {
-		encoding: "utf8",
-		flag: "wx",
-		mode: 0o600
-	});
-	await chmod(tmpPath, 0o600);
-	await rename(tmpPath, storePath);
-	await chmod(storePath, 0o600);
+	const tmpPath = `${storePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+	let fileHandle = null;
+	try {
+		fileHandle = await open(tmpPath, "wx", 0o600);
+		await fileHandle.writeFile(`${JSON.stringify(normalizeStore(store), null, 2)}\n`, "utf8");
+		await fileHandle.sync();
+		await fileHandle.close();
+		fileHandle = null;
+		await chmod(tmpPath, 0o600);
+		await rename(tmpPath, storePath);
+		await chmod(storePath, 0o600);
+		const directoryHandle = await open(dataDir, "r");
+		try {
+			await directoryHandle.sync();
+		} finally {
+			await directoryHandle.close();
+		}
+	} catch (error) {
+		if (fileHandle) await fileHandle.close().catch(() => undefined);
+		await unlink(tmpPath).catch(() => undefined);
+		throw error;
+	}
 }
 
 function normalizeStore(store) {
