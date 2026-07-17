@@ -30,7 +30,7 @@ const server = http.createServer(async (request, response) => {
 			ok: true,
 			publicMode: true,
 			launchSignupMode: true,
-			storage: { durable: true, tempDirOverride: false },
+			storage: { durable: true, tempDirOverride: false, storeReady: true },
 			openRscDb: { configured: true },
 			config: {
 				publicReady: true,
@@ -62,6 +62,12 @@ const server = http.createServer(async (request, response) => {
 	}
 	if (url.pathname === "/api/launcher/manifest.properties") {
 		return text(response, 200, launcherManifest(), "text/plain");
+	}
+	if (url.pathname === "/styles.css") {
+		return text(response, 200, "body{}", "text/css");
+	}
+	if (url.pathname === "/assets/favicon.png") {
+		return bytesResponse(request, response, Buffer.from("fixture:favicon"));
 	}
 	if (url.pathname.startsWith("/artifacts/")) {
 		const path = decodeURIComponent(url.pathname.slice("/artifacts/".length));

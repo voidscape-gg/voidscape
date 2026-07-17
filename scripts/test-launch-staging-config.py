@@ -223,6 +223,19 @@ class LaunchStagingConfigTest(unittest.TestCase):
         self.assertIn("portal-state-prelaunch-\\$stamp.json", package)
         self.assertIn("state-pair-prelaunch-\\$stamp.sha256", package)
         self.assertIn("sqlite3 /opt/voidscape/server/inc/sqlite/voidscape.db", package)
+        self.assertIn("check-launch-bundle-hygiene.py", package)
+        self.assertIn('MANIFEST_PENDING="$OUTPUT_DIR/MANIFEST.txt.pending"', package)
+        self.assertIn('mv "$MANIFEST_PENDING" "$OUTPUT_DIR/MANIFEST.txt"', package)
+        self.assertLess(
+            package.index('MANIFEST_PENDING="$OUTPUT_DIR/MANIFEST.txt.pending"'),
+            package.index('python3 "$ROOT/scripts/check-launch-bundle-hygiene.py"'),
+        )
+        self.assertLess(
+            package.index('python3 "$ROOT/scripts/check-launch-bundle-hygiene.py"'),
+            package.index('mv "$MANIFEST_PENDING" "$OUTPUT_DIR/MANIFEST.txt"'),
+        )
+        self.assertIn("cd <synced-bundle-dir>", package)
+        self.assertNotIn("cd $OUTPUT_DIR", package)
         self.assertNotIn(
             "install -m 600 /opt/voidscape/server/inc/sqlite/voidscape.db",
             package,

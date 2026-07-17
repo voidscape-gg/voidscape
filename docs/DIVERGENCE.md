@@ -27,6 +27,22 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-16 - Launch bundles reject local repository residue
+
+The launch packager no longer carries the obsolete empty `.gitsave` placeholder from
+the now-populated SQLite patch directory, and generated deployment instructions use a
+portable `<synced-bundle-dir>` instead of expanding the release machine's checkout
+path. A final package-hygiene gate rejects repository placeholders, symlinks, special
+files, top-level personal macOS/Linux/Windows home paths, and the exact build checkout
+root before a bundle can claim promotability; ZIP/JAR/APK members are decompressed and
+checked for that exact local root without rejecting legitimate third-party build
+provenance. Focused fixtures prove safe URL/third-party strings pass while each local
+residue case fails. This changes release packaging and verification only:
+server/client code, custom world/cache assets, protocol cohort 10139, gameplay,
+schemas, artifact endpoints, and live systems are unchanged. Reversibility is
+restoring the placeholder and machine-specific handoff text, which would reopen the
+false-promotable bundle path caught in rejected held-v13.
+
 ### 2026-07-16 - Android release packages reject cache scratch artifacts
 
 Android cache sync now excludes case-insensitive mutable runtime basenames and the

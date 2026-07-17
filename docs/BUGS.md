@@ -26,8 +26,19 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-096 is verified; release integration continues with a clean
-  held-v13 package build, not another bug-ledger claim.
+- **Active bug:** none — VS-097 is verified; held-v13 remains rejected and release
+  integration continues with a fresh clean successor candidate.
+- **Session preflight 2026-07-16 (VS-097):** branch
+  `codex/release-10139-integration`; VS-096 is committed and verified at `ead5f574`,
+  the worktree is clean, and the canonical fresh held-v13 build succeeds. Exact bundle
+  inspection rejects that candidate: tracked zero-byte
+  `server/database/sqlite/patches/.gitsave` is copied and hashed into the server
+  database tree, while generated `DEPLOYMENT.md` expands the local checkout/output
+  directory to `/Users/s/Desktop/voidscape-github-latest/...`. Both violate the dated
+  launch-readiness bundle-hygiene gate. Scope is the package copy/generation contract,
+  a final fail-closed bundle scan, focused regression coverage, and a fresh successor
+  candidate. V13 remains rejected; no deployment, upload, push, source publication, or
+  live-state change is authorized.
 - **Session preflight 2026-07-16 (VS-096):** branch
   `codex/release-10139-integration`; VS-095 is committed and verified at `ffc035e1`,
   the worktree is clean, and the pre-change `scripts/build.sh` plus full portal API
@@ -194,9 +205,9 @@ to resume from these two files alone. Keep every entry self-contained.
   numeric account ID reusable; a later signup and native backfill can silently transfer
   the stranded character to the wrong email account. V12 remains rejected; no live
   system changed.
-- **Next action:** implement and verify VS-096 as one bounded provisioning/reconciliation
-  fix before building and fully rehearsing held v13. Do not push, publish source, or
-  deploy any game/server/client artifact.
+- **Next action:** commit VS-097, then build and fully rehearse clean held-v14 as the
+  successor to rejected v13. Do not push, publish source, or deploy any
+  game/server/client artifact.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
   approved headless-player feature base is itself untracked or modified, so these
@@ -1102,6 +1113,28 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-097 — Held release bundle includes a repository marker and personal build path (FIXED)
+- Status: verified · Severity: P1 · Area: release packaging / bundle hygiene
+- Root cause: the tracked-tree copier faithfully included the obsolete empty
+  `server/database/sqlite/patches/.gitsave`, while an unquoted deployment-doc heredoc
+  expanded `$OUTPUT_DIR` to the release machine's private checkout path. The packager
+  had no final whole-bundle hygiene gate, so held-v13 still claimed promotability.
+- Fix: the populated patch directory no longer needs its marker, and deployment docs
+  now use `<synced-bundle-dir>`. A final checker rejects `.gitsave`, outer symlinks and
+  special files, top-level personal home paths, and the exact checkout root (including
+  inside compressed ZIP/JAR/APK members). The manifest remains
+  `MANIFEST.txt.pending` through that scan and is atomically renamed only after it
+  passes, before any optional rsync; failure leaves no canonical promotable manifest.
+- Verified 2026-07-16: rejected v13 fails on exactly the marker and checkout path. The
+  focused guard suite covers clean, marker, symlink, special-file, terminal macOS,
+  Linux, mixed-case Windows, file-URI, colon-delimited, safe HTTPS, safe third-party
+  archive, and deflated exact-root cases; all seven launch-config tests and final
+  `scripts/build.sh` pass. The full dirty/reused rehearsal under
+  `tmp/vs097-package-rehearsal-ead5f574d` is correctly non-promotable, contains no
+  marker/path/pending manifest, passes the new complete scan, and retains all 20 real
+  SQLite patches. Independent adversarial review approved the fix. Held-v13 remains
+  rejected; no deployment, upload, push, source publication, or live change occurred.
 
 ### VS-096 — Interrupted portal signup can transfer a character to the next account (FIXED)
 - Status: verified · Severity: P1 · Area: web-portal / account ownership / durability

@@ -1262,7 +1262,7 @@ default; set \`VOIDSCAPE_VERIFY_RUN_SIGNUP=1\` only for an isolated staging DB w
 one real staged account and character should be created:
 
 \`\`\`bash
-cd $OUTPUT_DIR
+cd <synced-bundle-dir>
 VOIDSCAPE_DEPLOYED_SERVER_CONFIG=/path/to/deployed-local.conf \\
 VOIDSCAPE_DEPLOYED_CONNECTIONS_CONFIG=/path/to/deployed-connections.conf \\
   ./VERIFY-STAGING.sh
@@ -1474,7 +1474,8 @@ if find "$OUTPUT_DIR" -type f \( -name '*.password' -o -name '*.provisioned' \) 
 	exit 1
 fi
 
-cat > "$OUTPUT_DIR/MANIFEST.txt" <<EOF
+MANIFEST_PENDING="$OUTPUT_DIR/MANIFEST.txt.pending"
+cat > "$MANIFEST_PENDING" <<EOF
 created_at=$CREATED_AT
 commit=$FULL_COMMIT
 short_commit=$COMMIT
@@ -1524,12 +1525,16 @@ android_endpoint_rewritten=$([[ "$ANDROID_ENDPOINT_REWRITTEN" -eq 1 ]] && echo t
 EOF
 
 if [[ -n "$ANDROID_BUNDLE_APK" && -f "$ANDROID_BUNDLE_APK" ]]; then
-	printf 'android_apk_path=%s\n' "${ANDROID_BUNDLE_APK#$OUTPUT_DIR/}" >> "$OUTPUT_DIR/MANIFEST.txt"
-	printf 'android_apk_sha256=%s\n' "$(sha256_file "$ANDROID_BUNDLE_APK")" >> "$OUTPUT_DIR/MANIFEST.txt"
+	printf 'android_apk_path=%s\n' "${ANDROID_BUNDLE_APK#$OUTPUT_DIR/}" >> "$MANIFEST_PENDING"
+	printf 'android_apk_sha256=%s\n' "$(sha256_file "$ANDROID_BUNDLE_APK")" >> "$MANIFEST_PENDING"
 	if [[ -n "$ANDROID_BUNDLE_META" && -f "$ANDROID_BUNDLE_META" ]]; then
-		printf 'android_apk_metadata_sha256=%s\n' "$(sha256_file "$ANDROID_BUNDLE_META")" >> "$OUTPUT_DIR/MANIFEST.txt"
+		printf 'android_apk_metadata_sha256=%s\n' "$(sha256_file "$ANDROID_BUNDLE_META")" >> "$MANIFEST_PENDING"
 	fi
 fi
+
+python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$OUTPUT_DIR" --forbidden-root "$ROOT"
+mv "$MANIFEST_PENDING" "$OUTPUT_DIR/MANIFEST.txt"
 
 if [[ -n "$RSYNC_TARGET" ]]; then
 	if [[ "$BUNDLE_PROMOTABLE" -ne 1 ]]; then

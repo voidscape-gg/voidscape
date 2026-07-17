@@ -23,6 +23,10 @@ bash -n "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'write_sha256_tree "$OUTPUT_DIR/server/database" "$OUTPUT_DIR/server/database.SHA256"' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'server_database_manifest_sha256=' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'server_database_file_count=' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'check-launch-bundle-hygiene.py' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'MANIFEST_PENDING="$OUTPUT_DIR/MANIFEST.txt.pending"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'mv "$MANIFEST_PENDING" "$OUTPUT_DIR/MANIFEST.txt"' "$ROOT/scripts/package-launch-staging.sh"
+grep -q 'cd <synced-bundle-dir>' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'promotable=$PROMOTABLE_TEXT' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'source_publication_status=publication_pending' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'portal_build_meta_sha256=' "$ROOT/scripts/package-launch-staging.sh"
@@ -53,7 +57,7 @@ fi
 grep -q 'location \^~ /api/admin/' "$ROOT/scripts/package-launch-staging.sh"
 grep -q 'https://voidscape.5.161.114.251.sslip.io/' "$ROOT/scripts/package-launch-staging.sh"
 grep -q '/var/www/html play voidscape' "$ROOT/scripts/package-launch-staging.sh"
-grep -q '/var/lib voidscape-portal' "$ROOT/scripts/package-launch-staging.sh"
+grep -q '/var/lib/voidscape-portal/dev-store.json' "$ROOT/scripts/package-launch-staging.sh"
 grep -q '/etc/voidscape/portal.env' "$ROOT/scripts/package-launch-staging.sh"
 if grep -q '/opt/voidscape/web/play' "$ROOT/scripts/package-launch-staging.sh"; then
 	echo "stale /opt/voidscape/web/play backup path remains" >&2
@@ -118,6 +122,73 @@ expect_fail() {
 		exit 1
 	fi
 }
+
+# Generated bundles must not retain repository placeholders or local-machine paths.
+hygiene_bundle="$TMP_DIR/hygiene-bundle"
+private_checkout="$TMP_DIR/private-checkout"
+mkdir -p "$hygiene_bundle/server/database" "$private_checkout"
+private_checkout="$(cd "$private_checkout" && pwd -P)"
+printf '%s\n' 'cd <synced-bundle-dir>' > "$hygiene_bundle/DEPLOYMENT.md"
+expect_pass hygiene-baseline python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+printf '' > "$hygiene_bundle/server/database/.gitsave"
+expect_fail hygiene-gitsave python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+rm "$hygiene_bundle/server/database/.gitsave"
+ln -s DEPLOYMENT.md "$hygiene_bundle/deployment-link"
+expect_fail hygiene-symlink python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+rm "$hygiene_bundle/deployment-link"
+mkfifo "$hygiene_bundle/runtime-pipe"
+expect_fail hygiene-special-file python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+rm "$hygiene_bundle/runtime-pipe"
+printf '%s\n' 'https://example.com/home/account/settings' \
+	> "$hygiene_bundle/DEPLOYMENT.md"
+expect_pass hygiene-url-path python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+printf '%s' '/Users/release-owner' > "$hygiene_bundle/DEPLOYMENT.md"
+expect_fail hygiene-terminal-personal-path python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+printf '%s\n' 'file:///Users/release-owner/private-checkout' \
+	> "$hygiene_bundle/DEPLOYMENT.md"
+expect_fail hygiene-file-uri-path python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+printf '%s\n' 'path:/home/release-owner/private-checkout' \
+	> "$hygiene_bundle/DEPLOYMENT.md"
+expect_fail hygiene-colon-path python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+printf '%s\n' 'cd /home/release-owner/private-checkout/dist/candidate' \
+	> "$hygiene_bundle/DEPLOYMENT.md"
+expect_fail hygiene-linux-path python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+printf '%s\n' 'C:\uSeRs\release-owner\private-checkout\candidate' \
+	> "$hygiene_bundle/DEPLOYMENT.md"
+expect_fail hygiene-windows-path python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+printf '%s\n' "cd $private_checkout/dist/candidate" \
+	> "$hygiene_bundle/DEPLOYMENT.md"
+expect_fail hygiene-forbidden-root python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+printf '%s\n' 'cd <synced-bundle-dir>' > "$hygiene_bundle/DEPLOYMENT.md"
+python3 - "$hygiene_bundle/safe-third-party.jar" <<'PY'
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED) as archive:
+    archive.writestr("build.txt", "/home/third-party-builder/dependency")
+PY
+expect_pass hygiene-third-party-archive python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
+python3 - "$hygiene_bundle/safe-third-party.jar" "$private_checkout" <<'PY'
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED) as archive:
+    archive.writestr("build.txt", f"{sys.argv[2]}/private-source")
+PY
+expect_fail hygiene-archive-checkout-root python3 "$ROOT/scripts/check-launch-bundle-hygiene.py" \
+	"$hygiene_bundle" --forbidden-root "$private_checkout"
 
 # The release-tree verifier must fail closed on bytes, paths, types, and modes.
 exact_tree="$TMP_DIR/exact-tree"
