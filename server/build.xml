@@ -75,6 +75,7 @@
             <zipgroupfileset dir="${lib}" includes="*.jar"/>
             <manifest>
                 <attribute name="Main-Class" value="com.openrsc.server.Server"/>
+                <attribute name="Multi-Release" value="true"/>
             </manifest>
         </jar>
         <delete dir="${build}"/>

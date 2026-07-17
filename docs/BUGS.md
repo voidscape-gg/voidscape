@@ -26,8 +26,21 @@ to resume from these two files alone. Keep every entry self-contained.
 
 ## Loop state
 
-- **Active bug:** none — VS-097 is verified; held-v13 remains rejected and release
-  integration continues with a fresh clean successor candidate.
+- **Active bug:** none — VS-098 is verified; held-v14 remains rejected and release
+  integration continues with a fresh clean held-v15 successor candidate.
+- **Session preflight 2026-07-16 (VS-098):** branch
+  `codex/release-10139-integration`; held-v14 is clean and locally promotable at
+  `54e58294`, and exact Java 8 server, desktop, web, portal, launcher, Android APK,
+  and Play AAB gates pass. A final direct-package rehearsal on Homebrew OpenJDK
+  `17.0.19` fails before config load with Log4j
+  `UnsupportedOperationException: No class provided`; a standalone logging probe
+  reproduces the same failure. The fat jar contains Log4j's Java-9
+  `META-INF/versions/9` classes but Ant replaces the dependency manifest without
+  retaining `Multi-Release: true`, so Java 9+ loads the Java-8 caller lookup.
+  Adding only that standard manifest attribute to a temporary copy makes the probe
+  pass. Scope is the manifest flag plus a direct-fat-jar JDK17 regression, full build,
+  and fresh held-v15; no gameplay, dependency, live system, upload, deployment, push,
+  or source publication change is authorized.
 - **Session preflight 2026-07-16 (VS-097):** branch
   `codex/release-10139-integration`; VS-096 is committed and verified at `ead5f574`,
   the worktree is clean, and the canonical fresh held-v13 build succeeds. Exact bundle
@@ -205,8 +218,8 @@ to resume from these two files alone. Keep every entry self-contained.
   numeric account ID reusable; a later signup and native backfill can silently transfer
   the stranded character to the wrong email account. V12 remains rejected; no live
   system changed.
-- **Next action:** commit VS-097, then build and fully rehearse clean held-v14 as the
-  successor to rejected v13. Do not push, publish source, or deploy any
+- **Next action:** build and rehearse clean held-v15 as the successor to rejected v14.
+  Do not push, publish source, or deploy any
   game/server/client artifact.
 - **Session preflight 2026-07-14 (VS-081 / VS-013):** branch `main`; the extensive
   pre-existing dirty launch/headless/client/server tree remains uncommitted. The
@@ -1113,6 +1126,31 @@ Wave 2 re-ran S-C/S-D on the fixed decoders and settled the wave-1 artifacts:
 ## Fixed archive
 
 _(entries move here when `verified`; find each fix via its subject — `git log --grep VS-NNN`)_
+
+### VS-098 — Packaged server jar fails at startup on JDK 11+ (FIXED)
+- Status: verified · Severity: P1 · Area: server packaging / runtime compatibility
+- Root cause: Ant flattened Log4j 2.17.0's Java-9
+  `META-INF/versions/9` classes into `server/core.jar` but replaced the dependency's
+  manifest without retaining `Multi-Release: true`. Java 9+ therefore selected the
+  Java-8 `StackLocator`, whose removed caller-class mechanism throws during static
+  logger initialization before server configuration can load.
+- Fix: the executable fat jar now declares its existing multi-release contents. A
+  canonical build guard requires exactly one manifest flag and versioned
+  `StackLocator`, runs a logger probe on JDK 11+ and Java 8 when installed, and runs
+  the executable jar to a deliberate missing-config boundary before any database or
+  listener can open. No dependency, gameplay, protocol, config, schema, or asset
+  changed.
+- Verified 2026-07-16: exact held-v14 fails on OpenJDK `17.0.19` and succeeds on Java
+  8; a disposable manifest-only copy proves causality. The fixed jar passes the
+  focused guard on JDK 17 and JDK 25 plus its Java-8 compatibility probe, and the full
+  `scripts/build.sh` is green. An isolated JDK-17 launch using the reviewed release
+  config and a disposable SQLite clone completed migrations, loaded 1,680 custom
+  landscape regions, 26 Void Enclave scenery locations, seven Void Rifts, all 492
+  plugin handlers, and both loopback listeners. With the harness's required clean
+  owner test account, `tests/smoke.sh` passed all 26 session, movement, dialog,
+  combat, loot, and bank assertions; the database remained integral and every test
+  process/listener was stopped. Independent review approved the one-line packaging
+  fix. No live system, upload, deployment, push, or source publication occurred.
 
 ### VS-097 — Held release bundle includes a repository marker and personal build path (FIXED)
 - Status: verified · Severity: P1 · Area: release packaging / bundle hygiene

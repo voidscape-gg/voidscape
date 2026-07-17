@@ -53,6 +53,8 @@ else
     ant -f Client_Base/build.xml compile
     ant -f PC_Launcher/build.xml compile
 fi
+echo "==> Testing standalone server fat-jar runtime"
+"$SCRIPT_DIR/test-server-fat-jar-runtime.sh"
 echo "==> Testing Void Arena ranked policy"
 "$SCRIPT_DIR/test-void-arena-ranked-policy-java.sh"
 echo "==> Testing Void Arena ranked persistence"

@@ -27,6 +27,22 @@ Keep entries terse. The git log has the details.
 
 ## Changes
 
+### 2026-07-16 - Standalone server jar preserves multi-release logging
+
+The Ant-built executable server jar now declares `Multi-Release: true` because it
+already flattens Log4j 2.17.0's Java-9 implementations into
+`META-INF/versions/9`. Without the dependency's original manifest flag, JDK 11+
+selected Log4j's Java-8 caller lookup and the server failed before configuration
+loading; Java 8 was unaffected. A canonical build guard checks the manifest and
+versioned class, exercises logger initialization on modern Java plus Java 8 when
+available, and launches the executable jar to a deterministic pre-database config
+boundary. Full JDK-17 loopback boot and voidbot smoke cover the packaged runtime.
+This changes server packaging and regression coverage only: dependencies, gameplay,
+protocol cohort 10139, configuration, schemas, clients, and cache assets are
+unchanged. Reversibility is removing the manifest flag and guard only after moving
+to a packaging format that preserves each multi-release dependency's runtime
+contract by another means.
+
 ### 2026-07-16 - Launch bundles reject local repository residue
 
 The launch packager no longer carries the obsolete empty `.gitsave` placeholder from
