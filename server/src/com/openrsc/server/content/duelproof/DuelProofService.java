@@ -56,6 +56,7 @@ public final class DuelProofService {
 		return first != null && second != null
 			&& first.getDuel().getDuelSetting(1) && second.getDuel().getDuelSetting(1)
 			&& !first.getWorld().getServer().getConfig().OPENRSC_CLASSIC_COMBAT_BASELINE
+			&& !first.getWorld().getServer().getConfig().OVERMATCH_COMBAT
 			&& !first.getWorld().getServer().getConfig().OSRS_COMBAT_MELEE;
 	}
 

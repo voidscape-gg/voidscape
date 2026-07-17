@@ -7,6 +7,7 @@ import com.openrsc.server.content.duelproof.DuelProofService;
 import com.openrsc.server.content.duelproof.DuelProofSession;
 import com.openrsc.server.event.rsc.impl.combat.CombatEvent;
 import com.openrsc.server.event.rsc.impl.combat.CombatFormula;
+import com.openrsc.server.event.rsc.impl.combat.OvermatchCombatFormula;
 import com.openrsc.server.external.ItemDefinition;
 import com.openrsc.server.model.PathValidation;
 import com.openrsc.server.model.action.WalkToMobAction;
@@ -353,6 +354,8 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 		second.resetAllExceptDueling();
 		CombatFormula.clearPvpMeleeMomentum(first);
 		CombatFormula.clearPvpMeleeMomentum(second);
+		OvermatchCombatFormula.clearEdge(first);
+		OvermatchCombatFormula.clearEdge(second);
 
 		if (!first.getDuel().checkDuelItems() || !second.getDuel().checkDuelItems()) {
 			first.setSuspiciousPlayer(true, "duel without appropriate items in inventory");

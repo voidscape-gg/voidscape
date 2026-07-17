@@ -363,6 +363,7 @@ public class ServerConfiguration {
 	public boolean RETRO_RANGED_DAMAGE;
 
 	public boolean OPENRSC_CLASSIC_COMBAT_BASELINE;
+	public boolean OVERMATCH_COMBAT;
 	public boolean OSRS_COMBAT_MELEE;
 	public boolean OSRS_COMBAT_RANGED;
 	public boolean SANTA_GIVES_PRESENTS;
@@ -526,6 +527,7 @@ public class ServerConfiguration {
 		RESTRICT_SCENERY_ID = tryReadInt("restrict_scenery_id").orElse(1188);
 		COMBAT_LEVEL_NON_MELEE_MASK = tryReadInt("combat_level_non_melee_mask").orElse(7);
 		OPENRSC_CLASSIC_COMBAT_BASELINE = tryReadBool("openrsc_classic_combat_baseline").orElse(false);
+		OVERMATCH_COMBAT = tryReadBool("overmatch_combat").orElse(false);
 		OSRS_COMBAT_MELEE = tryReadBool("osrs_combat_melee").orElse(false);
 		OSRS_COMBAT_RANGED = tryReadBool("osrs_combat_ranged").orElse(false);
 		SANTA_GIVES_PRESENTS = tryReadBool("santa_gives_presents").orElse(false);
@@ -832,6 +834,14 @@ public class ServerConfiguration {
 
 		// adminIp = Arrays.asList(ADMIN_IP.split(","));
 		validatePaperdollV2EvaluationPolicy();
+		validateCombatFormulaPolicy();
+	}
+
+	private void validateCombatFormulaPolicy() throws IOException {
+		if (OVERMATCH_COMBAT && (OPENRSC_CLASSIC_COMBAT_BASELINE
+			|| OSRS_COMBAT_MELEE || OSRS_COMBAT_RANGED)) {
+			throw new IOException("overmatch_combat cannot be combined with OpenRSC or OSRS combat formula flags");
+		}
 	}
 
 	private void validatePaperdollV2EvaluationPolicy() throws IOException {

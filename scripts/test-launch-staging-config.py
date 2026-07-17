@@ -41,6 +41,7 @@ REVIEWED_VOIDSCAPE_PROFILE = {
     "member_world": "true",
     "milliseconds_between_casts": "1900",
     "more_shafts_per_better_log": "true",
+    "overmatch_combat": "false",
     "perf_telemetry": "true",
     "perf_telemetry_interval_seconds": "30",
     "perf_telemetry_window_ticks": "512",

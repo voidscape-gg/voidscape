@@ -127,6 +127,40 @@ class Ruleset:
     npc_vs_player_bonus_cap: int = 0
     npc_vs_player_physical_accuracy_multiplier: float = 1.0
     npc_physical_defence_against_players_multiplier: float = 1.0
+    # --- Overmatch (opposed-margin) model. All *_num knobs are fixed-point
+    # numerators over OM_DENOM so the Java port can replay bit-for-bit.
+    model: str = "classic"
+    # Universal tier thresholds: T1 = max(t_glance*GS, t1_floor*AS),
+    # T2 = max(min(t_crit*GS, pvp_cap*AS), t2_floor*AS). The self-anchored
+    # floors mean a clean strike always requires rolling near your OWN
+    # ceiling (fixes crit-spam against low-guard targets in both directions);
+    # the guard terms mean armour keeps raising the bar beyond that.
+    om_t_glance_num: int = 205            # 0.200: glance/solid threshold, fraction of defender GS
+    om_t1_as_floor_num: int = 256         # 0.250: glance/solid floor, fraction of the attacker's own AS
+    om_t_crit_num: int = 614              # 0.600: melee crit threshold, fraction of defender GS
+    om_t_crit_ranged_num: int = 717       # 0.700: ranged crit threshold, fraction of defender GS
+    om_t2_as_floor_num: int = 614         # 0.600: crit floor, fraction of the attacker's own AS
+    om_t_crit_as_cap_num: int = 870       # 0.850: PvP-only cap, T2 <= cap * AS (keeps pures crit-capable)
+    om_t_crit_magic_num: int = 717        # 0.700: magic crit threshold (fraction of magic guard score)
+    om_glance_lo_num: int = 51            # damage bands as 1024ths of the channel max hit;
+    om_glance_hi_num: int = 307           #   damage = (draw + 512) >> 10, so fractional bands
+    om_solid_lo_num: int = 410            #   round to nearest and trash-tier hits keep classic pacing
+    om_solid_hi_num: int = 768
+    om_crit_lo_num: int = 870
+    om_crit_hi_num: int = 1178            # crits may exceed the classic max hit by ~15%
+    om_edge_frac_num: int = 307           # 0.300: attack-die bonus from spending an Edge stack (fraction of target GS)
+    om_riposte_frac_num: int = 922        # 0.900: defensive win margin (fraction of attacker AS) that earns Edge
+    om_npc_acc_floor: int = 15            # split NPC offence floors (both 15 == live single floor)
+    om_npc_power_floor: int = 15
+    om_magic_armour_frac_num: int = 123   # 0.120: armour weight in the magic guard score
+    om_magic_bonus_weight: int = 8        # magic equipment bonus -> caster score points
+    om_magic_graze_hi_num: int = 358      # 0.350: top of the magic graze band (fraction of spell power)
+    om_stall_decay_start_ticks: int = 0   # 0 = anti-stall reserve lever disabled
+    om_stall_decay_interval_ticks: int = 12
+    om_stall_decay_num: int = 51          # threshold decay per interval (fraction of GS-scale thresholds)
+
+
+OM_DENOM = 1024
 
 
 RULESETS: Dict[str, Ruleset] = {
@@ -146,6 +180,17 @@ RULESETS: Dict[str, Ruleset] = {
         npc_vs_player_physical_accuracy_multiplier=1.10,
         npc_physical_defence_against_players_multiplier=1.10,
     ),
+    "overmatch": Ruleset(
+        name="overmatch",
+        model="overmatch",
+        armour_accuracy_scale=0.60,
+        magic_player_damage_scale=0.92,
+        npc_vs_player_bonus_start=40,
+        npc_vs_player_bonus_levels_per_point=8,
+        npc_vs_player_bonus_cap=12,
+        npc_vs_player_physical_accuracy_multiplier=1.10,
+        npc_physical_defence_against_players_multiplier=1.10,
+    ),
 }
 
 
@@ -157,6 +202,7 @@ class RollSummary:
     max_hit: int
     average_on_hit: float
     average_per_attempt: float
+    tiers: Optional[Dict[str, Dict[str, float]]] = None
 
 
 def style_bonus(mob: Combatant, skill: str) -> int:
@@ -297,6 +343,16 @@ def expected_damage(max_roll: int) -> Tuple[int, float]:
 
 
 def summarize_melee(attacker: Combatant, defender: Combatant, rules: Ruleset) -> RollSummary:
+    if rules.model == "overmatch":
+        return om_summarize_physical(
+            attacker,
+            defender,
+            om_melee_attack_score(attacker, defender, rules),
+            om_guard_score(attacker, defender, rules),
+            om_melee_max_hit(attacker, defender, rules),
+            "melee",
+            rules,
+        )
     attack_roll = melee_accuracy(attacker, defender, rules)
     defence_roll = physical_defence(attacker, defender, rules)
     chance = hit_chance(attack_roll, defence_roll)
@@ -319,6 +375,16 @@ def summarize_melee(attacker: Combatant, defender: Combatant, rules: Ruleset) ->
 
 
 def summarize_ranged(attacker: Combatant, defender: Combatant, setup: RangedSetup, rules: Ruleset) -> RollSummary:
+    if rules.model == "overmatch":
+        return om_summarize_physical(
+            attacker,
+            defender,
+            om_ranged_attack_score(attacker, defender, setup, rules),
+            om_guard_score(attacker, defender, rules),
+            om_ranged_max_hit(attacker, setup),
+            "ranged",
+            rules,
+        )
     attack_roll = ranged_accuracy(attacker, defender, setup, rules)
     defence_roll = physical_defence(attacker, defender, rules)
     chance = hit_chance(attack_roll, defence_roll)
@@ -430,6 +496,328 @@ def roll_magic_damage(caster: Combatant, defender: Combatant, spell: MagicSetup,
     return mitigate_magic_damage(rng.randrange(math.floor(spell.spell_power) + 1), defender, rules)
 
 
+# --------------------------------------------------------------------------
+# Overmatch (opposed-margin) model
+#
+# One swing: the attacker draws A ~ U[0, AS), the defender draws D ~ U[0, GS).
+# The margin M = A - D alone decides the outcome tier:
+#   M <= 0        miss
+#   0 < M < T1    glance
+#   T1 <= M < T2  solid
+#   M >= T2       critical (may exceed the classic max hit)
+# Damage is then drawn uniformly from the tier's disjoint band of the channel
+# max hit. Edge (the KO-window state) is derived deterministically from the
+# two dice: a critical earns the attacker one stack against that target; an
+# overwhelming defensive win (D - A >= riposte_frac * AS) earns the defender
+# one. Spending a stack adds edge_frac * GS_target to the next attack die.
+# All thresholds/bands are fixed-point numerators over OM_DENOM (1024).
+# --------------------------------------------------------------------------
+
+OM_MISS = "miss"
+OM_GLANCE = "glance"
+OM_SOLID = "solid"
+OM_CRIT = "critical"
+
+
+def om_pairs_ge(attack_score: int, guard_score: int, threshold: int) -> int:
+    """Count pairs (a, d), a in [0, AS), d in [0, GS), with a - d >= threshold."""
+    if attack_score <= 0 or guard_score <= 0:
+        return 0
+    total = 0
+    # Per attack die a, qualifying defence dice count is clamp(a - t + 1, 0, GS).
+    ramp_start = max(0, threshold)
+    ramp_end = min(attack_score - 1, threshold + guard_score - 1)
+    if ramp_end >= ramp_start:
+        first = ramp_start - threshold + 1
+        last = ramp_end - threshold + 1
+        total += (first + last) * (ramp_end - ramp_start + 1) // 2
+    flat_start = max(0, threshold + guard_score)
+    if flat_start <= attack_score - 1:
+        total += (attack_score - flat_start) * guard_score
+    return total
+
+
+def om_p_margin_ge(attack_score: int, guard_score: int, threshold: int) -> float:
+    if attack_score <= 0 or guard_score <= 0:
+        return 0.0
+    return om_pairs_ge(attack_score, guard_score, threshold) / (attack_score * guard_score)
+
+
+def om_npc_level(attacker: Combatant, defender: Combatant, skill_level: int, floor_value: int, rules: Ruleset) -> int:
+    """Live NPC-vs-player offence shaping with split accuracy/power floors."""
+    if attacker.is_player or not defender.is_player:
+        return skill_level
+    effective = max(skill_level, floor_value)
+    if rules.npc_vs_player_bonus_cap <= 0 or rules.npc_vs_player_bonus_start <= 0:
+        return effective
+    offense_level = max(attacker.attack, attacker.strength)
+    if offense_level < rules.npc_vs_player_bonus_start:
+        return effective
+    levels_per_point = max(1, rules.npc_vs_player_bonus_levels_per_point)
+    bonus = ((offense_level - rules.npc_vs_player_bonus_start) // levels_per_point) + 1
+    return effective + min(rules.npc_vs_player_bonus_cap, bonus)
+
+
+def om_guard_multiplier(defender: Combatant, rules: Ruleset) -> int:
+    return 64 + math.floor(defender.armour * rules.armour_accuracy_scale)
+
+
+def om_melee_attack_score(attacker: Combatant, defender: Combatant, rules: Ruleset) -> int:
+    attack_level = om_npc_level(attacker, defender, attacker.attack, rules.om_npc_acc_floor, rules)
+    effective = (
+        math.floor(attack_level * attacker.attack_prayer)
+        + attacker.player_bonus
+        + style_bonus(attacker, SKILL_ATTACK)
+    )
+    score = effective * (attacker.weapon_aim + 64)
+    if not attacker.is_player and defender.is_player:
+        score = math.floor(score * rules.npc_vs_player_physical_accuracy_multiplier)
+    return max(1, score)  # scores are floored at 1: zero-stat NPCs exist in NpcDefs
+
+
+def om_guard_score(attacker: Combatant, defender: Combatant, rules: Ruleset) -> int:
+    effective = (
+        math.floor(defender.defense * defender.defense_prayer)
+        + defender.player_bonus
+        + style_bonus(defender, SKILL_DEFENSE)
+    )
+    score = effective * om_guard_multiplier(defender, rules)
+    if attacker.is_player and not defender.is_player:
+        score = math.floor(score * rules.npc_physical_defence_against_players_multiplier)
+    return max(1, score)
+
+
+def om_melee_max_hit(attacker: Combatant, defender: Combatant, rules: Ruleset) -> int:
+    strength_level = om_npc_level(attacker, defender, attacker.strength, rules.om_npc_power_floor, rules)
+    effective = (
+        math.floor(strength_level * attacker.strength_prayer)
+        + attacker.player_bonus
+        + style_bonus(attacker, SKILL_STRENGTH)
+    )
+    return max(1, effective * (attacker.weapon_power + 64) // 640)
+
+
+def om_ranged_attack_score(attacker: Combatant, defender: Combatant, setup: RangedSetup, rules: Ruleset) -> int:
+    score = (attacker.ranged + attacker.player_bonus) * (setup.bow_aim + 1 + 64)
+    if not attacker.is_player and defender.is_player:
+        score = math.floor(score * rules.npc_vs_player_physical_accuracy_multiplier)
+    return max(1, score)
+
+
+def om_ranged_max_hit(attacker: Combatant, setup: RangedSetup) -> int:
+    return max(1, (attacker.ranged + attacker.player_bonus) * (setup.ammo_power + 1 + 64) // 640)
+
+
+def om_thresholds(attacker: Combatant, defender: Combatant, attack_score: int, guard_score: int,
+                  channel: str, rules: Ruleset, lock_ticks: int = 0) -> Tuple[int, int]:
+    t1 = max(
+        rules.om_t_glance_num * guard_score // OM_DENOM,
+        rules.om_t1_as_floor_num * attack_score // OM_DENOM,
+    )
+    crit_num = rules.om_t_crit_ranged_num if channel == "ranged" else rules.om_t_crit_num
+    t2 = crit_num * guard_score // OM_DENOM
+    if attacker.is_player and defender.is_player:
+        t2 = min(t2, rules.om_t_crit_as_cap_num * attack_score // OM_DENOM)
+    t2 = max(t2, rules.om_t2_as_floor_num * attack_score // OM_DENOM)
+    if rules.om_stall_decay_start_ticks > 0 and lock_ticks >= rules.om_stall_decay_start_ticks:
+        steps = 1 + (lock_ticks - rules.om_stall_decay_start_ticks) // max(1, rules.om_stall_decay_interval_ticks)
+        decay = steps * rules.om_stall_decay_num * guard_score // OM_DENOM
+        t1 = max(0, t1 - decay)
+        t2 = max(0, t2 - decay)
+    t2 = max(t2, t1)
+    return t1, t2
+
+
+def om_band(tier: str, max_hit: int, rules: Ruleset) -> Tuple[int, int]:
+    """Damage band in 1024ths of the max hit. Final damage is (draw + 512) >> 10,
+    so fractional band edges round to nearest and expectation is preserved at
+    every scale — a max-hit-1 fighter still lands plenty of 0s, like classic."""
+    if tier == OM_GLANCE:
+        lo_num, hi_num = rules.om_glance_lo_num, rules.om_glance_hi_num
+    elif tier == OM_SOLID:
+        lo_num, hi_num = rules.om_solid_lo_num, rules.om_solid_hi_num
+    else:
+        lo_num, hi_num = rules.om_crit_lo_num, rules.om_crit_hi_num
+    return lo_num * max_hit, hi_num * max_hit
+
+
+def om_quantize(value: int) -> int:
+    return (value + 512) >> 10
+
+
+def om_band_stats(lo: int, hi: int) -> Tuple[int, int, float]:
+    """Exact (min, max, mean) of om_quantize over the inclusive draw range."""
+    total = 0
+    count = hi - lo + 1
+    for bucket in range(om_quantize(lo), om_quantize(hi) + 1):
+        bucket_lo = max(lo, bucket * 1024 - 512)
+        bucket_hi = min(hi, bucket * 1024 + 511)
+        if bucket_hi >= bucket_lo:
+            total += bucket * (bucket_hi - bucket_lo + 1)
+    return om_quantize(lo), om_quantize(hi), total / count
+
+
+def om_tier_for_margin(margin: int, t1: int, t2: int) -> str:
+    if margin <= 0:
+        return OM_MISS
+    if margin < t1:
+        return OM_GLANCE
+    if margin < t2:
+        return OM_SOLID
+    return OM_CRIT
+
+
+def om_tier_probabilities(attack_score: int, guard_score: int, t1: int, t2: int) -> Dict[str, float]:
+    p_ge_1 = om_p_margin_ge(attack_score, guard_score, 1)
+    t1_eff = max(t1, 1)
+    t2_eff = max(t2, t1_eff)
+    p_ge_t1 = om_p_margin_ge(attack_score, guard_score, t1_eff)
+    p_ge_t2 = om_p_margin_ge(attack_score, guard_score, t2_eff)
+    return {
+        OM_MISS: 1.0 - p_ge_1,
+        OM_GLANCE: p_ge_1 - p_ge_t1,
+        OM_SOLID: p_ge_t1 - p_ge_t2,
+        OM_CRIT: p_ge_t2,
+    }
+
+
+def om_summarize_physical(attacker: Combatant, defender: Combatant, attack_score: int, guard_score: int,
+                          max_hit: int, channel: str, rules: Ruleset) -> RollSummary:
+    t1, t2 = om_thresholds(attacker, defender, attack_score, guard_score, channel, rules)
+    probs = om_tier_probabilities(attack_score, guard_score, t1, t2)
+    hit_prob = 1.0 - probs[OM_MISS]
+    tier_stats: Dict[str, Dict[str, float]] = {}
+    avg_damage = 0.0
+    top_hit = 0
+    for tier in (OM_GLANCE, OM_SOLID, OM_CRIT):
+        lo, hi = om_band(tier, max_hit, rules)
+        dmg_lo, dmg_hi, mean = om_band_stats(lo, hi)
+        tier_stats[tier] = {"chance": probs[tier], "lo": dmg_lo, "hi": dmg_hi}
+        avg_damage += probs[tier] * mean
+        if probs[tier] > 0.0:
+            top_hit = max(top_hit, dmg_hi)
+    return RollSummary(
+        attack_roll=attack_score,
+        defence_roll=guard_score,
+        hit_chance=hit_prob,
+        max_hit=top_hit,
+        average_on_hit=(avg_damage / hit_prob) if hit_prob > 0 else 0.0,
+        average_per_attempt=avg_damage,
+        tiers=tier_stats,
+    )
+
+
+def om_roll_melee(
+    attacker: Combatant,
+    defender: Combatant,
+    rng: random.Random,
+    rules: Ruleset,
+    has_edge: bool,
+    lock_ticks: int = 0,
+) -> Tuple[int, str, bool]:
+    """Resolve one melee swing. Returns (damage, tier, defender_riposte)."""
+    attack_score = om_melee_attack_score(attacker, defender, rules)
+    guard_score = om_guard_score(attacker, defender, rules)
+    max_hit = om_melee_max_hit(attacker, defender, rules)
+    t1, t2 = om_thresholds(attacker, defender, attack_score, guard_score, "melee", rules, lock_ticks)
+    edge_bonus = rules.om_edge_frac_num * guard_score // OM_DENOM if has_edge else 0
+
+    attack_die = rng.randrange(attack_score) + edge_bonus          # draw 1 (+ consumed Edge)
+    guard_die = rng.randrange(guard_score)                          # draw 2
+    tier = om_tier_for_margin(attack_die - guard_die, t1, t2)
+
+    if tier == OM_MISS and attacker.is_player and attacker.attack_cape and rng.randint(1, 99) <= 35:
+        attack_die = rng.randrange(attack_score) + edge_bonus       # draw 1b: one bounded redraw
+        tier = om_tier_for_margin(attack_die - guard_die, t1, t2)
+
+    riposte_threshold = rules.om_riposte_frac_num * attack_score // OM_DENOM
+    riposte = (guard_die - attack_die) >= riposte_threshold
+
+    if tier == OM_MISS:
+        return 0, tier, riposte
+
+    lo, hi = om_band(tier, max_hit, rules)
+    damage = om_quantize(rng.randint(lo, hi))                       # draw 3
+
+    if attacker.is_player and attacker.strength_cape and tier in (OM_SOLID, OM_CRIT) and rng.randint(1, 99) <= 35:
+        damage += damage * 205 // OM_DENOM
+    if defender.is_player and defender.defense_cape and damage > 0 and rng.randint(1, 99) <= 35:
+        damage //= 2
+
+    return damage, tier, riposte
+
+
+def om_roll_ranged(
+    attacker: Combatant,
+    defender: Combatant,
+    setup: RangedSetup,
+    rng: random.Random,
+    rules: Ruleset,
+) -> int:
+    attack_score = om_ranged_attack_score(attacker, defender, setup, rules)
+    guard_score = om_guard_score(attacker, defender, rules)
+    max_hit = om_ranged_max_hit(attacker, setup)
+    t1, t2 = om_thresholds(attacker, defender, attack_score, guard_score, "ranged", rules)
+    tier = om_tier_for_margin(rng.randrange(attack_score) - rng.randrange(guard_score), t1, t2)
+    if tier == OM_MISS:
+        return 0
+    lo, hi = om_band(tier, max_hit, rules)
+    return om_quantize(rng.randint(lo, hi))
+
+
+def om_magic_scores(caster: Combatant, defender: Combatant, rules: Ruleset) -> Tuple[int, int]:
+    caster_score = (caster.magic + caster.player_bonus) * (64 + caster.magic_bonus * rules.om_magic_bonus_weight)
+    defence_effective = (
+        math.floor(defender.defense * defender.defense_prayer)
+        + defender.player_bonus
+        + style_bonus(defender, SKILL_DEFENSE)
+    )
+    guard_score = defence_effective * (64 + defender.armour * rules.om_magic_armour_frac_num // OM_DENOM)
+    return max(1, caster_score), max(1, guard_score)
+
+
+def om_magic_band(tier: str, spell_power: int, rules: Ruleset) -> Tuple[int, int]:
+    """Magic band in 1024ths of spell power (quantized like physical bands)."""
+    if tier == OM_GLANCE:
+        return 0, rules.om_magic_graze_hi_num * spell_power
+    if tier == OM_SOLID:
+        return rules.om_solid_lo_num * spell_power, rules.om_solid_hi_num * spell_power
+    return rules.om_crit_lo_num * spell_power, rules.om_crit_hi_num * spell_power
+
+
+def om_magic_tier_probabilities(caster_score: int, guard_score: int, t1: int, t2: int) -> Dict[str, float]:
+    """Magic has no miss tier: everything below T1 (including negative margins) is a graze."""
+    t1_eff = max(t1, 1)
+    t2_eff = max(t2, t1_eff)
+    p_ge_t1 = om_p_margin_ge(caster_score, guard_score, t1_eff)
+    p_ge_t2 = om_p_margin_ge(caster_score, guard_score, t2_eff)
+    return {
+        OM_GLANCE: 1.0 - p_ge_t1,
+        OM_SOLID: p_ge_t1 - p_ge_t2,
+        OM_CRIT: p_ge_t2,
+    }
+
+
+def om_roll_magic(caster: Combatant, defender: Combatant, spell: MagicSetup, rng: random.Random, rules: Ruleset) -> int:
+    if rng.random() > spell_success_chance(caster, spell):          # draw 0: unchanged cast gate
+        return 0
+    caster_score, guard_score = om_magic_scores(caster, defender, rules)
+    t1 = rules.om_t_glance_num * guard_score // OM_DENOM
+    t2 = rules.om_t_crit_magic_num * guard_score // OM_DENOM
+    margin = rng.randrange(caster_score) - rng.randrange(guard_score)   # draws 1, 2
+    if margin >= max(t2, max(t1, 1)):
+        tier = OM_CRIT
+    elif margin >= max(t1, 1):
+        tier = OM_SOLID
+    else:
+        tier = OM_GLANCE
+    lo, hi = om_magic_band(tier, math.floor(spell.spell_power), rules)
+    damage = om_quantize(rng.randint(lo, hi))                       # draw 3
+    if damage > 0 and defender.is_player and rules.magic_player_damage_scale < 1.0:
+        damage = max(1, math.floor(damage * rules.magic_player_damage_scale))
+    return damage
+
+
 def cadence_delay(cadence: str, round_number: int) -> int:
     if cadence in {"pvp-2-2", "duel-2-2", "npc-attacks-player"}:
         return 2
@@ -458,6 +846,7 @@ def simulate_melee_fight(
         total_damage = [0, 0]
         swings = [0, 0]
         momentum = [False, False]
+        edge = [False, False]
         tick = 0
         round_number = 0
         is_pvp_melee = scenario.attacker.is_player and scenario.defender.is_player
@@ -468,10 +857,20 @@ def simulate_melee_fight(
             source = scenario.attacker if source_index == 0 else scenario.defender
             target = scenario.defender if target_index == 1 else scenario.attacker
 
-            has_momentum = rules.pvp_melee_momentum and is_pvp_melee and momentum[source_index]
-            damage, did_hit = roll_melee_damage(source, target, rng, rules, has_momentum=has_momentum)
-            if rules.pvp_melee_momentum and is_pvp_melee:
-                momentum[source_index] = did_hit and is_big_pvp_melee_hit(source, target, damage, rules)
+            if rules.model == "overmatch":
+                damage, tier, riposte = om_roll_melee(
+                    source, target, rng, rules, has_edge=edge[source_index], lock_ticks=tick
+                )
+                # Edge (the KO window) is only earned against player targets:
+                # crits vs NPCs stay dramatic but do not chain into windows.
+                edge[source_index] = tier == OM_CRIT and target.is_player
+                if riposte and source.is_player:
+                    edge[target_index] = True
+            else:
+                has_momentum = rules.pvp_melee_momentum and is_pvp_melee and momentum[source_index]
+                damage, did_hit = roll_melee_damage(source, target, rng, rules, has_momentum=has_momentum)
+                if rules.pvp_melee_momentum and is_pvp_melee:
+                    momentum[source_index] = did_hit and is_big_pvp_melee_hit(source, target, damage, rules)
             damage = min(damage, hp[target_index])
             hp[target_index] -= damage
             total_damage[source_index] += damage
@@ -523,10 +922,16 @@ def simulate_projectile_to_kill(
         for attempt in range(1, max_attempts + 1):
             if scenario.mode == "ranged":
                 assert scenario.ranged is not None
-                damage = roll_ranged_damage(scenario.attacker, scenario.defender, scenario.ranged, rng, rules)
+                if rules.model == "overmatch":
+                    damage = om_roll_ranged(scenario.attacker, scenario.defender, scenario.ranged, rng, rules)
+                else:
+                    damage = roll_ranged_damage(scenario.attacker, scenario.defender, scenario.ranged, rng, rules)
             elif scenario.mode == "magic":
                 assert scenario.magic is not None
-                damage = roll_magic_damage(scenario.attacker, scenario.defender, scenario.magic, rng, rules)
+                if rules.model == "overmatch":
+                    damage = om_roll_magic(scenario.attacker, scenario.defender, scenario.magic, rng, rules)
+                else:
+                    damage = roll_magic_damage(scenario.attacker, scenario.defender, scenario.magic, rng, rules)
             else:
                 raise ValueError(f"Unsupported projectile mode: {scenario.mode}")
             damage = min(damage, hp)
@@ -883,6 +1288,15 @@ def load_scenarios(path: Path) -> Dict[str, Scenario]:
     return {scenario.name: scenario for scenario in scenarios}
 
 
+def roll_summary_dict(summary: RollSummary) -> Dict:
+    """Serialize a RollSummary, omitting the tiers key for classic rulesets so
+    baseline JSON output stays schema-identical to the pre-overmatch tool."""
+    data = asdict(summary)
+    if data.get("tiers") is None:
+        data.pop("tiers", None)
+    return data
+
+
 def scenario_result(scenario: Scenario, trials: int, seed: int, max_ticks: int, rules: Ruleset) -> Dict:
     result = {
         "name": scenario.name,
@@ -900,34 +1314,71 @@ def scenario_result(scenario: Scenario, trials: int, seed: int, max_ticks: int, 
         )
         result["pvp_melee_momentum_big_hit_ratio"] = rules.pvp_melee_momentum_big_hit_ratio
         result["cadence"] = scenario.cadence
-        result["attacker_roll"] = asdict(summarize_melee(scenario.attacker, scenario.defender, rules))
-        result["defender_roll"] = asdict(summarize_melee(scenario.defender, scenario.attacker, rules))
+        result["attacker_roll"] = roll_summary_dict(summarize_melee(scenario.attacker, scenario.defender, rules))
+        result["defender_roll"] = roll_summary_dict(summarize_melee(scenario.defender, scenario.attacker, rules))
         result["simulation"] = simulate_melee_fight(scenario, trials, seed, max_ticks, rules)
     elif scenario.mode == "ranged":
         if scenario.ranged is None:
             raise ValueError(f"Scenario {scenario.name} needs a ranged setup")
         summary = summarize_ranged(scenario.attacker, scenario.defender, scenario.ranged, rules)
         result["ranged"] = asdict(scenario.ranged)
-        result["attacker_roll"] = asdict(summary)
+        result["attacker_roll"] = roll_summary_dict(summary)
         result["projectile_kill"] = simulate_projectile_to_kill(scenario, trials, seed, 10000, rules)
     elif scenario.mode == "magic":
         if scenario.magic is None:
             raise ValueError(f"Scenario {scenario.name} needs a magic setup")
         success = spell_success_chance(scenario.attacker, scenario.magic)
-        max_hit = math.floor(scenario.magic.spell_power)
-        damage_values = [
-            mitigate_magic_damage(damage, scenario.defender, rules)
-            for damage in range(max_hit + 1)
-        ]
-        max_hit = max(damage_values)
-        avg_on_success = statistics.fmean(damage_values)
+        if rules.model == "overmatch":
+            caster_score, guard_score = om_magic_scores(scenario.attacker, scenario.defender, rules)
+            t1 = rules.om_t_glance_num * guard_score // OM_DENOM
+            t2 = rules.om_t_crit_magic_num * guard_score // OM_DENOM
+            probs = om_magic_tier_probabilities(caster_score, guard_score, t1, t2)
+            spell_power = math.floor(scenario.magic.spell_power)
+            scale = rules.magic_player_damage_scale if scenario.defender.is_player else 1.0
+            tier_stats: Dict[str, Dict[str, float]] = {}
+            avg_on_success = 0.0
+            max_hit = 0
+            for tier, prob in probs.items():
+                lo, hi = om_magic_band(tier, spell_power, rules)
+                scaled = [
+                    max(1, math.floor(q * scale)) if q > 0 and scale < 1.0 else q
+                    for q in range(om_quantize(lo), om_quantize(hi) + 1)
+                ]
+                tier_stats[tier] = {"chance": prob, "lo": min(scaled), "hi": max(scaled)}
+                total = 0.0
+                for bucket in range(om_quantize(lo), om_quantize(hi) + 1):
+                    bucket_lo = max(lo, bucket * 1024 - 512)
+                    bucket_hi = min(hi, bucket * 1024 + 511)
+                    if bucket_hi >= bucket_lo:
+                        value = max(1, math.floor(bucket * scale)) if bucket > 0 and scale < 1.0 else bucket
+                        total += value * (bucket_hi - bucket_lo + 1)
+                avg_on_success += prob * (total / (hi - lo + 1))
+                if prob > 0.0:
+                    max_hit = max(max_hit, max(scaled))
+            result["attacker_roll"] = {
+                "spell_success_chance": success,
+                "caster_score": caster_score,
+                "guard_score": guard_score,
+                "max_hit": max_hit,
+                "average_on_success": avg_on_success,
+                "average_per_attempt": success * avg_on_success,
+                "tiers": tier_stats,
+            }
+        else:
+            max_hit = math.floor(scenario.magic.spell_power)
+            damage_values = [
+                mitigate_magic_damage(damage, scenario.defender, rules)
+                for damage in range(max_hit + 1)
+            ]
+            max_hit = max(damage_values)
+            avg_on_success = statistics.fmean(damage_values)
+            result["attacker_roll"] = {
+                "spell_success_chance": success,
+                "max_hit": max_hit,
+                "average_on_success": avg_on_success,
+                "average_per_attempt": success * avg_on_success,
+            }
         result["magic"] = asdict(scenario.magic)
-        result["attacker_roll"] = {
-            "spell_success_chance": success,
-            "max_hit": max_hit,
-            "average_on_success": avg_on_success,
-            "average_per_attempt": success * avg_on_success,
-        }
         result["projectile_kill"] = simulate_projectile_to_kill(scenario, trials, seed, 10000, rules)
     else:
         raise ValueError(f"Unknown scenario mode: {scenario.mode}")
@@ -952,6 +1403,18 @@ def print_roll(label: str, roll: Dict) -> None:
     print(f"    max hit: {roll['max_hit']}")
     print(f"    avg on hit: {roll['average_on_hit']:.3f}")
     print(f"    avg per attempt: {roll['average_per_attempt']:.3f}")
+    print_tiers(roll.get("tiers"))
+
+
+def print_tiers(tiers: Optional[Dict]) -> None:
+    if not tiers:
+        return
+    parts = [
+        f"{name} {tier['chance'] * 100.0:.1f}% ({tier['lo']:.0f}-{tier['hi']:.0f})"
+        for name, tier in tiers.items()
+        if name != OM_MISS
+    ]
+    print(f"    tiers: {' | '.join(parts)}")
 
 
 def print_sample(label: str, sample: Dict, tick_units: bool = False) -> None:
@@ -1014,6 +1477,7 @@ def print_text_result(result: Dict) -> None:
         print(f"spell: {setup['spell_name']}")
         print(f"  success chance: {format_percent(roll['spell_success_chance'])}")
         print(f"  max hit: {roll['max_hit']}")
+        print_tiers(roll.get("tiers"))
         print(f"  avg on successful cast: {roll['average_on_success']:.3f}")
         print(f"  avg per cast attempt: {roll['average_per_attempt']:.3f}")
         print(f"  avg dps at {setup['interval_seconds']:.3f}s interval: {roll['average_per_attempt'] / setup['interval_seconds']:.3f}")

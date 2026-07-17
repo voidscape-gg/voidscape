@@ -58,6 +58,9 @@ python3 "$SCRIPT_DIR/test-void-dungeon-population.py"
 echo "==> Testing local OpenRSC combat baseline policy"
 python3 "$SCRIPT_DIR/test-openrsc-combat-baseline.py"
 
+echo "==> Testing Overmatch combat source/config policy"
+python3 "$SCRIPT_DIR/test-overmatch-combat-contract.py"
+
 echo "==> Testing PvE physical roll multipliers"
 python3 "$REPO_ROOT/tools/combat-sim/test_pve_multipliers.py"
 
@@ -73,6 +76,8 @@ else
 fi
 echo "==> Testing standalone server fat-jar runtime"
 "$SCRIPT_DIR/test-server-fat-jar-runtime.sh"
+echo "==> Testing Overmatch fixed-point Java vectors"
+"$SCRIPT_DIR/test-overmatch-combat-java.sh"
 echo "==> Testing Void Arena ranked policy"
 "$SCRIPT_DIR/test-void-arena-ranked-policy-java.sh"
 echo "==> Testing Void Arena ranked persistence"

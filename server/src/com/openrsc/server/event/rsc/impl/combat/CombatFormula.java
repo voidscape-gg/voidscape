@@ -86,6 +86,9 @@ public class CombatFormula {
 	}
 
 	public static int calculateMagicDamage(final double spellPower, final Mob source, final Mob victim) {
+		if (source != null && victim != null && source.getConfig().OVERMATCH_COMBAT) {
+			return OvermatchCombatFormula.calculateMagicDamage(spellPower, source, victim);
+		}
 		//Given that melee max hit is fractional, it was likely that spell power values ending in "5" were supposed to hit their max hit more often.
 		//TODO: More research to see if that was the case. For now, we can just make it uniform after flooring.
 		final double effectiveSpellPower = spellPower * VoidContent.voidSceptreMagicMultiplier(source, victim);
@@ -218,6 +221,9 @@ public class CombatFormula {
 	 * callers that need only damage should continue using that compatibility method.
 	 */
 	public static MeleeHitResult doMeleeHit(final Mob source, final Mob victim) {
+		if (source != null && source.getConfig().OVERMATCH_COMBAT) {
+			return OvermatchCombatFormula.doMeleeHit(source, victim);
+		}
 		final boolean isPvpMelee = source instanceof Player && victim instanceof Player;
 		final boolean usePvpMeleeMomentum = isPvpMelee
 			&& !usesOpenRscClassicBaseline(source, victim);
@@ -349,6 +355,9 @@ public class CombatFormula {
 	 * @return The amount to hit.
 	 */
 	public static int doRangedDamage(final Mob source, final int bowId, final int arrowId, final Mob victim, final boolean skillCape) {
+		if (source != null && source.getConfig().OVERMATCH_COMBAT) {
+			return OvermatchCombatFormula.doRangedDamage(source, bowId, arrowId, victim, skillCape);
+		}
 		boolean isHit = calculateRangedAccuracy(source, bowId, victim);
 
 		if (!isHit) return applyPlayerAttackDamageFloor(source, victim, 0);
@@ -454,7 +463,7 @@ public class CombatFormula {
 		return Math.max(1, (int)Math.floor(damage * (1.0D - reduction)));
 	}
 
-	private static int applyMagicDamageReduction(final int damage, final Mob source, final Mob victim) {
+	static int applyMagicDamageReduction(final int damage, final Mob source, final Mob victim) {
 		if (damage <= 0 || !(victim instanceof Player)) {
 			return damage;
 		}
@@ -476,7 +485,7 @@ public class CombatFormula {
 		return npcId != NpcId.DM_KING.id() && npcId != NpcId.DM_KING_ARENA.id();
 	}
 
-	private static int applyPlayerAttackDamageFloor(final Mob source, final Mob victim, final int damage) {
+	static int applyPlayerAttackDamageFloor(final Mob source, final Mob victim, final int damage) {
 		if (!(source instanceof Player) || !(victim instanceof Npc)) {
 			return damage;
 		}
@@ -543,10 +552,16 @@ public class CombatFormula {
 	}
 
 	public static int calculateMeleeMaxHit(final Mob source, final Mob victim) {
+		if (source != null && source.getConfig().OVERMATCH_COMBAT) {
+			return OvermatchCombatFormula.calculateMeleeMaxHit(source, victim);
+		}
 		return applyPlayerAttackDamageFloor(source, victim, getTargetAdjustedMeleeMaxHit(source, victim));
 	}
 
 	public static int calculateRangedMaxHit(final Mob source, final int bowId, final int arrowId, final Mob victim, final boolean skillCape) {
+		if (source != null && source.getConfig().OVERMATCH_COMBAT) {
+			return OvermatchCombatFormula.calculateRangedMaxHit(source, bowId, arrowId, victim, skillCape);
+		}
 		final int maxRoll = getRangedDamage(source, bowId, arrowId, victim);
 		if (maxRoll <= 0) {
 			return 0;
@@ -633,7 +648,7 @@ public class CombatFormula {
 		return effectiveLevel + bonus;
 	}
 
-	private static double voidMeleeMultiplier(final Mob attacker, final Mob defender) {
+	static double voidMeleeMultiplier(final Mob attacker, final Mob defender) {
 		if (!(attacker instanceof Player) || !VoidContent.isVoidNpc(defender)) {
 			return 1.0D;
 		}
@@ -644,7 +659,7 @@ public class CombatFormula {
 		return 1.0D;
 	}
 
-	private static double voidRangedMultiplier(final Mob attacker, final int bowId, final Mob defender) {
+	static double voidRangedMultiplier(final Mob attacker, final int bowId, final Mob defender) {
 		if (!(attacker instanceof Player) || bowId != VOID_BOW.id() || !VoidContent.isVoidNpc(defender)) {
 			return 1.0D;
 		}
@@ -699,7 +714,7 @@ public class CombatFormula {
 	 *
 	 * Uses values from the old projectile.txt file included with configXX.jag.
 	 */
-	private static int rangedPowerRetro(final int bowId) {
+	static int rangedPowerRetro(final int bowId) {
 		switch (ItemId.getById(bowId)) {
 			case SHORTBOW:
 				return 14;
@@ -716,7 +731,7 @@ public class CombatFormula {
 	/**
 	 * Returns a power to associate with each arrow (post-Fletching version)
 	 */
-	private static int rangedPower(final int arrowId) {
+	static int rangedPower(final int arrowId) {
 		/**
 		 * We don't have good data for throwing knives,
 		 * so everything besides rune knives is a guess based on
@@ -810,7 +825,7 @@ public class CombatFormula {
 	/**
 	 * Returns an aim to associate with each ranged item
 	 */
-	private static int rangedAim(final int bowId) {
+	static int rangedAim(final int bowId) {
 		/**
 		 * We have limited pre-Fletching "aim" information for
 		 * the shortbow, longbow, and crossbow in configXX.jag

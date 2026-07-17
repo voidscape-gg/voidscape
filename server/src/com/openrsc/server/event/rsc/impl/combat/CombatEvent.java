@@ -197,9 +197,10 @@ public class CombatEvent extends GameTickEvent {
 			int damage;
 			int attackerMaxHit;
 			try {
-				if (proofSession != null) {
-					if (getWorld().getServer().getConfig().OPENRSC_CLASSIC_COMBAT_BASELINE
-						|| getWorld().getServer().getConfig().OSRS_COMBAT_MELEE
+					if (proofSession != null) {
+						if (getWorld().getServer().getConfig().OPENRSC_CLASSIC_COMBAT_BASELINE
+							|| getWorld().getServer().getConfig().OVERMATCH_COMBAT
+							|| getWorld().getServer().getConfig().OSRS_COMBAT_MELEE
 						|| !hitter.isPlayer() || !target.isPlayer()) {
 						throw new IllegalStateException("proof combat left classic player melee");
 					}
@@ -207,7 +208,11 @@ public class CombatEvent extends GameTickEvent {
 						proofSession);
 					damage = meleeHit.getDamage();
 					attackerMaxHit = CombatFormula.calculateMeleeMaxHit(hitter, target);
-				} else if (getWorld().getServer().getConfig().OSRS_COMBAT_MELEE) {
+					} else if (getWorld().getServer().getConfig().OVERMATCH_COMBAT) {
+						meleeHit = OvermatchCombatFormula.doMeleeHit(hitter, target);
+						damage = meleeHit.getDamage();
+						attackerMaxHit = OvermatchCombatFormula.calculateMeleeMaxHit(hitter, target);
+					} else if (getWorld().getServer().getConfig().OSRS_COMBAT_MELEE) {
 					meleeHit = OSRSCombatFormula.Melee.doMeleeHit(hitter, target);
 					damage = meleeHit.getDamage();
 					attackerMaxHit = OSRSCombatFormula.Melee.calculateMaxHit(hitter, target);
@@ -463,6 +468,8 @@ public class CombatEvent extends GameTickEvent {
 	}
 
 	public void resetCombat() {
+		OvermatchCombatFormula.clearEdge(defenderMob);
+		OvermatchCombatFormula.clearEdge(attackerMob);
 		if (running) {
 			if (defenderMob != null) {
 				if (defenderMob.isPlayer()) {

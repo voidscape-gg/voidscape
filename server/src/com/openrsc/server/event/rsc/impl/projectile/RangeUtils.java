@@ -9,6 +9,7 @@ import com.openrsc.server.content.DropTable;
 import com.openrsc.server.content.VoidContent;
 import com.openrsc.server.event.rsc.impl.combat.CombatFormula;
 import com.openrsc.server.event.rsc.impl.combat.OSRSCombatFormula;
+import com.openrsc.server.event.rsc.impl.combat.OvermatchCombatFormula;
 import com.openrsc.server.model.container.Item;
 import com.openrsc.server.model.entity.GroundItem;
 import com.openrsc.server.model.entity.Mob;
@@ -245,7 +246,9 @@ public class RangeUtils {
     }
 
     public static int doRangedDamage(final Mob attacker, final int bowId, final int arrowId, final Mob defender, final boolean skillCape) {
-			if (attacker.getWorld().getServer().getConfig().OSRS_COMBAT_RANGED) {
+			if (attacker.getWorld().getServer().getConfig().OVERMATCH_COMBAT) {
+				return OvermatchCombatFormula.doRangedDamage(attacker, bowId, arrowId, defender, skillCape);
+			} else if (attacker.getWorld().getServer().getConfig().OSRS_COMBAT_RANGED) {
 				return OSRSCombatFormula.Ranged.doRangedDamage(attacker, bowId, arrowId, defender, skillCape);
 			} else {
 				return CombatFormula.doRangedDamage(attacker, bowId, arrowId, defender, skillCape);
@@ -253,7 +256,9 @@ public class RangeUtils {
 		}
 
 	public static int calculateRangedMaxHit(final Mob attacker, final int bowId, final int arrowId, final Mob defender, final boolean skillCape) {
-		if (attacker.getWorld().getServer().getConfig().OSRS_COMBAT_RANGED) {
+		if (attacker.getWorld().getServer().getConfig().OVERMATCH_COMBAT) {
+			return OvermatchCombatFormula.calculateRangedMaxHit(attacker, bowId, arrowId, defender, skillCape);
+		} else if (attacker.getWorld().getServer().getConfig().OSRS_COMBAT_RANGED) {
 			return OSRSCombatFormula.Ranged.calculateMaxHit(attacker, arrowId, defender, skillCape);
 		} else {
 			return CombatFormula.calculateRangedMaxHit(attacker, bowId, arrowId, defender, skillCape);

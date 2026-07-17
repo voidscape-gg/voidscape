@@ -8,6 +8,7 @@ import com.openrsc.server.content.voiddungeon.VoidDungeonTraversalGrace;
 import com.openrsc.server.event.rsc.impl.combat.AggroEvent;
 import com.openrsc.server.event.rsc.impl.combat.CombatFormula;
 import com.openrsc.server.event.rsc.impl.combat.OSRSCombatFormula;
+import com.openrsc.server.event.rsc.impl.combat.OvermatchCombatFormula;
 import com.openrsc.server.model.PathValidation;
 import com.openrsc.server.model.Point;
 import com.openrsc.server.model.action.ActionType;
@@ -269,9 +270,14 @@ public class NpcBehavior {
 		}
 		npc.getWorld().getServer().getCombatScriptLoader().checkAndExecuteCombatScript(npc, targetPlayer);
 
-		int damage = npc.getWorld().getServer().getConfig().OSRS_COMBAT_MELEE
-			? OSRSCombatFormula.Melee.doMeleeDamage(npc, targetPlayer)
-			: CombatFormula.doMeleeDamage(npc, targetPlayer);
+		int damage;
+		if (npc.getWorld().getServer().getConfig().OVERMATCH_COMBAT) {
+			damage = OvermatchCombatFormula.doMeleeHit(npc, targetPlayer).getDamage();
+		} else if (npc.getWorld().getServer().getConfig().OSRS_COMBAT_MELEE) {
+			damage = OSRSCombatFormula.Melee.doMeleeDamage(npc, targetPlayer);
+		} else {
+			damage = CombatFormula.doMeleeDamage(npc, targetPlayer);
+		}
 		int minimumDamage = npc.getContactAttackMinDamage();
 		if (minimumDamage > 0 && damage < minimumDamage && DataConversions.random(1, 3) == 1) {
 			damage = minimumDamage;

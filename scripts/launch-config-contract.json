@@ -19,6 +19,7 @@
   "skilling_exp_rate": "1.5",
   "melee_gives_xp_hit": "true",
   "ranged_gives_xp_hit": "true",
+  "overmatch_combat": "false",
   "want_fatigue": "false",
   "aggro_range": "4",
   "wilderness_npc_blocking": "0",
