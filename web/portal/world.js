@@ -68,6 +68,9 @@
 
 	var POD_CROWNS = ["assets/world/crown-gold.png", "assets/world/crown-silver.png", "assets/world/crown-iron.png"];
 	var POD_SHIELDS = ["assets/world/shield-1.png", "assets/world/shield-2.png", "assets/world/shield-3.png"];
+	/* Authentic RSC item picture masks used by rare-feed sprites. The source
+	   archive stores a neutral blade; the client tints gray pixels at draw time. */
+	var ITEM_PICTURE_MASKS = { 75: 0x00FFFF, 81: 0x00FFFF };
 	var smallStage = window.matchMedia("(max-width: 600px)");
 
 	var FALLBACK_AVATARS = ["assets/rsc-knight.png", "assets/rsc-ranger.png", "assets/rsc-mage.png"];
@@ -163,6 +166,53 @@
 		});
 		image.src = src;
 		return image;
+	}
+
+	function maskedPixelCanvas(src, scale, pictureMask, className) {
+		var canvas = el("canvas", "px" + (className ? " " + className : ""));
+		canvas.width = 1;
+		canvas.height = 1;
+		canvas.setAttribute("aria-hidden", "true");
+		var source = new Image();
+		source.decoding = "async";
+		source.addEventListener("load", function () {
+			canvas.width = source.naturalWidth;
+			canvas.height = source.naturalHeight;
+			canvas.style.width = source.naturalWidth * scale + "px";
+			canvas.style.height = source.naturalHeight * scale + "px";
+			var context = canvas.getContext("2d", { willReadFrequently: true });
+			context.imageSmoothingEnabled = false;
+			context.drawImage(source, 0, 0);
+			var pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+			var maskR = pictureMask >> 16 & 0xFF;
+			var maskG = pictureMask >> 8 & 0xFF;
+			var maskB = pictureMask & 0xFF;
+			for (var index = 0; index < pixels.data.length; index += 4) {
+				var red = pixels.data[index];
+				var green = pixels.data[index + 1];
+				var blue = pixels.data[index + 2];
+				if (!pixels.data[index + 3] || red !== green || green !== blue) continue;
+				pixels.data[index] = red * maskR >> 8;
+				pixels.data[index + 1] = green * maskG >> 8;
+				pixels.data[index + 2] = blue * maskB >> 8;
+			}
+			context.putImageData(pixels, 0, 0);
+		});
+		source.src = src;
+		return canvas;
+	}
+
+	function goldMedallion() {
+		var crop = el("span", "gold-medallion");
+		crop.setAttribute("aria-hidden", "true");
+		var image = el("img", "px");
+		image.src = "assets/world/medal-gold.png";
+		if (image.tagName === "IMG") {
+			image.alt = "";
+			image.loading = "lazy";
+		}
+		crop.appendChild(image);
+		return crop;
 	}
 
 	function normalizeEntry(raw, index) {
@@ -413,10 +463,16 @@
 			image = el("img");
 			image.src = skillByKey(text(entry.skill)).icon;
 		} else if (entry.type === "rare" && Number.isFinite(Number(entry.itemId))) {
-			image = pixelImg("assets/npc-database/item/" + number(entry.itemId) + ".png", 1);
+			var itemId = number(entry.itemId);
+			var pictureMask = ITEM_PICTURE_MASKS[itemId];
+			image = pictureMask
+				? maskedPixelCanvas("assets/npc-database/item/" + itemId + ".png", 1, pictureMask)
+				: pixelImg("assets/npc-database/item/" + itemId + ".png", 1);
 		} else if (entry.type === "total") {
 			image = el("img");
 			image.src = "assets/world/mini-void.png";
+		} else if (entry.type === "quest") {
+			image = goldMedallion();
 		} else {
 			image = el("img");
 			image.src = "assets/world/mini-gold.png";
@@ -556,19 +612,22 @@
 			var place = el("article", "pod pod-" + entry.rank + " pod-rank-" + entry.rank);
 			if (!animate) place.style.animation = "none";
 
+			var figure = el("span", "pod-figure");
+
 			var crown = el("img", "pod-crown");
 			crown.src = POD_CROWNS[entry.rank - 1] || POD_CROWNS[2];
 			crown.alt = "";
-			place.appendChild(crown);
+			figure.appendChild(crown);
 
 			var stage = el("span", "pod-stage");
 			stage.appendChild(podAvatar(entry));
-			place.appendChild(stage);
+			figure.appendChild(stage);
 
 			var shield = el("img", "pod-shield");
 			shield.src = POD_SHIELDS[entry.rank - 1] || POD_SHIELDS[2];
 			shield.alt = "Rank " + entry.rank;
-			place.appendChild(shield);
+			figure.appendChild(shield);
+			place.appendChild(figure);
 
 			var name = el("p", "pod-name");
 			name.appendChild(el("span", "pod-player", entry.player));
