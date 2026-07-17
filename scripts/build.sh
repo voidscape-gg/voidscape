@@ -43,6 +43,9 @@ echo "==> Testing duel-proof crypto vectors"
 echo "==> Testing duel-proof client handshake"
 "$SCRIPT_DIR/test-duel-proof-client-java.sh"
 
+echo "==> Testing ordinary duel and XP control contract"
+python3 "$SCRIPT_DIR/test-duel-xp-controls-contract.py"
+
 echo "==> Building voidscape (server + plugins + client)"
 if command -v make >/dev/null 2>&1; then
     make compile

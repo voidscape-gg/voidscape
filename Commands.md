@@ -234,10 +234,14 @@ Admin Commands
   - Usage: `::quickbank`
   - Displays the logged in player's bank window.
 - freezeexperience
-  - Usage: `::freezeexperience [player] (boolean)`
+  - Staff usage: `::freezeexperience [player] (boolean)`
   - Alias: `::freezeexp` or `::freezexp`
-  - Freezes the specified player's experience such that they can not gain anymore experience until the freeze is lifted.
+  - Freezes the specified online player's experience until the freeze is lifted.
   - If no boolean is supplied, then this command works as a toggle.
+- dueling
+  - Owner-only usage: `::dueling [on|off|status]`
+  - Enables or disables ordinary stake duels globally and persists the setting across restarts.
+  - Disabling cancels pending duel setups but lets combat already in progress finish normally.
 - skull
   - Usage: `::skull [player]`
   - Gives a PK skull or renews its duration for the specified player.
@@ -921,6 +925,10 @@ Regular Player Commands
   - Usage: `::rested`
   - Alias: `::restedxp`
   - Shows the current rested-XP pool, cap, and offline earn rate.
+- freezexp
+  - Usage: `::freezexp [on|off|status]`
+  - Alias: `::freezeexp` or `::freezeexperience`
+  - Persistently freezes or enables all experience gain for your character, including Hits and non-combat skills.
 - lootbeam
   - Usage: `::lootbeam [list|defaults|reset]`
   - Usage: `::lootbeam add <item id/name>`

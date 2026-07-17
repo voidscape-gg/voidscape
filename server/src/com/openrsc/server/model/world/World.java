@@ -8,6 +8,7 @@ import com.openrsc.server.constants.NpcDrops;
 import com.openrsc.server.constants.Quests;
 import com.openrsc.server.content.announcements.WorldAnnouncementService;
 import com.openrsc.server.content.GlobalChatCountryFlags;
+import com.openrsc.server.content.OrdinaryDuelControl;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.clan.ClanManager;
 import com.openrsc.server.content.market.Market;
@@ -120,6 +121,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 	private final Market market;
 	private final WorldAnnouncementService worldAnnouncementService;
 	private final BountyHunter bountyHunter;
+	private final OrdinaryDuelControl ordinaryDuelControl;
 	private final VoidArena voidArena;
 	private final WildernessHobgoblinSpawnController wildernessHobgoblinSpawnController;
 	private final WorldLoader worldLoader;
@@ -157,6 +159,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 		this.combatOdysseyData = new CombatOdysseyData(this);
 		this.worldAnnouncementService = new WorldAnnouncementService(this);
 		this.bountyHunter = new BountyHunter(this);
+		this.ordinaryDuelControl = new OrdinaryDuelControl(this);
 		this.voidArena = new VoidArena(this);
 		this.wildernessHobgoblinSpawnController = new WildernessHobgoblinSpawnController(this);
 
@@ -205,6 +208,10 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	public BountyHunter getBountyHunter() {
 		return bountyHunter;
+	}
+
+	public OrdinaryDuelControl getOrdinaryDuelControl() {
+		return ordinaryDuelControl;
 	}
 
 	public VoidArena getVoidArena() {
@@ -454,6 +461,7 @@ public final class World implements SimpleSubscriber<FishingTrawler>, Runnable {
 
 	public void load() {
 		try {
+			getOrdinaryDuelControl().load();
 			getClanManager().initialize();
 			getPartyManager().initialize();
 			if (getMarket() != null) {

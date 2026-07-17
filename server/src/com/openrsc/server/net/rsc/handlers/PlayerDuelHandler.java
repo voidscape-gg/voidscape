@@ -39,6 +39,9 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 		if (rejectVoidArenaDuel(player, affectedPlayer)) {
 			return;
 		}
+		if (rejectDisabledDuel(player, affectedPlayer)) {
+			return;
+		}
 
 		if (player == affectedPlayer) {
 			unsetOptions(player);
@@ -343,6 +346,9 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 		if (rejectVoidArenaDuel(first, second)) {
 			return;
 		}
+		if (rejectDisabledDuel(first, second)) {
+			return;
+		}
 		first.resetAllExceptDueling();
 		second.resetAllExceptDueling();
 		CombatFormula.clearPvpMeleeMomentum(first);
@@ -398,6 +404,9 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 	}
 
 	private void continuePreparedProofDuel(final Player first, final Player second) {
+		if (rejectDisabledDuel(first, second)) {
+			return;
+		}
 		final DuelProofSession proofSession = first.getDuel().getProofSession();
 		if (proofSession == null) {
 			cancelPreparedDuel(first, second);
@@ -584,6 +593,9 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 		if (rejectVoidArenaDuel(first, second)) {
 			return false;
 		}
+		if (rejectDisabledDuel(first, second)) {
+			return false;
+		}
 		CombatEvent combatEvent = null;
 		try {
 			first.resetAllExceptDueling();
@@ -633,6 +645,8 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 		second.setBusy(false);
 		first.getDuel().setDuelCombatStarted(true);
 		second.getDuel().setDuelCombatStarted(true);
+		first.message("Duels do not award experience.");
+		second.message("Duels do not award experience.");
 		return true;
 	}
 
@@ -671,6 +685,7 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 			return false;
 		}
 		return first != null && second != null && first != second
+			&& first.getWorld().getOrdinaryDuelControl().isEnabled()
 			&& first.loggedIn() && second.loggedIn() && !first.isRemoved() && !second.isRemoved()
 			&& first.getDuel().isDuelActive() && second.getDuel().isDuelActive()
 			&& first.getDuel().isDuelAccepted() && second.getDuel().isDuelAccepted()
@@ -715,6 +730,23 @@ public class PlayerDuelHandler implements PayloadProcessor<PlayerDuelStruct, Opc
 
 	private boolean blocksOrdinaryDuel(final Player player) {
 		return player != null && player.getWorld().getVoidArena().blocksOrdinaryDuel(player);
+	}
+
+	private boolean rejectDisabledDuel(final Player first, final Player second) {
+		if (first == null || first.getWorld().getOrdinaryDuelControl().isEnabled()) {
+			return false;
+		}
+		if (first.getDuel().hasDuelCombatStarted()
+			|| (second != null && second.getDuel().hasDuelCombatStarted())) {
+			return false;
+		}
+		first.message("Ordinary dueling is currently disabled.");
+		if (second != null && second != first) {
+			second.message("Ordinary dueling is currently disabled.");
+		}
+		unsetOptions(first);
+		unsetOptions(second);
+		return true;
 	}
 
 	private void unsetOptions(Player player) {

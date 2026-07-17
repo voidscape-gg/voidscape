@@ -74,6 +74,7 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 	));
 	private static final Set<String> PRODUCTION_OWNER_ONLY_COMMANDS = new HashSet<String>(Arrays.asList(
 		"saveall", "restart", "shutdown", "update", "reloadworld", "reloadland",
+		"dueling",
 		"reloadsslcert", "refreshsslcert", "sqlerrorreportingtest",
 		"clearipbans", "fixloggedincount",
 		"loadbots", "loadtest", "cinematic", "cine", "voidrushbots", "vrbots",
@@ -457,6 +458,7 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 	private static boolean blockUnsafeProductionCommand(Player player, String cmd, String[] args) {
 		if (!player.getWorld().getServer().getConfig().PRODUCTION_COMMAND_LOCKDOWN) return false;
 		if (player.isOwner()) return false;
+		if (isPlayerExperienceFreezeCommand(player, cmd, args)) return false;
 
 		if (PRODUCTION_OWNER_ONLY_COMMANDS.contains(cmd)
 			|| isProductionOwnerOnlyPrefix(cmd)
@@ -466,6 +468,19 @@ public final class CommandHandler implements PayloadProcessor<CommandStruct, Opc
 			return true;
 		}
 		return false;
+	}
+
+	private static boolean isPlayerExperienceFreezeCommand(Player player, String cmd, String[] args) {
+		if (!(cmd.equals("freezexp") || cmd.equals("freezeexp") || cmd.equals("freezeexperience"))) {
+			return false;
+		}
+		if (!player.isAdmin()) {
+			return true;
+		}
+		return args != null && args.length == 1
+			&& (args[0].equalsIgnoreCase("on")
+			|| args[0].equalsIgnoreCase("off")
+			|| args[0].equalsIgnoreCase("status"));
 	}
 
 	private static boolean isProductionOwnerOnlyPrefix(String cmd) {

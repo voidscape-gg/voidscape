@@ -56,6 +56,9 @@ public final class RegularPlayer implements CommandTrigger {
 	public static String badSyntaxPrefix = null;
 
 	public boolean blockCommand(Player player, String command, String[] args) {
+		if (isExperienceFreezeCommand(command) && player.isAdmin()) {
+			return isSelfExperienceFreezeSyntax(args);
+		}
 		return player.getConfig().PLAYER_COMMANDS || player.isMod();
 	}
 
@@ -131,6 +134,8 @@ public final class RegularPlayer implements CommandTrigger {
 			handleLootBeamCommand(player, args);
 		} else if (command.equalsIgnoreCase("rested") || command.equalsIgnoreCase("restedxp")) {
 			player.message(RestedExperience.status(player));
+		} else if (isExperienceFreezeCommand(command)) {
+			handleExperienceFreeze(player, command, args);
 		} else if (command.equalsIgnoreCase("titles") || command.equalsIgnoreCase("title")) {
 			PlayerTitleMenu.handleBrowseCommand(player, args);
 		} else if (command.equalsIgnoreCase("b") && config().RIGHT_CLICK_BANK) {
@@ -213,6 +218,53 @@ public final class RegularPlayer implements CommandTrigger {
 		} else if (command.equalsIgnoreCase("globalchat")) {
 			globalChatInfo(player);
 		}
+	}
+
+	private static boolean isExperienceFreezeCommand(String command) {
+		return command.equalsIgnoreCase("freezexp")
+			|| command.equalsIgnoreCase("freezeexp")
+			|| command.equalsIgnoreCase("freezeexperience");
+	}
+
+	private static boolean isSelfExperienceFreezeSyntax(String[] args) {
+		if (args.length == 0) {
+			return true;
+		}
+		if (args.length != 1) {
+			return false;
+		}
+		return args[0].equalsIgnoreCase("on")
+			|| args[0].equalsIgnoreCase("off")
+			|| args[0].equalsIgnoreCase("status");
+	}
+
+	private void handleExperienceFreeze(Player player, String command, String[] args) {
+		if (args.length != 1
+			|| (!args[0].equalsIgnoreCase("on")
+			&& !args[0].equalsIgnoreCase("off")
+			&& !args[0].equalsIgnoreCase("status"))) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [on|off|status]");
+			return;
+		}
+
+		if (args[0].equalsIgnoreCase("on")) {
+			player.setFreezeXp(true);
+			player.setAttribute("warned_xp_off", false);
+			ActionSender.sendExperienceToggle(player);
+			player.message(messagePrefix + "Experience gain is now frozen.");
+			return;
+		}
+
+		if (args[0].equalsIgnoreCase("off")) {
+			player.setFreezeXp(false);
+			player.setAttribute("warned_xp_off", false);
+			ActionSender.sendExperienceToggle(player);
+			player.message(messagePrefix + "Experience gain is now enabled.");
+			return;
+		}
+
+		player.message(messagePrefix + "Experience gain is "
+			+ (player.isExperienceFrozen() ? "frozen." : "enabled."));
 	}
 
 	private void globalChatInfo(Player player) {
@@ -1759,6 +1811,7 @@ public final class RegularPlayer implements CommandTrigger {
 		"@whi@::toggleblockprivate - toggle block all private messages %",
 		"@whi@::toggleblocktrade - toggle blocking all trade requests %",
 		"@whi@::toggleblockduel - toggle blocking all duel requests %",
+		"@whi@::freezexp on|off|status - control all XP gain %",
 		"@whi@::rested - show rested XP status %",
 		"@whi@::titles - browse titles; the Void Herald manages them %",
 		"@whi@::lootbeam - customize rare drop loot beams %",

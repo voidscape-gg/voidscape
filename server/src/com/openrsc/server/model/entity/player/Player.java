@@ -2317,24 +2317,7 @@ public final class Player extends Mob {
 	}
 
 	public void incExp(final int skill, int origSkillXP, final boolean useFatigue, final boolean fromQuest) {
-		// Warn the player that they currently cannot gain XP.
-		if (isExperienceFrozen()) {
-			if (getWorld().getServer().getConfig().WANT_FATIGUE) {
-				ActionSender.sendMessage(this, "You can not gain experience right now!");
-			}
-
-			// If we have fatigue disabled, that means the player has slept to disable XP
-			// gain. We will tell them once per login, to make sure that they didn't do it
-			// by accident.
-			else if (!this.getAttribute("warned_xp_off", false)) {
-				ActionSender.sendMessage(this, "You have disabled experience gain." +
-					"Use a sleeping bag or bed to re-enable,");
-				this.setAttribute("warned_xp_off", true);
-			}
-			return;
-		}
-
-		if (shouldBlockSkillExperience(skill, true)) {
+		if (shouldBlockExperienceGain(skill, true)) {
 			return;
 		}
 
@@ -4751,6 +4734,23 @@ public final class Player extends Mob {
 			setAttribute(skillExperienceLockWarningKey(skill), true);
 		}
 		return true;
+	}
+
+	public boolean shouldBlockExperienceGain(final int skill, final boolean notify) {
+		if (isExperienceFrozen()) {
+			if (notify && getWorld().getServer().getConfig().WANT_FATIGUE) {
+				ActionSender.sendMessage(this, "You can not gain experience right now!");
+			} else if (notify && !getAttribute("warned_xp_off", false)) {
+				ActionSender.sendMessage(this, "You have disabled experience gain. "
+					+ "Use ::freezexp off to re-enable it.");
+				setAttribute("warned_xp_off", true);
+			}
+			return true;
+		}
+		if (getDuel().hasDuelCombatStarted()) {
+			return true;
+		}
+		return shouldBlockSkillExperience(skill, notify);
 	}
 
 	private String skillExperienceLockWarningKey(final int skill) {

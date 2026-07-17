@@ -125,6 +125,14 @@ SERVER_PID=$(lsof -tiTCP:43596 -sTCP:LISTEN || true)
 
 Avoid broad `pkill -f openrsc` patterns for the server. The running command line is usually generic Java/Ant text and may not contain `openrsc`.
 
+### Launch-day duel and XP controls
+
+- `::dueling status` reports whether ordinary stake duels are enabled.
+- `::dueling off` immediately blocks new ordinary duels and cancels request/setup screens. A fight already in combat finishes normally so stakes are not stranded. The setting survives a server restart.
+- `::dueling on` restores ordinary duels. Leave this on for the normal launch baseline.
+- Players use `::freezexp on|off|status` when they want to preserve a fixed combat level. This freezes all XP, including Hits and skilling XP, and survives logout/restart.
+- Ordinary stake-duel combat itself awards no XP. These controls do not alter Void Arena matches.
+
 ## Friends-only hosted beta
 
 For a private beta, the intended player flow is one hosted game server plus a preconfigured launcher. Friends should not need the website or any manual client configuration.

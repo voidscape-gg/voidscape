@@ -3,6 +3,7 @@ package com.openrsc.server.plugins.authentic.commands;
 import com.openrsc.server.constants.*;
 import com.openrsc.server.content.BalanceTelemetry;
 import com.openrsc.server.content.GuaranteedResources;
+import com.openrsc.server.content.OrdinaryDuelControl;
 import com.openrsc.server.content.PlayerTitle;
 import com.openrsc.server.content.announcements.WorldAnnouncementService;
 import com.openrsc.server.content.wilderness.WildernessHobgoblinSpawnController;
@@ -102,7 +103,28 @@ public final class Admins implements CommandTrigger {
 	}
 
 	public boolean blockCommand(Player player, String command, String[] args) {
+		if (isExperienceFreezeCommand(command) && isSelfExperienceFreezeSyntax(args)) {
+			return false;
+		}
 		return player.isAdmin();
+	}
+
+	private static boolean isExperienceFreezeCommand(String command) {
+		return command.equalsIgnoreCase("freezexp")
+			|| command.equalsIgnoreCase("freezeexp")
+			|| command.equalsIgnoreCase("freezeexperience");
+	}
+
+	private static boolean isSelfExperienceFreezeSyntax(String[] args) {
+		if (args.length == 0) {
+			return true;
+		}
+		if (args.length != 1) {
+			return false;
+		}
+		return args[0].equalsIgnoreCase("on")
+			|| args[0].equalsIgnoreCase("off")
+			|| args[0].equalsIgnoreCase("status");
 	}
 
 	@Override
@@ -231,6 +253,8 @@ public final class Admins implements CommandTrigger {
 			setWildernessRule(player, command, args);
 		} else if (command.equalsIgnoreCase("freezexp") || command.equalsIgnoreCase("freezeexp") || command.equalsIgnoreCase("freezeexperience")) {
 			freezeExperience(player, command, args);
+		} else if (command.equalsIgnoreCase("dueling")) {
+			controlDueling(player, command, args);
 		} else if (command.equalsIgnoreCase("shootme")) {
 			npcShootPlayer(player, command, args);
 		} else if (command.equalsIgnoreCase("npcrangeevent")) {
@@ -2892,16 +2916,50 @@ public final class Admins implements CommandTrigger {
 
 		boolean newFreezeXp;
 		if (toggle) {
-			newFreezeXp = player.toggleFreezeXp();
+			newFreezeXp = targetPlayer.toggleFreezeXp();
 		} else {
-			newFreezeXp = player.setFreezeXp(freezeXp);
+			newFreezeXp = targetPlayer.setFreezeXp(freezeXp);
 		}
+		targetPlayer.setAttribute("warned_xp_off", false);
+		ActionSender.sendExperienceToggle(targetPlayer);
 
 		String freezeMessage = newFreezeXp ? "frozen" : "unfrozen";
-		if (player.getUsernameHash() != player.getUsernameHash() && !player.isInvisibleTo(targetPlayer)) {
-			player.message(messagePrefix + "Your experience has been " + freezeMessage + " by an admin");
+		if (targetPlayer.getUsernameHash() != player.getUsernameHash() && !player.isInvisibleTo(targetPlayer)) {
+			targetPlayer.message(messagePrefix + "Your experience has been " + freezeMessage + " by an admin");
 		}
-		player.message(messagePrefix + "Experience has been " + freezeMessage + ": " + player.getUsername());
+		player.message(messagePrefix + "Experience has been " + freezeMessage + ": " + targetPlayer.getUsername());
+	}
+
+	private void controlDueling(Player player, String command, String[] args) {
+		if (!player.isOwner()) {
+			player.message(messagePrefix + "That command is owner-only.");
+			return;
+		}
+		if (args.length != 1
+			|| (!args[0].equalsIgnoreCase("on")
+			&& !args[0].equalsIgnoreCase("off")
+			&& !args[0].equalsIgnoreCase("status"))) {
+			player.message(badSyntaxPrefix + command.toUpperCase() + " [on|off|status]");
+			return;
+		}
+
+		final OrdinaryDuelControl control = player.getWorld().getOrdinaryDuelControl();
+		if (args[0].equalsIgnoreCase("status")) {
+			player.message(messagePrefix + "Ordinary dueling is " + (control.isEnabled() ? "enabled." : "disabled."));
+			return;
+		}
+
+		final boolean enable = args[0].equalsIgnoreCase("on");
+		if (!control.setEnabled(enable)) {
+			player.message(messagePrefix + "Could not persist the dueling setting; nothing changed.");
+			return;
+		}
+
+		final int cancelled = enable ? 0 : control.cancelPendingDuels();
+		player.message(messagePrefix + "Ordinary dueling is now " + (enable ? "enabled." : "disabled.")
+			+ (cancelled > 0 ? " Cancelled " + cancelled + " pending duel setup(s)." : ""));
+		player.getWorld().getServer().getGameLogger().addQuery(
+			new StaffLog(player, 21, messagePrefix + "Set ordinary dueling " + (enable ? "on" : "off")));
 	}
 
 	private void npcShootPlayer(Player player, String command, String[] args) {
